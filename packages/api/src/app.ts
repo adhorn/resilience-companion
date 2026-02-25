@@ -1,0 +1,73 @@
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { logger } from "hono/logger";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { orrRoutes } from "./routes/orrs.js";
+import { sectionRoutes } from "./routes/sections.js";
+import { templateRoutes } from "./routes/templates.js";
+import { teachingMomentRoutes } from "./routes/teaching-moments.js";
+import { caseStudyRoutes } from "./routes/case-studies.js";
+import { sessionRoutes } from "./routes/sessions.js";
+import { dashboardRoutes } from "./routes/dashboard.js";
+import { exportRoutes } from "./routes/export.js";
+
+export const app = new Hono();
+
+app.use("*", logger());
+app.use(
+  "/api/*",
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+  }),
+);
+
+// Health check
+app.get("/api/health", (c) => c.json({ status: "ok" }));
+
+// Routes
+app.route("/api/v1/orrs", orrRoutes);
+app.route("/api/v1/orrs/:orrId/sections", sectionRoutes);
+app.route("/api/v1/templates", templateRoutes);
+app.route("/api/v1/teaching-moments", teachingMomentRoutes);
+app.route("/api/v1/case-studies", caseStudyRoutes);
+app.route("/api/v1/orrs/:orrId/sessions", sessionRoutes);
+app.route("/api/v1/dashboard", dashboardRoutes);
+app.route("/api/v1/orrs/:orrId/export", exportRoutes);
+
+// Serve static files in production (built web app)
+// Resolve relative to this file's location, not CWD
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const publicDir = resolve(__dirname, "../public");
+if (existsSync(publicDir)) {
+  const indexHtml = readFileSync(resolve(publicDir, "index.html"), "utf-8");
+
+  // Serve static assets
+  app.get("/assets/*", async (c) => {
+    const filePath = resolve(publicDir, c.req.path.slice(1));
+    if (existsSync(filePath)) {
+      const content = readFileSync(filePath);
+      const ext = filePath.split(".").pop();
+      const types: Record<string, string> = {
+        js: "application/javascript",
+        css: "text/css",
+        html: "text/html",
+        json: "application/json",
+        png: "image/png",
+        jpg: "image/jpeg",
+        svg: "image/svg+xml",
+      };
+      return new Response(content, {
+        headers: { "Content-Type": types[ext || ""] || "application/octet-stream" },
+      });
+    }
+    return c.notFound();
+  });
+
+  // SPA fallback: serve index.html for all non-API routes
+  app.get("*", (c) => {
+    return c.html(indexHtml);
+  });
+}
