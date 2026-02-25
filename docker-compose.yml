@@ -1,0 +1,44 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${DOCKER_PORT:-3080}:3000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      # Uncomment to use Postgres instead of SQLite:
+      # DATABASE_URL: postgres://companion:companion@db:5432/companion
+      - NODE_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+
+  # Postgres — for multi-team production deployments.
+  # Start with: docker compose up db
+  # Or start everything: docker compose up
+  # Not needed for local dev (npm run dev uses SQLite).
+  db:
+    image: postgres:17-alpine
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: companion
+      POSTGRES_PASSWORD: companion
+      POSTGRES_DB: companion
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U companion"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    profiles:
+      - postgres
+
+volumes:
+  pgdata:

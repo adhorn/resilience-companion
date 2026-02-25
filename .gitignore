@@ -1,0 +1,19 @@
+node_modules/
+dist/
+data/
+repos/
+logs/
+.env
+.encryption-key
+*.db
+*.db-journal
+*.db-wal
+reports/
+.stryker-tmp/
+stryker-incremental.json
+
+# Internal plans — not for public repo
+docs/plans/
+
+# Build artifacts
+*.tsbuildinfo

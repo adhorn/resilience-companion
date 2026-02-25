@@ -1,0 +1,39 @@
+{
+  "name": "resilience-companion",
+  "private": true,
+  "description": "AI-facilitated resilience practices (ORRs, incident analysis) for engineering teams. Companion to 'Why We Still Suck at Resilience' by Adrian Hornsby.",
+  "author": "Adrian Hornsby",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adhorn/resilience-companion.git"
+  },
+  "homepage": "https://github.com/adhorn/resilience-companion#readme",
+  "bugs": {
+    "url": "https://github.com/adhorn/resilience-companion/issues"
+  },
+  "workspaces": [
+    "packages/shared",
+    "packages/api",
+    "packages/web",
+    "packages/eval"
+  ],
+  "scripts": {
+    "dev": "concurrently --kill-others --kill-signal SIGTERM -n api,web -c blue,green \"cd packages/api && npx tsx watch --env-file=../../.env src/index.ts\" \"cd packages/web && npx vite\"",
+    "build": "npm run build -w @orr/shared && npm run build -w @orr/api && npm run build -w @orr/web",
+    "test": "vitest run",
+    "test:mutate": "stryker run",
+    "lint": "tsc --noEmit -p packages/api/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json && tsc --noEmit -p packages/eval/tsconfig.json",
+    "eval": "tsx --env-file=.env packages/eval/src/run.ts",
+    "eval:verbose": "tsx --env-file=.env packages/eval/src/run.ts --verbose"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "^9.6.0",
+    "@stryker-mutator/typescript-checker": "^9.6.0",
+    "@stryker-mutator/vitest-runner": "^9.6.0",
+    "concurrently": "^9.1.2",
+    "playwright": "^1.59.1",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
