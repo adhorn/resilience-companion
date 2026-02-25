@@ -1,0 +1,26 @@
+services:
+  orr-companion:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - orr-data:/app/data
+    environment:
+      - DB_PATH=/app/data/orr-companion.db
+      # Optional: LLM configuration
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_MODEL=${LLM_MODEL:-}
+    restart: unless-stopped
+
+volumes:
+  orr-data:
+    # Your ORR data lives here. Back it up!
+    # Option 1 — bind mount (easier to backup):
+    #   Replace the named volume above with:
+    #   volumes:
+    #     - ./data:/app/data
+    #   Then: crontab -e → 0 2 * * * ./scripts/backup.sh ./data
+    #
+    # Option 2 — named volume (use docker cp):
+    #   docker cp $(docker compose ps -q orr-companion):/app/data/orr-companion.db ./backup.db

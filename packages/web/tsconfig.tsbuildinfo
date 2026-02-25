@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/api/client.ts","./src/components/layout.tsx","./src/lib/auth.tsx","./src/pages/dashboard.tsx","./src/pages/learn.tsx","./src/pages/neworr.tsx","./src/pages/orrlist.tsx","./src/pages/orrview.tsx"],"version":"5.9.3"}

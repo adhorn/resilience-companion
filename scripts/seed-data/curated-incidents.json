@@ -1,0 +1,334 @@
+{
+  "teachingMoments": [
+    {
+      "title": "Cascading failures from retry storms",
+      "content": "When a dependency slows down, retries from multiple callers can amplify load exponentially. The original service may be recovering, but the retry storm prevents recovery. Circuit breakers and exponential backoff with jitter are essential — but more importantly, teams need to understand their retry topology across the entire call chain.",
+      "tags": ["retries", "cascading-failures", "circuit-breakers", "backoff"],
+      "sectionTags": ["Architecture", "Failures, Impact & Adaptive Capacity"],
+      "systemPattern": "Positive feedback loop",
+      "failureMode": "Cascade amplification"
+    },
+    {
+      "title": "The danger of untested failover procedures",
+      "content": "Many organizations have disaster recovery plans they've never actually tested end-to-end. When a real disaster hits, the failover procedure often has unexpected dependencies, stale configurations, or missing permissions. The only way to know your DR works is to actually do it regularly — ideally to the point where it becomes boring.",
+      "tags": ["disaster-recovery", "failover", "testing", "runbooks"],
+      "sectionTags": ["Disaster Recovery", "Operations & Adaptive Capacity"],
+      "systemPattern": "Untested assumptions",
+      "failureMode": "Recovery failure"
+    },
+    {
+      "title": "Configuration changes as a leading cause of outages",
+      "content": "Configuration changes are often deployed without the same rigor as code changes — no review, no staged rollout, no easy rollback. Yet they can have equally devastating effects. Treat configuration as code: version it, review it, deploy it gradually, and always have a fast rollback path.",
+      "tags": ["configuration", "deployment", "change-management", "rollback"],
+      "sectionTags": ["Deployment"],
+      "systemPattern": "Asymmetric rigor",
+      "failureMode": "Configuration-induced outage"
+    },
+    {
+      "title": "Monitoring blind spots during novel failures",
+      "content": "Dashboards and alerts are designed around known failure modes. When something genuinely new happens, the existing monitoring may show 'all green' while customers are impacted. Teams need both specific alerts and anomaly detection, plus the skill to investigate when something 'feels wrong' even if metrics look normal.",
+      "tags": ["monitoring", "observability", "novel-failures", "anomaly-detection"],
+      "sectionTags": ["Monitoring, Metrics & Alarms"],
+      "systemPattern": "Monitoring gap",
+      "failureMode": "Silent failure"
+    },
+    {
+      "title": "Single points of failure hidden in shared infrastructure",
+      "content": "Teams often identify single points of failure within their own service but miss shared infrastructure dependencies: a common DNS server, a shared certificate authority, a centralized configuration service. These hidden SPOFs can take down multiple services simultaneously and are harder to test in isolation.",
+      "tags": ["single-point-of-failure", "shared-infrastructure", "dependencies", "blast-radius"],
+      "sectionTags": ["Architecture", "Risk Assessment"],
+      "systemPattern": "Hidden coupling",
+      "failureMode": "Correlated failure"
+    },
+    {
+      "title": "The gap between SLAs and actual customer experience",
+      "content": "Meeting your SLA numbers doesn't mean customers are happy. Aggregate metrics can hide localized pain — a service might be 99.95% available globally while a specific region or customer segment experiences repeated failures. Measure from the customer's perspective, not just from your infrastructure's perspective.",
+      "tags": ["SLA", "customer-experience", "metrics", "measurement"],
+      "sectionTags": ["Service Definition and Goals", "Monitoring, Metrics & Alarms"],
+      "systemPattern": "Measurement gap",
+      "failureMode": "Hidden customer impact"
+    },
+    {
+      "title": "Thundering herd after recovery",
+      "content": "When a service recovers from an outage, queued requests and retries can create a surge that immediately overwhelms the recovering system. This 'thundering herd' pattern means the service bounces between up and down states. Solutions include request queuing with backpressure, gradual traffic ramp-up, and client-side adaptive throttling.",
+      "tags": ["thundering-herd", "recovery", "backpressure", "throttling"],
+      "sectionTags": ["Failures, Impact & Adaptive Capacity", "Architecture"],
+      "systemPattern": "Recovery instability",
+      "failureMode": "Post-recovery cascade"
+    },
+    {
+      "title": "Runbook rot and operational knowledge decay",
+      "content": "Runbooks become outdated as systems evolve. If the last time someone executed a runbook was months ago and the system has changed significantly since, the runbook may do more harm than good. Regularly executing runbooks (especially during GameDays) is the only way to keep them current and to maintain the team's muscle memory.",
+      "tags": ["runbooks", "operational-knowledge", "documentation", "gamedays"],
+      "sectionTags": ["Operations & Adaptive Capacity", "Disaster Recovery"],
+      "systemPattern": "Knowledge decay",
+      "failureMode": "Stale procedures"
+    },
+    {
+      "title": "Deployment as the highest-risk operation",
+      "content": "Most outages correlate with recent changes. Deployments are the moment of highest risk, yet teams often deploy without adequate health checks, canary analysis, or automatic rollback capabilities. Every deployment should be observable, reversible, and gradual.",
+      "tags": ["deployment", "canary", "rollback", "risk"],
+      "sectionTags": ["Deployment", "Risk Assessment"],
+      "systemPattern": "Change-induced failure",
+      "failureMode": "Deployment-triggered outage"
+    },
+    {
+      "title": "The cost of not practicing incident response",
+      "content": "Teams that only practice incident response during real incidents are always in reactive mode. Regular tabletop exercises and GameDays build the communication patterns, tool familiarity, and decision-making skills needed during real incidents. The team that practices together responds better together.",
+      "tags": ["incident-response", "gamedays", "practice", "team-coordination"],
+      "sectionTags": ["Operations & Adaptive Capacity", "Testing & Experimentation"],
+      "systemPattern": "Skill atrophy",
+      "failureMode": "Slow/chaotic incident response"
+    },
+    {
+      "title": "Dependency limits as ticking time bombs",
+      "content": "Every external dependency has limits — API rate limits, connection pool sizes, storage quotas. Teams often discover these limits only when they hit them in production. Proactively understanding, monitoring, and load-testing against dependency limits is essential. The question isn't whether you'll hit them, but when.",
+      "tags": ["dependencies", "limits", "rate-limiting", "capacity"],
+      "sectionTags": ["Failures, Impact & Adaptive Capacity", "Architecture"],
+      "systemPattern": "Unknown limits",
+      "failureMode": "Limit-induced degradation"
+    },
+    {
+      "title": "Post-incident reviews that focus on blame prevent learning",
+      "content": "When post-incident reviews focus on 'who made the mistake,' people stop reporting near-misses and hide contributing factors. Blameless reviews focus on understanding the system conditions that made the failure possible, not on finding a human to hold accountable. The goal is to learn, not to punish.",
+      "tags": ["incident-analysis", "blameless", "psychological-safety", "learning"],
+      "sectionTags": ["Organizational Learning", "Learning & Adaptation"],
+      "systemPattern": "Blame culture",
+      "failureMode": "Suppressed learning"
+    },
+    {
+      "title": "Graceful degradation requires explicit design",
+      "content": "Systems rarely degrade gracefully by accident. Without explicit design for partial functionality, systems tend to fail completely when any component fails. Design for 80%, 50%, and 20% functionality levels — what features can you shed to keep the core experience working?",
+      "tags": ["graceful-degradation", "partial-failure", "design", "resilience"],
+      "sectionTags": ["Failures, Impact & Adaptive Capacity", "Architecture"],
+      "systemPattern": "All-or-nothing design",
+      "failureMode": "Complete failure from partial issue"
+    },
+    {
+      "title": "Certificate expiration: the most preventable outage",
+      "content": "Certificate expiration has caused major outages at companies of all sizes. It's entirely preventable with monitoring and automation, yet it keeps happening because certificates are set-and-forget. Monitor certificate expiration proactively, automate renewal where possible, and track all certificates centrally.",
+      "tags": ["certificates", "TLS", "monitoring", "automation"],
+      "sectionTags": ["Monitoring, Metrics & Alarms", "Operations & Adaptive Capacity"],
+      "systemPattern": "Time-bomb failure",
+      "failureMode": "Certificate expiration"
+    },
+    {
+      "title": "The false comfort of 'it's never happened before'",
+      "content": "Past reliability is not a guarantee of future reliability. Systems that have 'never had that problem' often simply haven't been exposed to the right conditions yet. Chaos engineering and proactive failure injection exist precisely to test these assumptions before production does it for you.",
+      "tags": ["assumptions", "testing", "chaos-engineering", "risk"],
+      "sectionTags": ["Risk Assessment", "Testing & Experimentation"],
+      "systemPattern": "Survivorship bias",
+      "failureMode": "Untested failure mode"
+    },
+    {
+      "title": "Normalization of deviance in operational metrics",
+      "content": "When error rates or latency slowly creep up, teams adjust their expectations rather than investigating the cause. What was once alarming becomes 'normal.' This drift toward danger is invisible until a threshold is crossed. Regular review of what 'normal' looks like — and questioning whether it should be — is a critical practice.",
+      "tags": ["normalization-of-deviance", "drift", "metrics", "culture"],
+      "sectionTags": ["Monitoring, Metrics & Alarms", "Learning & Adaptation"],
+      "systemPattern": "Normalization of deviance",
+      "failureMode": "Gradual degradation"
+    },
+    {
+      "title": "The importance of diverse perspectives in review",
+      "content": "ORRs conducted only by the building team suffer from confirmation bias. The team knows what the system is supposed to do but may not see how it could fail in unexpected ways. Including people from operations, security, other teams, and different levels of seniority brings fresh eyes and different mental models.",
+      "tags": ["review", "diversity", "confirmation-bias", "ORR"],
+      "sectionTags": ["Service Definition and Goals", "Organizational Learning"],
+      "systemPattern": "Confirmation bias",
+      "failureMode": "Blind spots in review"
+    },
+    {
+      "title": "Capacity planning needs to account for failure scenarios",
+      "content": "Most capacity planning assumes everything is working normally. But what happens to capacity when an AZ goes down? When a dependency fails and retries consume resources? When a deployment is rolling and half the fleet is unavailable? Capacity planning must include failure scenarios, not just growth projections.",
+      "tags": ["capacity-planning", "failure-scenarios", "scaling", "availability-zones"],
+      "sectionTags": ["Architecture", "Failures, Impact & Adaptive Capacity"],
+      "systemPattern": "Normal-case planning",
+      "failureMode": "Capacity exhaustion during failure"
+    },
+    {
+      "title": "Knowledge silos as operational risk",
+      "content": "When only one person understands a critical system, the organization has a single point of failure in its knowledge. This bus factor extends beyond individuals — it applies to teams, documentation, and institutional memory. Cross-training, pair operations, and accessible documentation reduce this risk.",
+      "tags": ["knowledge-silos", "bus-factor", "cross-training", "documentation"],
+      "sectionTags": ["Operations & Adaptive Capacity", "Organizational Learning"],
+      "systemPattern": "Knowledge concentration",
+      "failureMode": "Loss of critical knowledge"
+    },
+    {
+      "title": "Automated systems fail silently",
+      "content": "Automation handles normal operations well but can mask emerging problems. When automated scaling, healing, or failover is working, teams may not notice the underlying issues driving those automated responses. Monitor not just whether automation is working, but how often and why it's being triggered.",
+      "tags": ["automation", "monitoring", "silent-failures", "observability"],
+      "sectionTags": ["Monitoring, Metrics & Alarms", "Operations & Adaptive Capacity"],
+      "systemPattern": "Automation opacity",
+      "failureMode": "Masked degradation"
+    }
+  ],
+  "caseStudies": [
+    {
+      "title": "Amazon S3 Outage (2017)",
+      "company": "Amazon",
+      "year": 2017,
+      "summary": "A simple typo in a command to remove a small number of S3 servers accidentally removed a much larger set, taking down a significant portion of AWS services that depended on S3. This highlighted how deeply S3 was embedded as a dependency across the AWS ecosystem, and how a single human error in an operational command could cascade to affect hundreds of services.",
+      "sourceUrl": "https://aws.amazon.com/message/41926/",
+      "failureCategory": "Human error / Blast radius / Hidden dependencies",
+      "sectionTags": ["Architecture", "Operations & Adaptive Capacity", "Deployment"],
+      "lessons": [
+        "Critical operational commands need safeguards against accidental scope expansion",
+        "Dependencies on shared infrastructure create hidden blast radius",
+        "Recovery procedures should be tested regularly with the actual tools operators use"
+      ]
+    },
+    {
+      "title": "GitHub Outage Due to Database Failover (2018)",
+      "company": "GitHub",
+      "year": 2018,
+      "summary": "A routine network maintenance caused a brief MySQL primary disconnection. The automated failover promoted a replica, but the 43 seconds of writes to the old primary couldn't be reconciled with the new primary. This led to 24 hours of degraded service as GitHub carefully reconciled data integrity across clusters.",
+      "sourceUrl": "https://github.blog/2018-10-30-oct21-post-incident-analysis/",
+      "failureCategory": "Failover / Data integrity / Automation gap",
+      "sectionTags": ["Disaster Recovery", "Architecture", "Failures, Impact & Adaptive Capacity"],
+      "lessons": [
+        "Automatic failover without automatic reconciliation creates data integrity risks",
+        "Choosing data integrity over availability was the right trade-off",
+        "Even brief split-brain scenarios can require hours of careful manual recovery"
+      ]
+    },
+    {
+      "title": "Cloudflare Outage from Regex (2019)",
+      "company": "Cloudflare",
+      "year": 2019,
+      "summary": "A single regular expression in a WAF rule update caused excessive CPU consumption, taking down Cloudflare's HTTP/HTTPS proxy for 27 minutes worldwide. The rule was deployed globally without staged rollout, and the CPU exhaustion prevented operators from reaching the management interface to fix it.",
+      "sourceUrl": "https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-july-2-2019/",
+      "failureCategory": "Configuration change / Blast radius / Deployment safety",
+      "sectionTags": ["Deployment", "Monitoring, Metrics & Alarms", "Risk Assessment"],
+      "lessons": [
+        "Configuration changes need the same deployment rigor as code changes",
+        "Global simultaneous deployment is a single point of failure",
+        "Management plane access must be independent of the data plane"
+      ]
+    },
+    {
+      "title": "Knight Capital Trading Loss (2012)",
+      "company": "Knight Capital",
+      "year": 2012,
+      "summary": "A deployment error left old test code active on one of eight servers. When markets opened, this server executed a massive volume of unintended trades, losing $440 million in 45 minutes. The firm had no kill switch, no automated checks for anomalous trading patterns, and the deployment process was manual.",
+      "sourceUrl": "https://www.sec.gov/litigation/admin/2013/34-70694.pdf",
+      "failureCategory": "Deployment / Safety controls / Monitoring gaps",
+      "sectionTags": ["Deployment", "Monitoring, Metrics & Alarms", "Risk Assessment"],
+      "lessons": [
+        "Deployment consistency across servers is critical — one inconsistent node can cause catastrophic impact",
+        "Kill switches and circuit breakers for anomalous behavior are essential",
+        "Manual deployment processes for critical systems are unacceptable risk"
+      ]
+    },
+    {
+      "title": "Facebook Six-Hour Outage (2021)",
+      "company": "Facebook (Meta)",
+      "year": 2021,
+      "summary": "A routine BGP configuration change accidentally disconnected Facebook's data centers from the internet. The issue was compounded because internal tools — including the ones needed to diagnose and fix the problem — were also inaccessible. Physical access to data centers was required to recover, turning a minutes-level fix into a six-hour outage.",
+      "sourceUrl": "https://engineering.fb.com/2021/10/05/networking-traffic/outage-details/",
+      "failureCategory": "Configuration change / Self-referential dependency / Recovery access",
+      "sectionTags": ["Architecture", "Disaster Recovery", "Operations & Adaptive Capacity"],
+      "lessons": [
+        "Management and recovery tools must not depend on the systems they manage",
+        "Physical access procedures need to be current and tested",
+        "BGP and DNS changes can have total-outage consequences"
+      ]
+    },
+    {
+      "title": "Equifax Data Breach (2017)",
+      "company": "Equifax",
+      "year": 2017,
+      "summary": "A known Apache Struts vulnerability went unpatched for months despite a patch being available. Attackers exploited it to access personal data of 147 million people. The breach revealed systemic failures in patch management, vulnerability scanning, certificate monitoring (an expired certificate left intrusion detection blind for 19 months), and incident response.",
+      "sourceUrl": "https://oversight.house.gov/wp-content/uploads/2018/12/Equifax-Report.pdf",
+      "failureCategory": "Security / Patch management / Monitoring gaps",
+      "sectionTags": ["Service Definition and Goals", "Monitoring, Metrics & Alarms", "Risk Assessment"],
+      "lessons": [
+        "Vulnerability patch management needs enforcement, not just notification",
+        "Expired certificates can blind security monitoring for extended periods",
+        "Multiple systemic failures compound — any single fix would have prevented or limited the breach"
+      ]
+    },
+    {
+      "title": "GitLab Database Deletion (2017)",
+      "company": "GitLab",
+      "year": 2017,
+      "summary": "During an incident response for a different issue, an engineer accidentally ran rm -rf on the production database directory instead of the replica. Of the five backup and replication methods in place, none were fully functional — backups hadn't been verified, LVM snapshots were never configured, and the recovery process had never been tested.",
+      "sourceUrl": "https://about.gitlab.com/blog/2017/02/10/postmortem-of-database-outage-of-january-31/",
+      "failureCategory": "Human error / Backup verification / Recovery testing",
+      "sectionTags": ["Disaster Recovery", "Operations & Adaptive Capacity"],
+      "lessons": [
+        "Backups are worthless if you never verify they can be restored",
+        "Multiple backup methods provide false confidence if none are tested",
+        "Transparency during incidents (GitLab livestreamed their recovery) builds trust"
+      ]
+    },
+    {
+      "title": "AWS us-east-1 DynamoDB Outage (2015)",
+      "company": "Amazon",
+      "year": 2015,
+      "summary": "A brief network disruption caused a metadata partition in DynamoDB's storage subsystem. The distributed system's automatic recovery triggered a thundering herd of requests that overwhelmed the metadata service. Multiple services depending on DynamoDB experienced cascading failures. Recovery required manually throttling internal recovery traffic.",
+      "sourceUrl": "https://aws.amazon.com/message/5467D2/",
+      "failureCategory": "Cascading failure / Recovery storm / Distributed systems",
+      "sectionTags": ["Architecture", "Failures, Impact & Adaptive Capacity"],
+      "lessons": [
+        "Automatic recovery mechanisms can create thundering herd problems",
+        "Distributed systems need circuit breakers on internal recovery paths, not just customer-facing ones",
+        "Partial failures in metadata services can have disproportionate impact"
+      ]
+    },
+    {
+      "title": "British Airways IT Failure (2017)",
+      "company": "British Airways",
+      "year": 2017,
+      "summary": "A power supply issue at a data center caused a major IT failure that grounded flights for three days, stranding 75,000 passengers and costing an estimated £80 million. The recovery was slowed because systems couldn't be brought back up in the correct sequence, and the DR site couldn't handle the full workload.",
+      "sourceUrl": "https://www.bbc.com/news/business-40069859",
+      "failureCategory": "Infrastructure / DR capacity / Recovery sequencing",
+      "sectionTags": ["Disaster Recovery", "Architecture"],
+      "lessons": [
+        "DR sites must be tested at full production load",
+        "System startup dependencies and sequencing must be documented and tested",
+        "The cost of a multi-day outage dwarfs the cost of proper DR investment"
+      ]
+    },
+    {
+      "title": "Slack Outage from Database Migration (2021)",
+      "company": "Slack",
+      "year": 2021,
+      "summary": "A planned database migration caused an unexpected interaction with Slack's caching layer. The cache invalidation pattern during migration generated more database load than anticipated, creating a feedback loop. The team had load-tested the migration in isolation but not the interaction between migration and cache behavior.",
+      "sourceUrl": "https://slack.engineering/slacks-outage-on-january-4th-2021/",
+      "failureCategory": "Migration / Cache interaction / Load testing gaps",
+      "sectionTags": ["Deployment", "Testing & Experimentation", "Architecture"],
+      "lessons": [
+        "Load testing migrations in isolation misses interaction effects",
+        "Cache invalidation during major operations can create unexpected amplification",
+        "Migration rollback procedures need to be as well-tested as the migration itself"
+      ]
+    },
+    {
+      "title": "Roblox 73-Hour Outage (2021)",
+      "company": "Roblox",
+      "year": 2021,
+      "summary": "A combination of a Consul cluster overload and a hidden bug in BoltDB (Consul's storage backend) created a cascading failure that took Roblox offline for 73 hours. The root cause was subtle: a new streaming feature increased Consul load, which exposed a performance cliff in BoltDB that had never been encountered at that scale.",
+      "sourceUrl": "https://blog.roblox.com/2022/01/roblox-return-to-service-10-28-10-31-2021/",
+      "failureCategory": "Cascading failure / Hidden performance cliff / Infrastructure overload",
+      "sectionTags": ["Architecture", "Testing & Experimentation", "Monitoring, Metrics & Alarms"],
+      "lessons": [
+        "Performance characteristics change at scale — what works at N may break at 2N",
+        "Infrastructure components have hidden performance cliffs that only emerge under specific conditions",
+        "Gradual feature rollouts that increase infrastructure load need capacity analysis"
+      ]
+    },
+    {
+      "title": "Fastly CDN Global Outage (2021)",
+      "company": "Fastly",
+      "year": 2021,
+      "summary": "A valid customer configuration change triggered a latent bug in Fastly's software that had been deployed weeks earlier. The bug affected 85% of Fastly's network within seconds, taking down major websites globally for about an hour. The latent bug had passed all testing because the specific triggering condition hadn't been covered.",
+      "sourceUrl": "https://www.fastly.com/blog/summary-of-june-8-outage",
+      "failureCategory": "Latent bug / Configuration trigger / Global blast radius",
+      "sectionTags": ["Deployment", "Testing & Experimentation", "Risk Assessment"],
+      "lessons": [
+        "Latent bugs can exist in production for weeks before being triggered by the right conditions",
+        "Customer-controlled configuration can trigger infrastructure-level failures",
+        "Global deployment of network changes needs progressive rollout, not simultaneous deployment"
+      ]
+    }
+  ]
+}

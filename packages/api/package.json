@@ -1,0 +1,30 @@
+{
+  "name": "@orr/api",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@hono/node-server": "^1.13.8",
+    "@orr/shared": "*",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.8.1",
+    "drizzle-orm": "^0.38.4",
+    "hono": "^4.7.4",
+    "jose": "^6.0.8",
+    "nanoid": "^5.0.9",
+    "openai": "^4.82.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.12",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
