@@ -1,4 +1,4 @@
-import { MAX_AGENT_ITERATIONS } from "@orr/shared";
+import { MAX_AGENT_ITERATIONS, MAX_SESSION_TOKENS } from "@orr/shared";
 import { getLLM } from "../llm/index.js";
 import type { LLMMessage, StreamChunk } from "../llm/index.js";
 import type { SSEEvent } from "@orr/shared";
@@ -13,6 +13,7 @@ export interface AgentInput {
   activeSectionId: string | null;
   conversationHistory: LLMMessage[];
   userMessage: string;
+  sessionTokenUsage: number; // cumulative tokens used so far in this session
 }
 
 /**
@@ -23,7 +24,7 @@ export interface AgentInput {
  * 4. Yield SSE events throughout for streaming to client
  */
 export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
-  const { orrId, sessionId, activeSectionId, conversationHistory, userMessage } = input;
+  const { orrId, sessionId, activeSectionId, conversationHistory, userMessage, sessionTokenUsage } = input;
   const llm = getLLM();
 
   // Build context and system prompt
@@ -41,8 +42,15 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
   yield { type: "message_start", messageId };
 
   let totalUsage = 0;
+  const cumulativeTokens = () => sessionTokenUsage + totalUsage;
 
   for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration++) {
+    // Check token budget before each LLM call
+    if (iteration > 0 && cumulativeTokens() >= MAX_SESSION_TOKENS) {
+      console.log(`Session ${sessionId} hit token budget mid-turn (${cumulativeTokens()}/${MAX_SESSION_TOKENS}). Wrapping up.`);
+      break; // falls through to the graceful wrap-up below
+    }
+
     let fullContent = "";
     const pendingToolCalls: Array<{
       id: string;
@@ -136,7 +144,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
 
       // Emit section_updated events for write operations
       if (
-        ["update_section_content", "update_depth_assessment", "set_flags"].includes(
+        ["update_section_content", "update_depth_assessment", "set_flags", "update_question_response"].includes(
           tc.name,
         ) &&
         parsedResult.success
@@ -146,7 +154,9 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
             ? "content"
             : tc.name === "update_depth_assessment"
               ? "depth"
-              : "flags";
+              : tc.name === "update_question_response"
+                ? "promptResponses"
+                : "flags";
         yield {
           type: "section_updated",
           sectionId: args.section_id as string,
@@ -164,11 +174,32 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
     // Loop continues — LLM will generate a response based on tool results
   }
 
-  // If we hit max iterations, send a wrap-up message
-  yield {
-    type: "content_delta",
-    content:
-      "\n\n*I've reached the limit for tool operations in this turn. Please send another message to continue our discussion.*",
-  };
+  // Hit max iterations — give the LLM one final text-only turn (no tools)
+  // so it can wrap up coherently instead of being cut off mid-thought.
+  try {
+    messages.push({
+      role: "user",
+      content: "[System: You've used all available tool iterations for this turn. Wrap up your response to the team now — no more tool calls are available. If you had pending work, briefly note what still needs to be done.]",
+    });
+
+    const finalStream = llm.chat(messages, []); // empty tools array = text only
+    for await (const chunk of finalStream) {
+      if (chunk.type === "content") {
+        yield { type: "content_delta", content: chunk.content! };
+      }
+      if (chunk.type === "done" && chunk.usage) {
+        totalUsage += chunk.usage.promptTokens + chunk.usage.completionTokens;
+      }
+    }
+  } catch (err) {
+    // If the graceful wrap-up fails, fall back to canned message
+    console.error("Agent wrap-up error:", (err as Error).message);
+    yield {
+      type: "content_delta",
+      content:
+        "\n\n*I've reached the limit for tool operations in this turn. Please send another message to continue our discussion.*",
+    };
+  }
+
   yield { type: "message_end", tokenUsage: totalUsage };
 }

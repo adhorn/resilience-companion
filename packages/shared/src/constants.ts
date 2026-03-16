@@ -25,6 +25,14 @@ export const SectionFlag = {
 } as const;
 export type SectionFlag = (typeof SectionFlag)[keyof typeof SectionFlag];
 
+// Risk severity levels
+export const RiskSeverity = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+export type RiskSeverity = (typeof RiskSeverity)[keyof typeof RiskSeverity];
+
 // Session status
 export const SessionStatus = {
   ACTIVE: "ACTIVE",
@@ -71,3 +79,8 @@ export const AGING_MONTHS = 6;
 
 // Agent loop limits
 export const MAX_AGENT_ITERATIONS = 5;
+
+// Token budget: max tokens per session before graceful wrap-up.
+// ~200k tokens ≈ $1-3 depending on model. Covers a full ORR review
+// (11 sections × ~15k tokens each) with headroom.
+export const MAX_SESSION_TOKENS = 200_000;

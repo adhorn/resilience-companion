@@ -7,6 +7,7 @@ import { ORRList } from "./pages/ORRList";
 import { NewORR } from "./pages/NewORR";
 import { ORRView } from "./pages/ORRView";
 import { Learn } from "./pages/Learn";
+import { Flags } from "./pages/Flags";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -17,9 +18,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/orrs" element={<ORRList />} />
           <Route path="/orrs/new" element={<NewORR />} />
-          <Route path="/orrs/:id" element={<ORRView />} />
+          <Route path="/flags" element={<Flags />} />
           <Route path="/learn" element={<Learn />} />
         </Route>
+        {/* ORRView is full-screen — no app sidebar */}
+        <Route path="/orrs/:id" element={<ORRView />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>

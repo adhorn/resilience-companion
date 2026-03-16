@@ -5,12 +5,10 @@ services:
       - "3000:3000"
     volumes:
       - orr-data:/app/data
+    env_file:
+      - .env
     environment:
       - DB_PATH=/app/data/orr-companion.db
-      # Optional: LLM configuration
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_BASE_URL=${LLM_BASE_URL:-}
-      - LLM_MODEL=${LLM_MODEL:-}
     restart: unless-stopped
 
 volumes:

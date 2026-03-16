@@ -4,6 +4,7 @@ import { Link, useLocation, Outlet } from "react-router-dom";
 const NAV_ITEMS = [
   { path: "/dashboard", label: "Dashboard" },
   { path: "/orrs", label: "ORRs" },
+  { path: "/flags", label: "Flags" },
   { path: "/learn", label: "Learn" },
 ];
 

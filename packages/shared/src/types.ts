@@ -2,6 +2,7 @@ import type {
   ORRStatus,
   SectionDepth,
   SectionFlag,
+  RiskSeverity,
   SessionStatus,
   TeachingMomentStatus,
   TeachingMomentSource,
@@ -56,6 +57,8 @@ export interface Section {
 export interface SectionFlagEntry {
   type: SectionFlag;
   note: string;
+  severity?: RiskSeverity;  // RISK flags only
+  deadline?: string;        // ISO date, RISK flags only
   createdAt: string;
 }
 
@@ -179,6 +182,7 @@ export type SSEEvent =
   | { type: "tool_call"; tool: string; args: Record<string, unknown> }
   | { type: "tool_result"; tool: string; result: Record<string, unknown> }
   | { type: "section_updated"; sectionId: string; field: string }
+  | { type: "session_renewed"; oldSessionId: string; newSessionId: string }
   | { type: "message_end"; tokenUsage: number }
   | { type: "error"; message: string };
 
@@ -190,6 +194,7 @@ export interface DashboardStats {
   stale: number;
   aging: number;
   recentActivity: DashboardORRSummary[];
+  totalTokens: number; // cumulative tokens across all sessions
 }
 
 export interface DashboardORRSummary {
@@ -199,4 +204,28 @@ export interface DashboardORRSummary {
   updatedAt: string;
   staleness: "fresh" | "aging" | "stale";
   coveragePercent: number; // sections with depth > UNKNOWN
+}
+
+// --- Flags aggregation types ---
+
+export interface FlagWithContext extends SectionFlagEntry {
+  orrId: string;
+  serviceName: string;
+  orrStatus: ORRStatus;
+  sectionId: string;
+  sectionTitle: string;
+  sectionPosition: number;
+  isOverdue: boolean;
+}
+
+export interface FlagsSummary {
+  total: number;
+  byType: Record<SectionFlag, number>;
+  bySeverity: Record<RiskSeverity, number>;
+  overdueCount: number;
+}
+
+export interface FlagsResponse {
+  summary: FlagsSummary;
+  flags: FlagWithContext[];
 }

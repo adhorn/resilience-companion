@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useParams, Link } from "react-router-dom";
 import { api, sendMessage } from "../api/client";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 
 interface Message {
   role: "user" | "assistant";
@@ -26,6 +27,12 @@ const FLAG_COLORS: Record<string, string> = {
   GAP: "bg-amber-100 text-amber-700",
   STRENGTH: "bg-green-100 text-green-700",
   FOLLOW_UP: "bg-blue-100 text-blue-700",
+};
+
+const SEVERITY_COLORS: Record<string, string> = {
+  HIGH: "bg-red-600 text-white",
+  MEDIUM: "bg-orange-500 text-white",
+  LOW: "bg-yellow-400 text-gray-900",
 };
 
 /**
@@ -86,7 +93,6 @@ function renderMarkdown(text: string): React.ReactNode {
 }
 
 function renderInline(text: string): React.ReactNode {
-  // Split on **bold**, *italic*, `code` patterns
   const parts: React.ReactNode[] = [];
   let remaining = text;
   let key = 0;
@@ -133,11 +139,23 @@ export function ORRView() {
   const [sections, setSections] = useState<any[]>([]);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionTokens, setSessionTokens] = useState(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [notification, setNotification] = useState<string | null>(null);
+  const speech = useSpeechRecognition((text) => {
+    setInput((prev) => (prev ? prev + " " + text : text));
+  });
+  // Per-question responses: local editing state
+  const [editingResponses, setEditingResponses] = useState<Record<number, string>>({});
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Debounce reloadSections to avoid race conditions from rapid section_updated events
+  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloadSeqRef = useRef(0);
 
   // Load ORR + restore active session
   useEffect(() => {
@@ -158,6 +176,7 @@ export function ORRView() {
         const activeSession = sessRes.sessions.find((s: any) => s.status === "ACTIVE");
         if (activeSession) {
           setSessionId(activeSession.id);
+          setSessionTokens(activeSession.tokenUsage || 0);
           const msgRes = await api.sessions.getMessages(id!, activeSession.id);
           if (msgRes.messages.length > 0) {
             setMessages(
@@ -181,18 +200,84 @@ export function ORRView() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Helper to reload sections from server
+  // Helper to reload sections from server, with sequence number to prevent stale overwrites
   const reloadSections = useCallback(async () => {
     if (!id) return;
+    const seq = ++reloadSeqRef.current;
     const res = await api.orrs.get(id);
-    setOrr(res.orr);
-    setSections(res.sections.sort((a: any, b: any) => a.position - b.position));
+    // Only apply if this is still the latest request (prevents stale race conditions)
+    if (seq === reloadSeqRef.current) {
+      setOrr(res.orr);
+      setSections(res.sections.sort((a: any, b: any) => a.position - b.position));
+    }
   }, [id]);
+
+  // Debounced reload — collapses rapid section_updated events into a single fetch
+  const debouncedReload = useCallback(() => {
+    if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+    reloadTimerRef.current = setTimeout(() => {
+      reloadSections().then(() => setEditingResponses({}));
+    }, 300);
+  }, [reloadSections]);
+
+  // Reset editing state when switching sections
+  useEffect(() => {
+    setEditingResponses({});
+  }, [activeSection]);
+
+  // Parse promptResponses from a section (handles string or object)
+  const parseResponses = (section: any): Record<number, string> => {
+    if (!section?.promptResponses) return {};
+    const raw = typeof section.promptResponses === "string"
+      ? JSON.parse(section.promptResponses)
+      : section.promptResponses;
+    return raw || {};
+  };
+
+  // Auto-save per-question responses with debounce
+  const saveResponses = useCallback(
+    async (sectionId: string, responses: Record<number, string>) => {
+      if (!id) return;
+      setSaving(true);
+      try {
+        await api.sections.update(id, sectionId, { promptResponses: responses });
+        // Update local sections state
+        setSections((prev) =>
+          prev.map((s) => (s.id === sectionId ? { ...s, promptResponses: responses } : s)),
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [id],
+  );
+
+  const handleResponseChange = useCallback(
+    (questionIndex: number, value: string) => {
+      setEditingResponses((prev) => {
+        const updated = { ...prev, [questionIndex]: value };
+        // Schedule save
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = setTimeout(() => {
+          if (activeSection) {
+            // Merge with existing saved responses
+            const currentSection = sections.find((s) => s.id === activeSection);
+            const savedResponses = parseResponses(currentSection);
+            const merged = { ...savedResponses, ...updated };
+            saveResponses(activeSection, merged);
+          }
+        }, 1000);
+        return updated;
+      });
+    },
+    [activeSection, sections, saveResponses],
+  );
 
   const startSession = useCallback(async () => {
     if (!id) return;
     const res = await api.sessions.create(id);
     setSessionId(res.session.id);
+    setSessionTokens(0);
     setMessages([]);
   }, [id]);
 
@@ -228,15 +313,26 @@ export function ORRView() {
           });
         }
 
-        // When AI calls any tool with a section_id, switch the left panel to it
+        // When AI calls any tool with a section_id, switch to that section
         if (event.type === "tool_call" && event.args?.section_id) {
           setActiveSection(event.args.section_id);
         }
 
-        // When AI writes to a section, reload data and switch to it
+        // When AI writes to a section, switch view and schedule debounced reload
         if (event.type === "section_updated") {
           if (event.sectionId) setActiveSection(event.sectionId);
-          reloadSections();
+          debouncedReload();
+        }
+
+        if (event.type === "message_end" && event.tokenUsage) {
+          setSessionTokens((prev) => prev + event.tokenUsage);
+        }
+
+        if (event.type === "session_renewed") {
+          setSessionId(event.newSessionId);
+          setSessionTokens(0);
+          setNotification("Session renewed (token limit reached). Your review continues seamlessly.");
+          setTimeout(() => setNotification(null), 8000);
         }
       });
     } catch (err) {
@@ -264,8 +360,12 @@ export function ORRView() {
       });
     }
 
+    // Always reload sections after stream ends — safety net in case
+    // section_updated events were lost (disconnect, server restart, etc.)
+    await reloadSections();
+    setEditingResponses({});
     setStreaming(false);
-  }, [input, id, sessionId, activeSection, streaming, reloadSections]);
+  }, [input, id, sessionId, activeSection, streaming, reloadSections, debouncedReload]);
 
   if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
   if (!orr) return <div className="p-6 text-red-500">ORR not found</div>;
@@ -281,145 +381,233 @@ export function ORRView() {
       ? JSON.parse(currentSection.flags)
       : currentSection.flags
     : [];
+  const savedResponses = parseResponses(currentSection);
+
+  // Count answered questions per section (for the sidebar)
+  const answeredCount = (section: any): number => {
+    const responses = parseResponses(section);
+    return Object.values(responses).filter((v) => v && String(v).trim().length > 0).length;
+  };
+  const totalQuestions = (section: any): number => {
+    const prompts = typeof section.prompts === "string"
+      ? JSON.parse(section.prompts)
+      : section.prompts;
+    return (prompts || []).length;
+  };
 
   return (
     <div className="flex h-screen">
-      {/* Left panel: Section nav + content */}
-      <div className="w-1/2 border-r border-gray-200 flex flex-col overflow-hidden">
+      {/* Column 1: Section sidebar */}
+      <div className="w-48 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 overflow-hidden">
         {/* Header */}
-        <div className="p-4 border-b border-gray-200 bg-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-gray-900">{orr.serviceName}</h2>
-              <span className="text-xs text-gray-500">{orr.status.replace("_", " ")}</span>
-            </div>
+        <div className="p-3 border-b border-gray-200">
+          <Link to="/orrs" className="text-[10px] text-gray-400 hover:text-blue-600">&larr; All ORRs</Link>
+          <h2 className="font-bold text-sm text-gray-900 truncate mt-1">{orr.serviceName}</h2>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[10px] text-gray-500">{orr.status.replace("_", " ")}</span>
             <a
               href={`/api/v1/orrs/${id}/export/markdown`}
-              className="text-xs text-blue-600 hover:underline"
+              className="text-[10px] text-blue-600 hover:underline"
             >
-              Export MD
+              Export
             </a>
           </div>
 
           {/* Coverage map */}
-          <div className="mt-3 flex gap-0.5">
+          <div className="mt-2 flex gap-0.5">
             {sections.map((s) => (
               <button
                 key={s.id}
                 onClick={() => setActiveSection(s.id)}
                 title={`${s.title}: ${DEPTH_LABELS[s.depth]}`}
-                className={`flex-1 h-3 rounded-sm ${DEPTH_COLORS[s.depth]} ${
+                className={`flex-1 h-2 rounded-sm ${DEPTH_COLORS[s.depth]} ${
                   s.id === activeSection ? "ring-2 ring-blue-500" : ""
                 }`}
               />
             ))}
           </div>
-          <div className="mt-1 flex justify-between text-[10px] text-gray-400">
-            <span>1</span>
-            <span>{sections.length}</span>
-          </div>
         </div>
 
-        {/* Section nav */}
-        <div className="overflow-y-auto flex-1">
-          <div className="p-2 space-y-0.5">
-            {sections.map((s) => {
-              const flags = typeof s.flags === "string" ? JSON.parse(s.flags) : s.flags;
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => setActiveSection(s.id)}
-                  className={`w-full text-left px-3 py-2 rounded text-sm ${
-                    s.id === activeSection
-                      ? "bg-blue-50 border border-blue-200"
-                      : "hover:bg-gray-50"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${DEPTH_COLORS[s.depth]}`} />
-                    <span className="flex-1 truncate">
-                      {s.position}. {s.title}
-                    </span>
-                    {flags.length > 0 && (
-                      <span className="text-[10px] text-gray-400">{flags.length}</span>
-                    )}
-                  </div>
-                  {s.conversationSnippet && (
-                    <div className="text-[10px] text-gray-400 mt-0.5 ml-4 truncate">
-                      {s.conversationSnippet}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Active section detail */}
-          {currentSection && (
-            <div className="p-4 border-t border-gray-200">
-              <h3 className="font-medium text-gray-900 mb-2">{currentSection.title}</h3>
-              <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
-                <span className={`inline-block w-2 h-2 rounded-full ${DEPTH_COLORS[currentSection.depth]}`} />
-                <span>{DEPTH_LABELS[currentSection.depth]}</span>
-                {currentSection.depthRationale && (
-                  <span className="italic text-gray-400"> — {currentSection.depthRationale}</span>
-                )}
-              </div>
-
-              {/* Flags */}
-              {currentFlags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {currentFlags.map((f: any, i: number) => (
-                    <span
-                      key={i}
-                      className={`px-2 py-0.5 rounded text-[10px] font-medium ${FLAG_COLORS[f.type] || "bg-gray-100 text-gray-600"}`}
-                    >
-                      {f.type}: {f.note}
-                    </span>
-                  ))}
+        {/* Section list */}
+        <div className="overflow-y-auto flex-1 py-1">
+          {sections.map((s) => {
+            const answered = answeredCount(s);
+            const total = totalQuestions(s);
+            return (
+              <button
+                key={s.id}
+                onClick={() => setActiveSection(s.id)}
+                className={`w-full text-left px-3 py-2 text-xs ${
+                  s.id === activeSection
+                    ? "bg-blue-50 border-r-2 border-blue-500"
+                    : "hover:bg-gray-100"
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${DEPTH_COLORS[s.depth]}`} />
+                  <span className="flex-1 truncate text-gray-700">
+                    {s.position}. {s.title}
+                  </span>
                 </div>
-              )}
-
-              {/* Prompts */}
-              <div className="space-y-1.5 mb-4">
-                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Prompts</div>
-                {currentPrompts.map((p: string, i: number) => (
-                  <div key={i} className="text-xs text-gray-600 pl-3 border-l-2 border-gray-200">
-                    {p}
-                  </div>
-                ))}
-              </div>
-
-              {/* Content */}
-              {currentSection.content ? (
-                <div>
-                  <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-1">Notes</div>
-                  <div className="bg-gray-50 rounded p-3 text-sm text-gray-700">
-                    {renderMarkdown(currentSection.content)}
-                  </div>
+                <div className="ml-3.5 mt-0.5 text-[10px] text-gray-400">
+                  {answered}/{total} answered
                 </div>
-              ) : (
-                <div className="text-sm text-gray-400 italic">
-                  No notes yet. Start an AI session to review this section.
-                </div>
-              )}
-            </div>
-          )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Right panel: AI conversation */}
-      <div className="w-1/2 flex flex-col bg-white">
+      {/* Column 2: Questions workspace */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {currentSection ? (
+          <>
+            {/* Section header */}
+            <div className="p-4 border-b border-gray-200 bg-white">
+              <div className="flex items-center gap-3">
+                <h3 className="font-semibold text-gray-900">{currentSection.title}</h3>
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <span className={`inline-block w-2 h-2 rounded-full ${DEPTH_COLORS[currentSection.depth]}`} />
+                  <span>{DEPTH_LABELS[currentSection.depth]}</span>
+                </div>
+                {saving && <span className="text-[10px] text-gray-400 ml-auto">Saving...</span>}
+              </div>
+              {currentSection.depthRationale && (
+                <p className="text-xs text-gray-400 mt-1 italic">{currentSection.depthRationale}</p>
+              )}
+            </div>
+
+            {/* Questions list */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {currentPrompts.map((prompt: string, i: number) => {
+                const isEditing = editingResponses[i] !== undefined;
+                const savedValue = savedResponses[i] || "";
+                const responseValue = isEditing ? editingResponses[i] : savedValue;
+                const isAnswered = (savedValue || editingResponses[i] || "").trim().length > 0;
+
+                return (
+                  <div key={i} className="group">
+                    <div className="flex items-start gap-2 mb-1.5">
+                      <span className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                        isAnswered ? "bg-green-500" : "bg-gray-300"
+                      }`} />
+                      <span className="text-sm text-gray-700 font-medium">{prompt}</span>
+                    </div>
+                    <div className="ml-4">
+                      {isEditing ? (
+                        <textarea
+                          autoFocus
+                          value={responseValue}
+                          onChange={(e) => handleResponseChange(i, e.target.value)}
+                          onBlur={() => {
+                            // Exit editing mode — if value matches saved, just clear editing state
+                            setEditingResponses((prev) => {
+                              const next = { ...prev };
+                              delete next[i];
+                              return next;
+                            });
+                          }}
+                          placeholder="Type your answer here..."
+                          className="w-full bg-white rounded border border-blue-300 p-2.5 text-sm text-gray-700 ring-1 ring-blue-500 resize-y transition-colors"
+                          rows={responseValue ? Math.max(3, responseValue.split("\n").length + 1) : 3}
+                        />
+                      ) : savedValue ? (
+                        <div
+                          onClick={() => setEditingResponses((prev) => ({ ...prev, [i]: savedValue }))}
+                          className="w-full bg-gray-50 rounded border border-gray-200 p-2.5 text-sm text-gray-700 cursor-text hover:border-gray-300 hover:bg-gray-100 transition-colors"
+                        >
+                          {renderMarkdown(savedValue)}
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => setEditingResponses((prev) => ({ ...prev, [i]: "" }))}
+                          className="w-full bg-gray-50 rounded border border-gray-200 border-dashed p-2.5 text-sm text-gray-400 cursor-text hover:border-gray-300 transition-colors"
+                        >
+                          Click to answer, or let the AI capture your response during the review...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* AI Observations (content field) */}
+              {currentSection.content && (
+                <div className="pt-3 border-t border-gray-200">
+                  <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2">AI Observations</div>
+                  <div className="bg-blue-50 rounded border border-blue-100 p-3 text-sm text-gray-700 leading-relaxed">
+                    {renderMarkdown(currentSection.content)}
+                  </div>
+                </div>
+              )}
+
+              {/* Flags */}
+              {currentFlags.length > 0 && (
+                <div className="pt-3 border-t border-gray-200">
+                  <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2">Flags</div>
+                  <div className="space-y-2">
+                    {currentFlags.map((f: any, i: number) => {
+                      const isRisk = f.type === "RISK";
+                      const isOverdue = isRisk && f.deadline && new Date(f.deadline) < new Date();
+                      return (
+                        <div
+                          key={i}
+                          className={`rounded border px-3 py-2 text-xs ${
+                            isRisk
+                              ? "border-red-200 bg-red-50"
+                              : "border-gray-200 bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${FLAG_COLORS[f.type] || "bg-gray-100 text-gray-600"}`}>
+                              {f.type}
+                            </span>
+                            {isRisk && f.severity && (
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${SEVERITY_COLORS[f.severity] || "bg-gray-200"}`}>
+                                {f.severity}
+                              </span>
+                            )}
+                            {isRisk && f.deadline && (
+                              <span className={`text-[10px] ml-auto ${isOverdue ? "text-red-600 font-bold" : "text-gray-500"}`}>
+                                {isOverdue ? "OVERDUE" : "Due"}: {f.deadline}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 text-gray-700">{f.note}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+            Select a section to begin
+          </div>
+        )}
+      </div>
+
+      {/* Column 3: AI conversation */}
+      <div className="w-[40%] flex-shrink-0 flex flex-col bg-white border-l border-gray-200">
         {/* Session controls */}
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="font-medium text-gray-900 text-sm">AI Review Session</h3>
+          <h3 className="font-medium text-gray-900 text-sm">AI Assistant</h3>
           {sessionId ? (
-            <button
-              onClick={endSession}
-              className="text-xs px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-            >
-              End Session
-            </button>
+            <div className="flex items-center gap-3">
+              {sessionTokens > 0 && (
+                <span className="text-[10px] text-gray-400">
+                  {Math.round(sessionTokens / 1000)}k tokens
+                </span>
+              )}
+              <button
+                onClick={endSession}
+                className="text-xs px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              >
+                End Session
+              </button>
+            </div>
           ) : (
             <button
               onClick={startSession}
@@ -430,13 +618,24 @@ export function ORRView() {
           )}
         </div>
 
+        {/* Session renewal notification */}
+        {notification && (
+          <div className="px-4 py-2 bg-blue-50 border-b border-blue-200 text-xs text-blue-700 flex items-center justify-between">
+            <span>{notification}</span>
+            <button onClick={() => setNotification(null)} className="text-blue-400 hover:text-blue-600 ml-2">&times;</button>
+          </div>
+        )}
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {!sessionId && messages.length === 0 && (
             <div className="text-center text-gray-400 text-sm mt-8">
               <p>Start an AI session to get help reviewing this ORR.</p>
               <p className="mt-2 text-xs">
-                The AI will guide you through sections, ask probing questions, and share relevant industry lessons.
+                The AI will help you think through questions, share relevant lessons, and assess depth.
+              </p>
+              <p className="mt-4 text-xs text-gray-300">
+                You can also answer questions directly without AI.
               </p>
             </div>
           )}
@@ -451,7 +650,7 @@ export function ORRView() {
               }`}
             >
               <div className="text-[10px] text-gray-400 mb-1 uppercase">
-                {msg.role === "user" ? "You" : "AI Facilitator"}
+                {msg.role === "user" ? "You" : "AI Assistant"}
               </div>
               <div className="leading-relaxed">
                 {msg.role === "assistant" ? renderMarkdown(msg.content) : msg.content}
@@ -470,10 +669,35 @@ export function ORRView() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                placeholder="Type your response..."
+                placeholder={speech.isListening ? "Listening..." : "Type or use mic..."}
                 disabled={streaming}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                className={`flex-1 px-3 py-2 border rounded text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 ${
+                  speech.isListening ? "border-red-400 bg-red-50" : "border-gray-300"
+                }`}
               />
+              {speech.isSupported && (
+                <button
+                  onClick={speech.toggle}
+                  disabled={streaming}
+                  title={speech.isListening ? "Stop listening" : "Voice input"}
+                  className={`px-3 py-2 rounded text-sm font-medium disabled:opacity-50 ${
+                    speech.isListening
+                      ? "bg-red-500 text-white hover:bg-red-600"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {speech.isListening ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                      <rect x="5" y="5" width="10" height="10" rx="1" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                      <path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 1 1-6 0V4Z" />
+                      <path d="M5.5 9.643a.75.75 0 0 0-1.5 0V10c0 3.06 2.29 5.585 5.25 5.954V17.5h-1.5a.75.75 0 0 0 0 1.5h4.5a.75.75 0 0 0 0-1.5h-1.5v-1.546A6.001 6.001 0 0 0 16 10v-.357a.75.75 0 0 0-1.5 0V10a4.5 4.5 0 0 1-9 0v-.357Z" />
+                    </svg>
+                  )}
+                </button>
+              )}
               <button
                 onClick={handleSend}
                 disabled={streaming || !input.trim()}
