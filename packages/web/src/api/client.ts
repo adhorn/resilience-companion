@@ -44,7 +44,7 @@ export const api = {
       request<{ sections: any[] }>(`/orrs/${orrId}/sections`),
     get: (orrId: string, sectionId: string) =>
       request<{ section: any }>(`/orrs/${orrId}/sections/${sectionId}`),
-    update: (orrId: string, sectionId: string, data: { content?: string; prompts?: string[] }) =>
+    update: (orrId: string, sectionId: string, data: { content?: string; prompts?: string[]; promptResponses?: Record<string, string> }) =>
       request<{ section: any }>(`/orrs/${orrId}/sections/${sectionId}`, {
         method: "PATCH",
         body: JSON.stringify(data),
@@ -68,6 +68,19 @@ export const api = {
   // Dashboard
   dashboard: {
     get: () => request<{ dashboard: any }>("/dashboard"),
+  },
+
+  // Flags
+  flags: {
+    list: (params?: { type?: string; severity?: string; orrId?: string; overdue?: boolean }) => {
+      const qs = new URLSearchParams();
+      if (params?.type) qs.set("type", params.type);
+      if (params?.severity) qs.set("severity", params.severity);
+      if (params?.orrId) qs.set("orrId", params.orrId);
+      if (params?.overdue) qs.set("overdue", "true");
+      const query = qs.toString();
+      return request<{ summary: any; flags: any[] }>(`/flags${query ? `?${query}` : ""}`);
+    },
   },
 
   // Templates

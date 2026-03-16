@@ -78,12 +78,20 @@ dashboardRoutes.get("/", (c) => {
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   );
 
+  // Total token usage across all sessions for this team's ORRs
+  const orrIds = orrs.map((o) => o.id);
+  const allSessions = orrIds.length > 0
+    ? db.select().from(schema.sessions).all().filter((s) => orrIds.includes(s.orrId))
+    : [];
+  const totalTokens = allSessions.reduce((sum, s) => sum + s.tokenUsage, 0);
+
   const stats: DashboardStats = {
     totalOrrs: orrs.length,
     byStatus,
     stale,
     aging,
     recentActivity: summaries,
+    totalTokens,
   };
 
   return c.json({ dashboard: stats });

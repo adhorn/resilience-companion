@@ -112,6 +112,7 @@ sectionRoutes.patch("/:sectionId", async (c) => {
 
   if (body.content !== undefined) updates.content = body.content;
   if (body.prompts !== undefined) updates.prompts = JSON.stringify(body.prompts);
+  if (body.promptResponses !== undefined) updates.promptResponses = body.promptResponses;
 
   db.update(schema.sections)
     .set(updates)

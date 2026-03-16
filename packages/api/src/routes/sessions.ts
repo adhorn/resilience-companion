@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { nanoid } from "nanoid";
 import { eq, and } from "drizzle-orm";
+import { MAX_SESSION_TOKENS } from "@orr/shared";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
 import { runAgent } from "../agent/loop.js";
@@ -215,12 +216,91 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
     return c.json({ error: "bad_request", message: "Session not active" }, 400);
   }
 
-  // Save user message
+  // Auto-renew session if token budget exceeded
+  let activeSessionId = sessionId;
+  let activeTokenUsage = session.tokenUsage;
+  let sessionRenewed = false;
+
+  if (session.tokenUsage >= MAX_SESSION_TOKENS) {
+    const now = new Date().toISOString();
+
+    // Build a summary for the old session from its recent messages
+    const oldMessages = db
+      .select()
+      .from(schema.sessionMessages)
+      .where(eq(schema.sessionMessages.sessionId, sessionId))
+      .all();
+    const oldDiscussed = typeof session.sectionsDiscussed === "string"
+      ? JSON.parse(session.sectionsDiscussed) as string[]
+      : session.sectionsDiscussed as string[];
+    const autoSummary = `Auto-renewed session (${Math.round(session.tokenUsage / 1000)}k tokens). ${oldMessages.length} messages exchanged. Sections discussed: ${oldDiscussed.length > 0 ? oldDiscussed.join(", ") : "none recorded"}.`;
+
+    // End the old session with summary
+    db.update(schema.sessions)
+      .set({ status: "COMPLETED", endedAt: now, summary: autoSummary })
+      .where(eq(schema.sessions.id, sessionId))
+      .run();
+
+    // Snapshot ORR at session boundary
+    const snapshotSections = db
+      .select()
+      .from(schema.sections)
+      .where(eq(schema.sections.orrId, orrId))
+      .all();
+    db.insert(schema.orrVersions)
+      .values({
+        id: nanoid(),
+        orrId,
+        snapshot: JSON.stringify({ orr, sections: snapshotSections }),
+        reason: `Session auto-renewed (token limit)`,
+        createdAt: now,
+      })
+      .run();
+
+    // Create new session, carrying forward sectionsDiscussed
+    activeSessionId = nanoid();
+    db.insert(schema.sessions)
+      .values({
+        id: activeSessionId,
+        orrId,
+        userId: user.sub,
+        agentProfile: "REVIEW_FACILITATOR",
+        summary: null,
+        sectionsDiscussed: JSON.stringify(oldDiscussed),
+        status: "ACTIVE",
+        tokenUsage: 0,
+        startedAt: now,
+        endedAt: null,
+      })
+      .run();
+
+    // Carry recent conversation into the new session for continuity.
+    // The system prompt already has the full ORR document state, so we only
+    // need enough messages for conversational context (last ~20 messages).
+    const recentMessages = oldMessages.slice(-20);
+    for (const msg of recentMessages) {
+      db.insert(schema.sessionMessages)
+        .values({
+          id: nanoid(),
+          sessionId: activeSessionId,
+          role: msg.role,
+          content: msg.content,
+          createdAt: msg.createdAt,
+        })
+        .run();
+    }
+
+    activeTokenUsage = 0;
+    sessionRenewed = true;
+    console.log(`Session auto-renewed: ${sessionId} → ${activeSessionId} (token limit ${session.tokenUsage}/${MAX_SESSION_TOKENS}, carried ${recentMessages.length} messages)`);
+  }
+
+  // Save user message to the active session
   const now = new Date().toISOString();
   db.insert(schema.sessionMessages)
     .values({
       id: nanoid(),
-      sessionId,
+      sessionId: activeSessionId,
       role: "user",
       content,
       createdAt: now,
@@ -229,14 +309,19 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
 
   // Track section discussed
   if (sectionId) {
-    const discussed = typeof session.sectionsDiscussed === "string"
-      ? JSON.parse(session.sectionsDiscussed)
-      : session.sectionsDiscussed;
+    const activeSession = db
+      .select()
+      .from(schema.sessions)
+      .where(eq(schema.sessions.id, activeSessionId))
+      .get();
+    const discussed = typeof activeSession!.sectionsDiscussed === "string"
+      ? JSON.parse(activeSession!.sectionsDiscussed)
+      : activeSession!.sectionsDiscussed;
     if (!(discussed as string[]).includes(sectionId)) {
       (discussed as string[]).push(sectionId);
       db.update(schema.sessions)
         .set({ sectionsDiscussed: JSON.stringify(discussed) })
-        .where(eq(schema.sessions.id, sessionId))
+        .where(eq(schema.sessions.id, activeSessionId))
         .run();
     }
   }
@@ -245,7 +330,7 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
   const allMessages = db
     .select()
     .from(schema.sessionMessages)
-    .where(eq(schema.sessionMessages.sessionId, sessionId))
+    .where(eq(schema.sessionMessages.sessionId, activeSessionId))
     .all();
 
   // Don't include the user message we just saved — it goes as the new user message
@@ -268,13 +353,26 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
   return streamSSE(c, async (stream) => {
     let fullResponse = "";
 
+    // Notify frontend of session renewal before agent response
+    if (sessionRenewed) {
+      await stream.writeSSE({
+        event: "session_renewed",
+        data: JSON.stringify({
+          type: "session_renewed",
+          oldSessionId: sessionId,
+          newSessionId: activeSessionId,
+        }),
+      });
+    }
+
     try {
       const agentStream = runAgent({
         orrId,
-        sessionId,
+        sessionId: activeSessionId,
         activeSectionId: sectionId || null,
         conversationHistory: history,
         userMessage: content,
+        sessionTokenUsage: activeTokenUsage,
       });
 
       for await (const event of agentStream) {
@@ -288,10 +386,10 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
         }
 
         if (event.type === "message_end") {
-          // Update token usage
+          // Update token usage on the active session
           db.update(schema.sessions)
-            .set({ tokenUsage: session.tokenUsage + (event.tokenUsage || 0) })
-            .where(eq(schema.sessions.id, sessionId))
+            .set({ tokenUsage: activeTokenUsage + (event.tokenUsage || 0) })
+            .where(eq(schema.sessions.id, activeSessionId))
             .run();
         }
       }
@@ -313,7 +411,7 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
         db.insert(schema.sessionMessages)
           .values({
             id: nanoid(),
-            sessionId,
+            sessionId: activeSessionId,
             role: "assistant",
             content: fullResponse,
             createdAt: new Date().toISOString(),

@@ -18,6 +18,13 @@ function findSeedDataPath(): string {
 export async function seed(db: Db) {
   const now = new Date().toISOString();
 
+  // Migrate: add prompt_responses column if it doesn't exist
+  try {
+    (db as any).run("ALTER TABLE sections ADD COLUMN prompt_responses TEXT NOT NULL DEFAULT '{}'");
+  } catch {
+    // Column already exists — ignore
+  }
+
   // Seed default team and user (single-tenant, no login)
   const existingUser = db.select().from(schema.users).limit(1).get();
   if (!existingUser) {

@@ -11,6 +11,7 @@ import { teachingMomentRoutes } from "./routes/teaching-moments.js";
 import { caseStudyRoutes } from "./routes/case-studies.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
+import { flagsRoutes } from "./routes/flags.js";
 import { exportRoutes } from "./routes/export.js";
 
 export const app = new Hono();
@@ -35,6 +36,7 @@ app.route("/api/v1/teaching-moments", teachingMomentRoutes);
 app.route("/api/v1/case-studies", caseStudyRoutes);
 app.route("/api/v1/orrs/:orrId/sessions", sessionRoutes);
 app.route("/api/v1/dashboard", dashboardRoutes);
+app.route("/api/v1/flags", flagsRoutes);
 app.route("/api/v1/orrs/:orrId/export", exportRoutes);
 
 // Serve static files in production (built web app)

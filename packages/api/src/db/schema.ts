@@ -76,6 +76,7 @@ export const sections = sqliteTable("sections", {
     .notNull()
     .default("UNKNOWN"),
   depthRationale: text("depth_rationale"),
+  promptResponses: text("prompt_responses", { mode: "json" }).notNull().default("{}"), // Record<number, string>
   flags: text("flags", { mode: "json" }).notNull().default("[]"), // SectionFlagEntry[]
   conversationSnippet: text("conversation_snippet"),
   updatedAt: text("updated_at").notNull(),

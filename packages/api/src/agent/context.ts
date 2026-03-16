@@ -62,14 +62,18 @@ export function buildORRContext(
     if (sec) {
       const flags = typeof sec.flags === "string" ? JSON.parse(sec.flags) : sec.flags;
       const prompts = typeof sec.prompts === "string" ? JSON.parse(sec.prompts) : sec.prompts;
+      const promptResponses = typeof sec.promptResponses === "string"
+        ? JSON.parse(sec.promptResponses as string)
+        : (sec.promptResponses || {});
       activeSection = {
         id: sec.id,
         title: sec.title,
         prompts: prompts as string[],
         content: sec.content,
+        promptResponses: promptResponses as Record<number, string>,
         depth: sec.depth,
         depthRationale: sec.depthRationale,
-        flags: flags as Array<{ type: string; note: string }>,
+        flags: flags as Array<{ type: string; note: string; severity?: string; deadline?: string }>,
         conversationSnippet: sec.conversationSnippet,
       };
     }
@@ -124,5 +128,6 @@ export function buildORRContext(
     activeSection,
     sessionSummaries,
     teachingMoments,
+    isReturningSession: completedSessions.length > 0,
   };
 }

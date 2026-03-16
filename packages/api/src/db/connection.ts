@@ -1,10 +1,19 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { mkdirSync } from "node:fs";
 import * as schema from "./schema.js";
 
-const DB_PATH = process.env.DB_PATH || "./data/orr-companion.db";
+// Resolve DB_PATH: if relative, resolve from the monorepo root (3 levels up from this file)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const monorepoRoot = resolve(__dirname, "../../../..");
+const rawPath = process.env.DB_PATH || "./data/orr-companion.db";
+const DB_PATH = rawPath.startsWith("/") ? rawPath : resolve(monorepoRoot, rawPath);
 
 function createConnection(dbPath: string = DB_PATH) {
+  // Ensure the parent directory exists
+  mkdirSync(dirname(dbPath), { recursive: true });
   const sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
