@@ -352,6 +352,7 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
   // Stream agent response via SSE
   return streamSSE(c, async (stream) => {
     let fullResponse = "";
+    const toolCalls: Array<{ tool: string; args: unknown; result: unknown; timestamp: string }> = [];
 
     // Notify frontend of session renewal before agent response
     if (sessionRenewed) {
@@ -375,6 +376,8 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
         sessionTokenUsage: activeTokenUsage,
       });
 
+      let pendingToolCall: { tool: string; args: unknown } | null = null;
+
       for await (const event of agentStream) {
         await stream.writeSSE({
           event: event.type,
@@ -383,6 +386,19 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
 
         if (event.type === "content_delta") {
           fullResponse += event.content;
+        }
+
+        // Track tool calls for audit trail
+        if (event.type === "tool_call") {
+          pendingToolCall = { tool: event.tool!, args: event.args };
+        }
+        if (event.type === "tool_result" && pendingToolCall) {
+          toolCalls.push({
+            ...pendingToolCall,
+            result: event.result,
+            timestamp: new Date().toISOString(),
+          });
+          pendingToolCall = null;
         }
 
         if (event.type === "message_end") {
@@ -414,6 +430,7 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
             sessionId: activeSessionId,
             role: "assistant",
             content: fullResponse,
+            metadata: toolCalls.length > 0 ? JSON.stringify({ toolCalls }) : null,
             createdAt: new Date().toISOString(),
           })
           .run();

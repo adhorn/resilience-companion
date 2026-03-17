@@ -171,8 +171,23 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
       yield { type: "tool_call", tool: tc.name, args };
 
       console.log(`Agent tool call [iter ${iteration}]: ${tc.name}(${JSON.stringify(args).slice(0, 200)})`);
-      const result = executeTool(tc.name, args, orrId, sessionId);
-      const parsedResult = JSON.parse(result);
+
+      let result: string;
+      let parsedResult: Record<string, unknown>;
+      try {
+        result = executeTool(tc.name, args, orrId, sessionId);
+        parsedResult = JSON.parse(result);
+      } catch (err) {
+        const errMsg = (err as Error).message || "Unknown tool error";
+        console.error(`Tool execution failed [${tc.name}]:`, errMsg);
+        result = JSON.stringify({ error: `Tool failed: ${errMsg}` });
+        parsedResult = { error: `Tool failed: ${errMsg}` };
+        yield {
+          type: "error",
+          message: `Tool "${tc.name}" failed: ${errMsg}`,
+        } as SSEEvent;
+      }
+
       console.log(`Agent tool result: ${result.slice(0, 200)}`);
 
       yield { type: "tool_result", tool: tc.name, result: parsedResult };

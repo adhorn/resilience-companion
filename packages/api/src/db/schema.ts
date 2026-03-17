@@ -126,6 +126,7 @@ export const sessionMessages = sqliteTable("session_messages", {
     .references(() => sessions.id, { onDelete: "cascade" }),
   role: text("role", { enum: ["user", "assistant"] }).notNull(),
   content: text("content").notNull(),
+  metadata: text("metadata", { mode: "json" }), // tool calls audit trail for assistant messages
   createdAt: text("created_at").notNull(),
 });
 

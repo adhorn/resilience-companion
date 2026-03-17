@@ -7,8 +7,7 @@
     "packages/web"
   ],
   "scripts": {
-    "dev": "if [ ! -f /.dockerenv ]; then echo '\\n❌ Do not run dev locally. Use: docker compose -f docker-compose.dev.yml up --build\\n' && exit 1; fi && concurrently -n api,web -c blue,green \"npm run dev -w @orr/api\" \"npm run dev -w @orr/web\"",
-    "dev:docker": "docker compose -f docker-compose.dev.yml up --build",
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @orr/api\" \"npm run dev -w @orr/web\"",
     "build": "npm run build -w @orr/shared && npm run build -w @orr/api && npm run build -w @orr/web",
     "test": "vitest run",
     "lint": "tsc --noEmit -p packages/api/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json"

@@ -32,7 +32,7 @@ export interface ActiveSectionDetail {
   title: string;
   prompts: string[];
   content: string;
-  promptResponses: Record<number, string>;
+  promptResponses: Record<number, string | { answer: string; source?: string; codeRef?: string }>;
   depth: string;
   depthRationale: string | null;
   flags: { type: string; note: string; severity?: string; deadline?: string }[];
@@ -127,9 +127,10 @@ export function buildSystemPrompt(ctx: ORRContext): string {
     parts.push(`\n## Active Section: ${sec.title} (id: ${sec.id})`);
     parts.push("\nQuestions:");
     for (let i = 0; i < sec.prompts.length; i++) {
-      const response = sec.promptResponses?.[i];
-      const status = response && response.trim().length > 0
-        ? `ANSWERED (${response.length} chars)`
+      const rawResponse = sec.promptResponses?.[i];
+      const responseText = typeof rawResponse === "string" ? rawResponse : rawResponse?.answer || "";
+      const status = responseText.trim().length > 0
+        ? `ANSWERED (${responseText.length} chars)`
         : "UNANSWERED";
       parts.push(`[${i}] ${sec.prompts[i]} → ${status}`);
     }
