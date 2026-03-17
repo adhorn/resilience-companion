@@ -146,6 +146,9 @@ export function ORRView() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+  const [streamStatus, setStreamStatus] = useState<string | null>(null); // retry/status messages during streaming
+  const [lastError, setLastError] = useState<string | null>(null);
+  const lastUserMessageRef = useRef<string | null>(null);
   const speech = useSpeechRecognition((text) => {
     setInput((prev) => (prev ? prev + " " + text : text));
   });
@@ -225,8 +228,26 @@ export function ORRView() {
     setEditingResponses({});
   }, [activeSection]);
 
+  // Parse a single prompt response value — may be a plain string (legacy) or { answer, source, codeRef }
+  const getResponseText = (val: any): string => {
+    if (!val) return "";
+    if (typeof val === "string") return val;
+    if (typeof val === "object" && val.answer) return val.answer;
+    return "";
+  };
+
+  const getResponseSource = (val: any): "team" | "code" | null => {
+    if (!val || typeof val === "string") return null;
+    return val.source || null;
+  };
+
+  const getResponseCodeRef = (val: any): string | null => {
+    if (!val || typeof val === "string") return null;
+    return val.codeRef || null;
+  };
+
   // Parse promptResponses from a section (handles string or object)
-  const parseResponses = (section: any): Record<number, string> => {
+  const parseResponses = (section: any): Record<number, any> => {
     if (!section?.promptResponses) return {};
     const raw = typeof section.promptResponses === "string"
       ? JSON.parse(section.promptResponses)
@@ -288,13 +309,13 @@ export function ORRView() {
     await reloadSections();
   }, [id, sessionId, reloadSections]);
 
-  const handleSend = useCallback(async () => {
-    if (!input.trim() || !id || !sessionId || streaming) return;
+  const doSend = useCallback(async (userMessage: string) => {
+    if (!id || !sessionId || streaming) return;
 
-    const userMessage = input.trim();
-    setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    lastUserMessageRef.current = userMessage;
+    setLastError(null);
     setStreaming(true);
+    setStreamStatus(null);
 
     let assistantContent = "";
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -302,6 +323,7 @@ export function ORRView() {
     try {
       await sendMessage(id, sessionId, userMessage, activeSection, (event) => {
         if (event.type === "content_delta") {
+          setStreamStatus(null); // clear status once content flows
           assistantContent += event.content;
           setMessages((prev) => {
             const updated = [...prev];
@@ -311,6 +333,15 @@ export function ORRView() {
             };
             return updated;
           });
+        }
+
+        if (event.type === "status") {
+          setStreamStatus(event.message);
+        }
+
+        if (event.type === "error") {
+          setLastError(event.message);
+          setStreamStatus(null);
         }
 
         // When AI calls any tool with a section_id, switch to that section
@@ -336,27 +367,20 @@ export function ORRView() {
         }
       });
     } catch (err) {
-      const errText = "\n\n*Connection lost. Your conversation is saved — reload the page to continue.*";
-      assistantContent += errText;
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          role: "assistant",
-          content: assistantContent,
-        };
-        return updated;
-      });
+      setLastError("Connection lost. Your conversation is saved — reload the page to continue.");
     }
 
-    // If the stream completed but produced no content, show an error
+    setStreamStatus(null);
+
+    // If the stream completed but produced no content, show fallback
     if (!assistantContent.trim()) {
+      setLastError((prev) => prev || "No response received. The AI may be overloaded.");
+      // Remove empty assistant message
       setMessages((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          role: "assistant",
-          content: "*No response received. The AI may be overloaded. Send your message again to retry.*",
-        };
-        return updated;
+        if (prev.length > 0 && prev[prev.length - 1].role === "assistant" && !prev[prev.length - 1].content.trim()) {
+          return prev.slice(0, -1);
+        }
+        return prev;
       });
     }
 
@@ -365,7 +389,21 @@ export function ORRView() {
     await reloadSections();
     setEditingResponses({});
     setStreaming(false);
-  }, [input, id, sessionId, activeSection, streaming, reloadSections, debouncedReload]);
+  }, [id, sessionId, activeSection, streaming, reloadSections, debouncedReload]);
+
+  const handleSend = useCallback(async () => {
+    if (!input.trim() || !id || !sessionId || streaming) return;
+    const userMessage = input.trim();
+    setInput("");
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    await doSend(userMessage);
+  }, [input, id, sessionId, streaming, doSend]);
+
+  const handleRetry = useCallback(async () => {
+    if (!lastUserMessageRef.current || streaming) return;
+    setLastError(null);
+    await doSend(lastUserMessageRef.current);
+  }, [streaming, doSend]);
 
   if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
   if (!orr) return <div className="p-6 text-red-500">ORR not found</div>;
@@ -386,7 +424,12 @@ export function ORRView() {
   // Count answered questions per section (for the sidebar)
   const answeredCount = (section: any): number => {
     const responses = parseResponses(section);
-    return Object.values(responses).filter((v) => v && String(v).trim().length > 0).length;
+    return Object.values(responses).filter((v) => getResponseText(v).trim().length > 0).length;
+  };
+  // Count code-sourced answers in a section
+  const codeSourcedCount = (section: any): number => {
+    const responses = parseResponses(section);
+    return Object.values(responses).filter((v) => getResponseSource(v) === "code").length;
   };
   const totalQuestions = (section: any): number => {
     const prompts = typeof section.prompts === "string"
@@ -433,6 +476,7 @@ export function ORRView() {
           {sections.map((s) => {
             const answered = answeredCount(s);
             const total = totalQuestions(s);
+            const codeSourced = codeSourcedCount(s);
             return (
               <button
                 key={s.id}
@@ -451,6 +495,11 @@ export function ORRView() {
                 </div>
                 <div className="ml-3.5 mt-0.5 text-[10px] text-gray-400">
                   {answered}/{total} answered
+                  {codeSourced > 0 && (
+                    <span className="ml-1 text-purple-500" title={`${codeSourced} answer${codeSourced > 1 ? "s" : ""} sourced from code`}>
+                      ({codeSourced} from code)
+                    </span>
+                  )}
                 </div>
               </button>
             );
@@ -481,7 +530,10 @@ export function ORRView() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {currentPrompts.map((prompt: string, i: number) => {
                 const isEditing = editingResponses[i] !== undefined;
-                const savedValue = savedResponses[i] || "";
+                const rawValue = savedResponses[i];
+                const savedValue = getResponseText(rawValue);
+                const source = getResponseSource(rawValue);
+                const codeRef = getResponseCodeRef(rawValue);
                 const responseValue = isEditing ? editingResponses[i] : savedValue;
                 const isAnswered = (savedValue || editingResponses[i] || "").trim().length > 0;
 
@@ -517,6 +569,15 @@ export function ORRView() {
                           className="w-full bg-gray-50 rounded border border-gray-200 p-2.5 text-sm text-gray-700 cursor-text hover:border-gray-300 hover:bg-gray-100 transition-colors"
                         >
                           {renderMarkdown(savedValue)}
+                          {source === "code" && (
+                            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-purple-600">
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                                <path fillRule="evenodd" d="M4.78 4.97a.75.75 0 0 1 0 1.06L2.81 8l1.97 1.97a.75.75 0 1 1-1.06 1.06l-2.5-2.5a.75.75 0 0 1 0-1.06l2.5-2.5a.75.75 0 0 1 1.06 0Zm6.44 0a.75.75 0 0 1 1.06 0l2.5 2.5a.75.75 0 0 1 0 1.06l-2.5 2.5a.75.75 0 1 1-1.06-1.06L13.19 8l-1.97-1.97a.75.75 0 0 1 0-1.06Zm-3.4-.89a.75.75 0 0 1 .46.95l-2 6a.75.75 0 0 1-1.41-.47l2-6a.75.75 0 0 1 .95-.48Z" clipRule="evenodd" />
+                              </svg>
+                              <span>sourced from code</span>
+                              {codeRef && <span className="text-purple-400 font-mono">{codeRef}</span>}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div
@@ -548,14 +609,18 @@ export function ORRView() {
                   <div className="space-y-2">
                     {currentFlags.map((f: any, i: number) => {
                       const isRisk = f.type === "RISK";
-                      const isOverdue = isRisk && f.deadline && new Date(f.deadline) < new Date();
+                      const status = f.status || "OPEN";
+                      const isResolved = status === "RESOLVED" || status === "ACCEPTED";
+                      const isOverdue = isRisk && f.deadline && new Date(f.deadline) < new Date() && !isResolved;
                       return (
                         <div
                           key={i}
                           className={`rounded border px-3 py-2 text-xs ${
-                            isRisk
-                              ? "border-red-200 bg-red-50"
-                              : "border-gray-200 bg-gray-50"
+                            isResolved
+                              ? "border-gray-200 bg-gray-50 opacity-60"
+                              : isRisk
+                                ? "border-red-200 bg-red-50"
+                                : "border-gray-200 bg-gray-50"
                           }`}
                         >
                           <div className="flex items-center gap-2">
@@ -567,13 +632,65 @@ export function ORRView() {
                                 {f.severity}
                               </span>
                             )}
+                            {status !== "OPEN" && (
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                status === "ACCEPTED" ? "bg-purple-100 text-purple-700" : "bg-green-100 text-green-700"
+                              }`}>
+                                {status}
+                              </span>
+                            )}
                             {isRisk && f.deadline && (
-                              <span className={`text-[10px] ml-auto ${isOverdue ? "text-red-600 font-bold" : "text-gray-500"}`}>
+                              <span className={`text-[10px] ${isOverdue ? "text-red-600 font-bold" : "text-gray-500"}`}>
                                 {isOverdue ? "OVERDUE" : "Due"}: {f.deadline}
                               </span>
                             )}
+                            <span className="ml-auto flex gap-1">
+                              {status === "OPEN" ? (
+                                <>
+                                  <button
+                                    onClick={async () => {
+                                      const reason = prompt(f.type === "RISK" ? "Why is this risk acceptable?" : "Why accept this?");
+                                      if (reason) {
+                                        await api.flags.updateStatus(id!, activeSection!, i, { status: "ACCEPTED", resolution: reason });
+                                        reloadSections();
+                                      }
+                                    }}
+                                    className="text-[9px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 hover:bg-purple-100"
+                                  >
+                                    Accept
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      const reason = prompt("What was done to resolve this?");
+                                      if (reason) {
+                                        await api.flags.updateStatus(id!, activeSection!, i, { status: "RESOLVED", resolution: reason });
+                                        reloadSections();
+                                      }
+                                    }}
+                                    className="text-[9px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 hover:bg-green-100"
+                                  >
+                                    Resolve
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={async () => {
+                                    await api.flags.updateStatus(id!, activeSection!, i, { status: "OPEN" });
+                                    reloadSections();
+                                  }}
+                                  className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                >
+                                  Reopen
+                                </button>
+                              )}
+                            </span>
                           </div>
                           <div className="mt-1 text-gray-700">{f.note}</div>
+                          {f.resolution && (
+                            <div className="mt-1 text-gray-500 italic">
+                              {status === "ACCEPTED" ? "Accepted" : "Resolved"}: {f.resolution}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -623,6 +740,33 @@ export function ORRView() {
           <div className="px-4 py-2 bg-blue-50 border-b border-blue-200 text-xs text-blue-700 flex items-center justify-between">
             <span>{notification}</span>
             <button onClick={() => setNotification(null)} className="text-blue-400 hover:text-blue-600 ml-2">&times;</button>
+          </div>
+        )}
+
+        {/* Retry status (shown while LLM is retrying) */}
+        {streamStatus && (
+          <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-700 flex items-center gap-2">
+            <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span>{streamStatus}</span>
+          </div>
+        )}
+
+        {/* Error banner with retry */}
+        {lastError && !streaming && (
+          <div className="px-4 py-2 bg-red-50 border-b border-red-200 text-xs text-red-700 flex items-center justify-between">
+            <span>{lastError}</span>
+            <div className="flex items-center gap-2 ml-4 shrink-0">
+              <button
+                onClick={handleRetry}
+                className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 font-medium"
+              >
+                Retry
+              </button>
+              <button onClick={() => setLastError(null)} className="text-red-400 hover:text-red-600">&times;</button>
+            </div>
           </div>
         )}
 

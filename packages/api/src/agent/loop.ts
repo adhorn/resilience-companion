@@ -1,11 +1,35 @@
 import { MAX_AGENT_ITERATIONS, MAX_SESSION_TOKENS } from "@orr/shared";
 import { getLLM } from "../llm/index.js";
-import type { LLMMessage, StreamChunk } from "../llm/index.js";
+import type { LLMMessage } from "../llm/index.js";
 import type { SSEEvent } from "@orr/shared";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { buildORRContext } from "./context.js";
 import { AGENT_TOOLS, executeTool } from "./tools.js";
 import { nanoid } from "nanoid";
+
+/** Translate raw LLM errors into user-friendly messages */
+function categorizeError(msg: string): string {
+  const lower = msg.toLowerCase();
+  if (lower.includes("rate limit") || lower.includes("429")) {
+    return "The AI provider is rate limiting us. Retries were exhausted. Wait a moment and send your message again.";
+  }
+  if (lower.includes("overloaded") || lower.includes("529")) {
+    return "The AI provider is currently overloaded. This is temporary — try again in a minute.";
+  }
+  if (lower.includes("401") || lower.includes("authentication") || lower.includes("unauthorized")) {
+    return "AI authentication failed. Check that LLM_API_KEY is valid.";
+  }
+  if (lower.includes("timeout") || lower.includes("etimedout")) {
+    return "The AI request timed out. This can happen with complex prompts. Send your message again to retry.";
+  }
+  if (lower.includes("econnrefused") || lower.includes("enotfound") || lower.includes("fetch failed")) {
+    return "Cannot reach the AI provider. Check your network connection.";
+  }
+  if (lower.includes("500") || lower.includes("502") || lower.includes("503")) {
+    return "The AI provider had a server error. This is on their end — try again shortly.";
+  }
+  return `AI error: ${msg}`;
+}
 
 export interface AgentInput {
   orrId: string;
@@ -63,6 +87,15 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
       const stream = llm.chat(messages, AGENT_TOOLS);
 
       for await (const chunk of stream) {
+        // RetryAdapter emits retry events between attempts
+        if (chunk.type === "retry") {
+          yield {
+            type: "status",
+            message: `${chunk.reason}. Retrying (${chunk.attempt}/${chunk.maxRetries})...`,
+          } as SSEEvent;
+          continue;
+        }
+
         switch (chunk.type) {
           case "content":
             fullContent += chunk.content!;
@@ -97,12 +130,14 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
         }
       }
     } catch (err) {
-      const errMsg = (err as Error).message || "Unknown LLM error";
+      const errMsg = (err as Error).message || "Unknown error";
       console.error(`Agent LLM error [iter ${iteration}]:`, errMsg);
+      // Categorize the error for the user
+      const userMessage = categorizeError(errMsg);
       yield {
-        type: "content_delta",
-        content: `\n\n*AI error: ${errMsg}. Send your message again to retry.*`,
-      };
+        type: "error",
+        message: userMessage,
+      } as SSEEvent;
       yield { type: "message_end", tokenUsage: totalUsage };
       return;
     }
@@ -192,8 +227,12 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
       }
     }
   } catch (err) {
-    // If the graceful wrap-up fails, fall back to canned message
-    console.error("Agent wrap-up error:", (err as Error).message);
+    const errMsg = (err as Error).message || "Unknown error";
+    console.error("Agent wrap-up error:", errMsg);
+    yield {
+      type: "error",
+      message: `Could not generate summary: ${categorizeError(errMsg)}`,
+    } as SSEEvent;
     yield {
       type: "content_delta",
       content:

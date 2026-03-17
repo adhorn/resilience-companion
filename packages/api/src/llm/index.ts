@@ -2,8 +2,10 @@ import type { LLMAdapter } from "./adapter.js";
 import { OpenAICompatibleAdapter } from "./openai-compatible.js";
 import { AnthropicAdapter } from "./anthropic.js";
 import { NoOpAdapter } from "./noop.js";
+import { RetryAdapter } from "./retry.js";
 
 export type { LLMAdapter, LLMMessage, LLMToolDef, LLMToolCall, StreamChunk } from "./adapter.js";
+export type { RetryEvent } from "./retry.js";
 
 // Map short model names to Anthropic model IDs
 const ANTHROPIC_MODEL_MAP: Record<string, string> = {
@@ -28,16 +30,16 @@ export function getLLM(): LLMAdapter {
       if (isAnthropicKey(apiKey)) {
         const modelInput = process.env.LLM_MODEL || "sonnet";
         const model = ANTHROPIC_MODEL_MAP[modelInput] || modelInput;
-        _adapter = new AnthropicAdapter(apiKey, model);
-        console.log(`LLM adapter: Anthropic (model: ${model})`);
+        _adapter = new RetryAdapter(new AnthropicAdapter(apiKey, model));
+        console.log(`LLM adapter: Anthropic (model: ${model}) with retry`);
       } else {
-        _adapter = new OpenAICompatibleAdapter(
+        _adapter = new RetryAdapter(new OpenAICompatibleAdapter(
           apiKey,
           process.env.LLM_BASE_URL,
           process.env.LLM_MODEL,
-        );
+        ));
         console.log(
-          `LLM adapter: OpenAI-compatible (model: ${process.env.LLM_MODEL || "gpt-4o"})`,
+          `LLM adapter: OpenAI-compatible (model: ${process.env.LLM_MODEL || "gpt-4o"}) with retry`,
         );
       }
     } else {

@@ -29,12 +29,17 @@ export interface LLMToolDef {
 }
 
 export interface StreamChunk {
-  type: "content" | "tool_call_start" | "tool_call_args" | "tool_call_end" | "done";
+  type: "content" | "tool_call_start" | "tool_call_args" | "tool_call_end" | "done" | "retry";
   content?: string;
   toolCallId?: string;
   toolName?: string;
   toolArgs?: string;
   usage?: { promptTokens: number; completionTokens: number };
+  // Retry-specific fields (present when type === "retry")
+  attempt?: number;
+  maxRetries?: number;
+  delayMs?: number;
+  reason?: string;
 }
 
 export interface LLMAdapter {

@@ -24,7 +24,7 @@ export const api = {
   orrs: {
     list: () => request<{ orrs: any[] }>("/orrs"),
     get: (id: string) => request<{ orr: any; sections: any[] }>(`/orrs/${id}`),
-    create: (data: { serviceName: string; templateId?: string }) =>
+    create: (data: { serviceName: string; templateId?: string; repositoryUrl?: string; repositoryToken?: string }) =>
       request<{ orr: any; sections: any[] }>("/orrs", {
         method: "POST",
         body: JSON.stringify(data),
@@ -72,15 +72,21 @@ export const api = {
 
   // Flags
   flags: {
-    list: (params?: { type?: string; severity?: string; orrId?: string; overdue?: boolean }) => {
+    list: (params?: { type?: string; severity?: string; orrId?: string; overdue?: boolean; status?: string }) => {
       const qs = new URLSearchParams();
       if (params?.type) qs.set("type", params.type);
       if (params?.severity) qs.set("severity", params.severity);
       if (params?.orrId) qs.set("orrId", params.orrId);
       if (params?.overdue) qs.set("overdue", "true");
+      if (params?.status) qs.set("status", params.status);
       const query = qs.toString();
       return request<{ summary: any; flags: any[] }>(`/flags${query ? `?${query}` : ""}`);
     },
+    updateStatus: (orrId: string, sectionId: string, flagIndex: number, data: { status: string; resolution?: string }) =>
+      request<{ flag: any; flags: any[] }>(`/orrs/${orrId}/sections/${sectionId}/flags/${flagIndex}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
   },
 
   // Templates

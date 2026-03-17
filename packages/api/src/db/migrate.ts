@@ -38,10 +38,22 @@ export function migrate(db: Db) {
     team_id TEXT NOT NULL REFERENCES teams(id),
     template_version TEXT NOT NULL REFERENCES templates(id),
     status TEXT NOT NULL DEFAULT 'DRAFT',
+    repository_path TEXT,
+    repository_token TEXT,
+    repository_local_path TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     completed_at TEXT
   )`);
+
+  // Migrations: add repository columns to existing orrs tables
+  for (const col of ["repository_path", "repository_token", "repository_local_path"]) {
+    try {
+      db.run(sql.raw(`ALTER TABLE orrs ADD COLUMN ${col} TEXT`));
+    } catch (_) {
+      // Column already exists
+    }
+  }
 
   db.run(sql`CREATE TABLE IF NOT EXISTS sections (
     id TEXT PRIMARY KEY,
