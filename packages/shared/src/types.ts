@@ -3,6 +3,7 @@ import type {
   SectionDepth,
   SectionFlag,
   RiskSeverity,
+  FlagStatus,
   SessionStatus,
   TeachingMomentStatus,
   TeachingMomentSource,
@@ -34,6 +35,7 @@ export interface ORR {
   teamId: string;
   templateVersion: string;
   status: ORRStatus;
+  repositoryPath: string | null; // path to source code for code exploration
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -59,6 +61,10 @@ export interface SectionFlagEntry {
   note: string;
   severity?: RiskSeverity;  // RISK flags only
   deadline?: string;        // ISO date, RISK flags only
+  status: FlagStatus;       // OPEN, ACCEPTED, RESOLVED
+  resolution?: string;      // reason for accept/resolve
+  resolvedAt?: string;      // ISO 8601
+  resolvedBy?: string;      // user ID
   createdAt: string;
 }
 
@@ -162,6 +168,17 @@ export interface LoginInput {
 export interface CreateORRInput {
   serviceName: string;
   templateId?: string; // defaults to default template
+  repositoryPath?: string; // optional: path to source code for code exploration
+}
+
+// --- Answer source tracking ---
+
+export type AnswerSource = "team" | "code";
+
+export interface PromptResponse {
+  answer: string;
+  source: AnswerSource; // "team" = generated from memory, "code" = read from source code
+  codeRef?: string; // e.g. "src/llm/retry.ts:45-92" — file location the answer came from
 }
 
 export interface UpdateSectionInput {
@@ -184,6 +201,7 @@ export type SSEEvent =
   | { type: "section_updated"; sectionId: string; field: string }
   | { type: "session_renewed"; oldSessionId: string; newSessionId: string }
   | { type: "message_end"; tokenUsage: number }
+  | { type: "status"; message: string }
   | { type: "error"; message: string };
 
 // --- Dashboard types ---
@@ -216,6 +234,7 @@ export interface FlagWithContext extends SectionFlagEntry {
   sectionTitle: string;
   sectionPosition: number;
   isOverdue: boolean;
+  flagIndex: number;  // index within section's flags array (for PATCH)
 }
 
 export interface FlagsSummary {

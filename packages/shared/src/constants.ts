@@ -25,6 +25,14 @@ export const SectionFlag = {
 } as const;
 export type SectionFlag = (typeof SectionFlag)[keyof typeof SectionFlag];
 
+// Flag resolution status
+export const FlagStatus = {
+  OPEN: "OPEN",
+  ACCEPTED: "ACCEPTED",   // Risk accepted — team acknowledges with reason
+  RESOLVED: "RESOLVED",   // Risk addressed — action taken
+} as const;
+export type FlagStatus = (typeof FlagStatus)[keyof typeof FlagStatus];
+
 // Risk severity levels
 export const RiskSeverity = {
   HIGH: "HIGH",

@@ -20,7 +20,7 @@ app.use("*", logger());
 app.use(
   "/api/*",
   cors({
-    origin: ["http://localhost:5173"],
+    origin: ["http://localhost:5173", "http://localhost:3000"],
     credentials: true,
   }),
 );
@@ -39,14 +39,13 @@ app.route("/api/v1/dashboard", dashboardRoutes);
 app.route("/api/v1/flags", flagsRoutes);
 app.route("/api/v1/orrs/:orrId/export", exportRoutes);
 
-// Serve static files in production (built web app)
-// Resolve relative to this file's location, not CWD
+// Serve frontend — either built static files or proxy to Vite dev server
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(__dirname, "../public");
 if (existsSync(publicDir)) {
+  // Production: serve built assets
   const indexHtml = readFileSync(resolve(publicDir, "index.html"), "utf-8");
 
-  // Serve static assets
   app.get("/assets/*", async (c) => {
     const filePath = resolve(publicDir, c.req.path.slice(1));
     if (existsSync(filePath)) {
@@ -68,8 +67,25 @@ if (existsSync(publicDir)) {
     return c.notFound();
   });
 
-  // SPA fallback: serve index.html for all non-API routes
-  app.get("*", (c) => {
-    return c.html(indexHtml);
+  app.get("*", (c) => c.html(indexHtml));
+} else {
+  // Dev: reverse-proxy non-API requests to Vite dev server
+  const VITE_URL = "http://localhost:5173";
+
+  app.all("*", async (c) => {
+    const url = new URL(c.req.url);
+    const target = `${VITE_URL}${url.pathname}${url.search}`;
+    try {
+      const resp = await fetch(target, {
+        method: c.req.method,
+        headers: c.req.raw.headers,
+      });
+      return new Response(resp.body, {
+        status: resp.status,
+        headers: resp.headers,
+      });
+    } catch {
+      return c.text("Vite dev server not ready", 502);
+    }
   });
 }

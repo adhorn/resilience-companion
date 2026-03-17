@@ -21,11 +21,9 @@ npm run lint         # TypeScript type-check (--noEmit) for api + web
 
 Per-workspace: `npm run dev -w @orr/shared`, `npm run dev -w @orr/api`, `npm run dev -w @orr/web`
 
-Docker: `docker compose up` (production), `docker compose -f docker-compose.dev.yml up` (dev, source mounted)
-
 ## Architecture
 
-TypeScript monorepo, three npm workspaces. SQLite database. Self-hosted, docker-compose distribution only.
+TypeScript monorepo, three npm workspaces. SQLite database.
 
 ### `packages/shared` (@orr/shared)
 Pure TypeScript types and constants — no runtime code. **Must be built first.**

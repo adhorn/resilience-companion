@@ -65,6 +65,10 @@ flagsRoutes.get("/", (c) => {
         note: f.note,
         severity: f.severity || undefined,
         deadline: f.deadline || undefined,
+        status: f.status || "OPEN",
+        resolution: f.resolution || undefined,
+        resolvedAt: f.resolvedAt || undefined,
+        resolvedBy: f.resolvedBy || undefined,
         createdAt: f.createdAt,
         orrId: orr.id,
         serviceName: orr.serviceName,
@@ -73,6 +77,7 @@ flagsRoutes.get("/", (c) => {
         sectionTitle: section.title,
         sectionPosition: section.position,
         isOverdue: !!isOverdue,
+        flagIndex: flags.indexOf(f),
       });
     }
   }
@@ -97,12 +102,14 @@ flagsRoutes.get("/", (c) => {
   const severityFilter = c.req.query("severity");
   const orrIdFilter = c.req.query("orrId");
   const overdueFilter = c.req.query("overdue");
+  const statusFilter = c.req.query("status");
 
   let filtered = allFlags;
   if (typeFilter) filtered = filtered.filter((f) => f.type === typeFilter);
   if (severityFilter) filtered = filtered.filter((f) => f.severity === severityFilter);
   if (orrIdFilter) filtered = filtered.filter((f) => f.orrId === orrIdFilter);
   if (overdueFilter === "true") filtered = filtered.filter((f) => f.isOverdue);
+  if (statusFilter) filtered = filtered.filter((f) => f.status === statusFilter);
 
   // Sort: overdue first, then HIGH→MEDIUM→LOW, then newest
   const severityOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };

@@ -129,5 +129,6 @@ export function buildORRContext(
     sessionSummaries,
     teachingMoments,
     isReturningSession: completedSessions.length > 0,
+    hasRepositoryPath: !!orr.repositoryPath,
   };
 }

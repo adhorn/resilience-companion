@@ -4,6 +4,7 @@ import { eq, and } from "drizzle-orm";
 import type { TemplateSection } from "@orr/shared";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
+import { validateGitUrl, ensureRepo, encryptToken, decryptToken } from "../git.js";
 
 export const orrRoutes = new Hono();
 
@@ -24,7 +25,13 @@ orrRoutes.get("/", (c) => {
     .where(eq(schema.orrs.teamId, user.teamId))
     .all();
 
-  return c.json({ orrs: rows });
+  // Never send encrypted tokens to the client
+  const sanitized = rows.map(({ repositoryToken, repositoryLocalPath, ...rest }) => ({
+    ...rest,
+    hasRepositoryToken: !!repositoryToken,
+  }));
+
+  return c.json({ orrs: sanitized });
 });
 
 /**
@@ -34,10 +41,33 @@ orrRoutes.get("/", (c) => {
 orrRoutes.post("/", async (c) => {
   const user = c.get("user");
   const body = await c.req.json();
-  const { serviceName, templateId } = body;
+  const { serviceName, templateId, repositoryUrl, repositoryToken } = body;
 
   if (!serviceName) {
     return c.json({ error: "validation", message: "serviceName is required" }, 400);
+  }
+
+  // Validate git URL if provided
+  let encryptedToken: string | null = null;
+  let localPath: string | null = null;
+
+  if (repositoryUrl) {
+    const validation = validateGitUrl(repositoryUrl);
+    if (!validation.valid) {
+      return c.json({ error: "validation", message: validation.error }, 400);
+    }
+
+    // Encrypt token if provided
+    if (repositoryToken) {
+      encryptedToken = encryptToken(repositoryToken);
+    }
+
+    // Clone the repo
+    const result = ensureRepo(repositoryUrl, repositoryToken || undefined);
+    if ("error" in result) {
+      return c.json({ error: "clone_failed", message: result.error }, 400);
+    }
+    localPath = result.localPath;
   }
 
   const db = getDb();
@@ -72,6 +102,9 @@ orrRoutes.post("/", async (c) => {
       serviceName,
       teamId: user.teamId,
       templateVersion: template.id,
+      repositoryPath: repositoryUrl || null,
+      repositoryToken: encryptedToken,
+      repositoryLocalPath: localPath,
       status: "DRAFT",
       createdAt: now,
       updatedAt: now,
@@ -105,7 +138,7 @@ orrRoutes.post("/", async (c) => {
       .run();
   }
 
-  const orr = db
+  const createdOrr = db
     .select()
     .from(schema.orrs)
     .where(eq(schema.orrs.id, orrId))
@@ -117,7 +150,8 @@ orrRoutes.post("/", async (c) => {
     .where(eq(schema.sections.orrId, orrId))
     .all();
 
-  return c.json({ orr, sections: secs }, 201);
+  const { repositoryToken: _rt, repositoryLocalPath: _rl, ...safeCreated } = createdOrr!;
+  return c.json({ orr: { ...safeCreated, hasRepositoryToken: !!_rt }, sections: secs }, 201);
 });
 
 /**
@@ -146,7 +180,10 @@ orrRoutes.get("/:id", (c) => {
     .where(eq(schema.sections.orrId, orr.id))
     .all();
 
-  return c.json({ orr, sections: secs });
+  // Strip sensitive fields
+  const { repositoryToken, repositoryLocalPath, ...safeOrr } = orr;
+
+  return c.json({ orr: { ...safeOrr, hasRepositoryToken: !!repositoryToken }, sections: secs });
 });
 
 /**
@@ -182,6 +219,36 @@ orrRoutes.patch("/:id", async (c) => {
   if (body.serviceName) {
     updates.serviceName = body.serviceName;
   }
+  if (body.repositoryUrl !== undefined) {
+    if (body.repositoryUrl) {
+      const validation = validateGitUrl(body.repositoryUrl);
+      if (!validation.valid) {
+        return c.json({ error: "validation", message: validation.error }, 400);
+      }
+
+      // Decrypt existing token if no new one provided
+      let token = body.repositoryToken;
+      if (!token && orr.repositoryToken) {
+        token = decryptToken(orr.repositoryToken);
+      }
+
+      if (body.repositoryToken) {
+        updates.repositoryToken = encryptToken(body.repositoryToken);
+      }
+
+      const result = ensureRepo(body.repositoryUrl, token || undefined);
+      if ("error" in result) {
+        return c.json({ error: "clone_failed", message: result.error }, 400);
+      }
+
+      updates.repositoryPath = body.repositoryUrl;
+      updates.repositoryLocalPath = result.localPath;
+    } else {
+      updates.repositoryPath = null;
+      updates.repositoryToken = null;
+      updates.repositoryLocalPath = null;
+    }
+  }
 
   db.update(schema.orrs)
     .set(updates)
@@ -194,7 +261,9 @@ orrRoutes.patch("/:id", async (c) => {
     .where(eq(schema.orrs.id, orr.id))
     .get();
 
-  return c.json({ orr: updated });
+  const { repositoryToken: _t, repositoryLocalPath: _l, ...safeUpdated } = updated!;
+
+  return c.json({ orr: { ...safeUpdated, hasRepositoryToken: !!_t } });
 });
 
 /**

@@ -14,6 +14,7 @@ export interface ORRContext {
   sessionSummaries: string[];
   teachingMoments: TeachingMomentSummary[];
   isReturningSession: boolean;
+  hasRepositoryPath: boolean;
 }
 
 export interface SectionSummary {
@@ -95,7 +96,9 @@ Share relevant teaching moments naturally when they connect to what the team is 
 
 Be direct about gaps you notice. Teams value honesty over false reassurance.
 
-When you need to make multiple tool calls (e.g. update depth + set flags, or update several question responses), batch them into a single response rather than making them one at a time. Each round-trip to you costs time and tokens — use them efficiently.`;
+When you need to make multiple tool calls (e.g. update depth + set flags, or update several question responses), batch them into a single response rather than making them one at a time. Each round-trip to you costs time and tokens — use them efficiently.
+
+`;
 
 export function buildSystemPrompt(ctx: ORRContext): string {
   const parts = [IDENTITY];
@@ -175,6 +178,29 @@ This team has completed ${ctx.sessionSummaries.length} previous session(s) on th
       if (tm.failureMode) parts.push(`Failure mode: ${tm.failureMode}`);
     }
     parts.push("\nUse these teaching moments naturally in conversation when relevant. Don't force them.");
+  }
+
+  // Code exploration guidance (only when a repository is configured)
+  if (ctx.hasRepositoryPath) {
+    parts.push(`\n## Code Exploration — Escalation Ladder
+
+You have tools to search and read the service's source code (search_code, read_file, list_directory). These are powerful but must be used carefully — struggle before assistance improves learning. The team's ability to recall system details from memory is itself a depth signal.
+
+**NEVER proactively offer code exploration.** Follow this escalation ladder:
+
+1. **Team hedges** ("theoretically", "should be", "I think", "probably"): Note the uncertainty but probe deeper first. "Walk me through what you remember about how that works." Do NOT offer code yet.
+
+2. **Probe for prediction**: "Before we look anything up, what's your best guess? Even if you're not sure — the prediction itself is useful."
+
+3. **Team hits a genuine wall** ("I really don't know", "I'd have to look that up", "no idea"): NOW offer code exploration. "Want me to search the codebase for that?"
+
+4. **Team explicitly asks** ("help me find that out", "can you check the code?", "look it up"): Use search_code to find relevant files. Return file locations and brief snippets — NOT full content yet.
+
+5. **Team asks to read** ("ok, tell me", "read that file", "what does it say?"): NOW use read_file to get the actual content. Share what you find.
+
+6. **Tag the source**: When you record findings from code exploration using update_question_response, ALWAYS set source to "code" and include the file reference in code_ref. This is not a judgment — it's data for understanding the team's blind spots. A high ratio of code-sourced answers in a section means the team has less operational familiarity there.
+
+The key insight: a team that can't recall how their retry logic works has a different readiness posture than a team that can trace it from memory. Both get the answer eventually, but the source tells us something important about operational preparedness.`);
   }
 
   return parts.join("\n");

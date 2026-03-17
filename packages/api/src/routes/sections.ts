@@ -133,3 +133,68 @@ sectionRoutes.patch("/:sectionId", async (c) => {
 
   return c.json({ section: updated });
 });
+
+/**
+ * PATCH /api/v1/orrs/:orrId/sections/:sectionId/flags/:flagIndex
+ * Update a flag's status: accept or resolve.
+ * Body: { status: "ACCEPTED" | "RESOLVED", resolution: "reason text" }
+ */
+sectionRoutes.patch("/:sectionId/flags/:flagIndex", async (c) => {
+  const user = c.get("user");
+  const orrId = c.req.param("orrId")!;
+  const sectionId = c.req.param("sectionId")!;
+  const flagIndex = parseInt(c.req.param("flagIndex")!, 10);
+  const body = await c.req.json();
+  const db = getDb();
+
+  const orr = db
+    .select()
+    .from(schema.orrs)
+    .where(and(eq(schema.orrs.id, orrId), eq(schema.orrs.teamId, user.teamId)))
+    .get();
+
+  if (!orr) {
+    return c.json({ error: "not_found", message: "ORR not found" }, 404);
+  }
+
+  const section = db
+    .select()
+    .from(schema.sections)
+    .where(
+      and(eq(schema.sections.id, sectionId), eq(schema.sections.orrId, orrId)),
+    )
+    .get();
+
+  if (!section) {
+    return c.json({ error: "not_found", message: "Section not found" }, 404);
+  }
+
+  const flags: any[] = typeof section.flags === "string"
+    ? JSON.parse(section.flags)
+    : (section.flags as any[]) || [];
+
+  if (flagIndex < 0 || flagIndex >= flags.length) {
+    return c.json({ error: "not_found", message: "Flag not found" }, 404);
+  }
+
+  const newStatus = body.status;
+  if (newStatus !== "ACCEPTED" && newStatus !== "RESOLVED" && newStatus !== "OPEN") {
+    return c.json({ error: "invalid", message: "Status must be OPEN, ACCEPTED, or RESOLVED" }, 400);
+  }
+
+  const now = new Date().toISOString();
+  flags[flagIndex] = {
+    ...flags[flagIndex],
+    status: newStatus,
+    resolution: newStatus === "OPEN" ? undefined : (body.resolution || flags[flagIndex].resolution),
+    resolvedAt: newStatus === "OPEN" ? undefined : now,
+    resolvedBy: newStatus === "OPEN" ? undefined : user.sub,
+  };
+
+  db.update(schema.sections)
+    .set({ flags: JSON.stringify(flags), updatedAt: now })
+    .where(eq(schema.sections.id, sectionId))
+    .run();
+
+  return c.json({ flag: flags[flagIndex], flags });
+});
