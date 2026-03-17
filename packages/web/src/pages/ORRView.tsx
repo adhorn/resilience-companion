@@ -152,6 +152,12 @@ export function ORRView() {
   const speech = useSpeechRecognition((text) => {
     setInput((prev) => (prev ? prev + " " + text : text));
   });
+  // Repo connection
+  const [showRepoForm, setShowRepoForm] = useState(false);
+  const [repoUrl, setRepoUrl] = useState("");
+  const [repoToken, setRepoToken] = useState("");
+  const [repoSaving, setRepoSaving] = useState(false);
+  const [repoError, setRepoError] = useState("");
   // Per-question responses: local editing state
   const [editingResponses, setEditingResponses] = useState<Record<number, string>>({});
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -405,6 +411,25 @@ export function ORRView() {
     await doSend(lastUserMessageRef.current);
   }, [streaming, doSend]);
 
+  const handleRepoSubmit = useCallback(async () => {
+    if (!id || !repoUrl.trim()) return;
+    setRepoSaving(true);
+    setRepoError("");
+    try {
+      const data: Record<string, string> = { repositoryUrl: repoUrl.trim() };
+      if (repoToken.trim()) data.repositoryToken = repoToken.trim();
+      const res = await api.orrs.update(id, data);
+      setOrr(res.orr);
+      setShowRepoForm(false);
+      setRepoUrl("");
+      setRepoToken("");
+    } catch (err) {
+      setRepoError((err as Error).message);
+    } finally {
+      setRepoSaving(false);
+    }
+  }, [id, repoUrl, repoToken]);
+
   if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
   if (!orr) return <div className="p-6 text-red-500">ORR not found</div>;
 
@@ -455,6 +480,60 @@ export function ORRView() {
               Export
             </a>
           </div>
+
+          {/* Repo connection */}
+          {orr.repositoryPath ? (
+            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-green-600" title={orr.repositoryPath}>
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
+              <span className="truncate">{orr.repositoryPath.replace(/^https?:\/\/[^/]+\//, "")}</span>
+            </div>
+          ) : (
+            <div className="mt-1.5">
+              {showRepoForm ? (
+                <div className="space-y-1.5">
+                  <input
+                    type="url"
+                    value={repoUrl}
+                    onChange={(e) => setRepoUrl(e.target.value)}
+                    placeholder="https://github.com/org/repo"
+                    className="w-full px-1.5 py-1 border border-gray-300 rounded text-[10px] font-mono"
+                  />
+                  {repoUrl.trim() && (
+                    <input
+                      type="password"
+                      value={repoToken}
+                      onChange={(e) => setRepoToken(e.target.value)}
+                      placeholder="Token (for private repos)"
+                      className="w-full px-1.5 py-1 border border-gray-300 rounded text-[10px] font-mono"
+                    />
+                  )}
+                  {repoError && <div className="text-[10px] text-red-600">{repoError}</div>}
+                  <div className="flex gap-1">
+                    <button
+                      onClick={handleRepoSubmit}
+                      disabled={repoSaving || !repoUrl.trim()}
+                      className="flex-1 py-0.5 bg-blue-600 text-white rounded text-[10px] disabled:opacity-50"
+                    >
+                      {repoSaving ? "Cloning..." : "Connect"}
+                    </button>
+                    <button
+                      onClick={() => { setShowRepoForm(false); setRepoError(""); }}
+                      className="px-2 py-0.5 text-gray-500 rounded text-[10px] hover:bg-gray-200"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowRepoForm(true)}
+                  className="text-[10px] text-blue-600 hover:underline"
+                >
+                  + Connect repo
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Coverage map */}
           <div className="mt-2 flex gap-0.5">

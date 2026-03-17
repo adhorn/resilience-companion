@@ -46,10 +46,17 @@ export function migrate(db: Db) {
     completed_at TEXT
   )`);
 
-  // Migrations: add repository columns to existing orrs tables
-  for (const col of ["repository_path", "repository_token", "repository_local_path"]) {
+  // Migrations: add columns to existing tables
+  const migrations: [string, string, string][] = [
+    ["orrs", "repository_path", "TEXT"],
+    ["orrs", "repository_token", "TEXT"],
+    ["orrs", "repository_local_path", "TEXT"],
+    ["sections", "prompt_responses", "TEXT NOT NULL DEFAULT '{}'"],
+    ["session_messages", "metadata", "TEXT"],
+  ];
+  for (const [table, col, type] of migrations) {
     try {
-      db.run(sql.raw(`ALTER TABLE orrs ADD COLUMN ${col} TEXT`));
+      db.run(sql.raw(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`));
     } catch (_) {
       // Column already exists
     }

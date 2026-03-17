@@ -4,7 +4,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "dev": "if [ ! -f /.dockerenv ]; then echo '❌ Use: npm run dev:docker (from monorepo root)' && exit 1; fi && tsx watch src/index.ts",
+    "dev": "tsx watch --env-file=../../.env src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   },

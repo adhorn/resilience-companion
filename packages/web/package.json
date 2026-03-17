@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "if [ ! -f /.dockerenv ]; then echo '❌ Use: npm run dev:docker (from monorepo root)' && exit 1; fi && vite",
+    "dev": "vite",
     "build": "tsc -b && vite build && rm -rf ../api/public && cp -r dist ../api/public",
     "preview": "vite preview"
   },
