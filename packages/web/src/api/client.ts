@@ -59,6 +59,8 @@ export const api = {
       request<{ sessions: any[] }>(`/orrs/${orrId}/sessions`),
     getMessages: (orrId: string, sessionId: string) =>
       request<{ messages: any[] }>(`/orrs/${orrId}/sessions/${sessionId}/messages`),
+    getAllMessages: (orrId: string) =>
+      request<{ messages: any[] }>(`/orrs/${orrId}/sessions/all-messages`),
     end: (orrId: string, sessionId: string) =>
       request<{ ended: boolean }>(`/orrs/${orrId}/sessions/${sessionId}/end`, {
         method: "POST",
