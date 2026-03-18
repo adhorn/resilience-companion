@@ -13,6 +13,7 @@ export interface ORRContext {
   activeSection: ActiveSectionDetail | null;
   sessionSummaries: string[];
   teachingMoments: TeachingMomentSummary[];
+  caseStudies: CaseStudySummary[];
   isReturningSession: boolean;
   hasRepositoryPath: boolean;
 }
@@ -46,6 +47,15 @@ export interface TeachingMomentSummary {
   failureMode: string | null;
 }
 
+export interface CaseStudySummary {
+  title: string;
+  company: string;
+  year: number | null;
+  summary: string;
+  lessons: string[];
+  failureCategory: string;
+}
+
 const IDENTITY = `You are the ORR Companion Review Facilitator — an AI that helps engineering teams learn about their own operational readiness through structured conversation.
 
 You are a learning facilitator, not a compliance checker. Your job is to help teams discover what they actually know (and don't know) about their systems — not to verify they've filled in the right boxes. The ORR document captures what the team learns; the conversation is how they learn it.
@@ -61,6 +71,8 @@ These are your natural instincts, not a checklist. Use them fluidly as the conve
 **Trace the path.** When someone mentions a mechanism — circuit breakers, failover, retry logic — ask them to trace the exact path step by step. "OK, the circuit breaker trips. Then what happens? Where does the request go? What does the user see?" Vague descriptions of concrete mechanisms indicate surface understanding.
 
 **Ask for the why.** When the team describes what exists, ask why it was built that way. "You have a 30-second timeout there — what drove that number?" Teams that can explain design reasoning have deeper understanding than teams that can only describe what's deployed.
+
+**Ground in real incidents.** When the team describes their approach to something — retries, failover, deployment, monitoring — connect it to a real incident where that approach (or lack of it) mattered. Not as a scare tactic, but as a concrete anchor: "At Knight Capital, a deployment inconsistency across servers cost $440 million in 45 minutes. How would your deployment process prevent something similar?" Use the case studies and teaching moments provided below. If the conversation touches a topic not covered by what's in context, use query_case_studies or query_teaching_moments to search for relevant incidents. Real stories stick — abstract risks don't.
 
 **One question, then stop.** Ask exactly one question at a time, then wait. No compound questions. No "and also..." follow-ups tacked on. The pause after a single question is where thinking happens. Resist the urge to fill silence with more questions.
 
@@ -91,8 +103,6 @@ CRITICAL — Recording answers: When the team gives ANY substantive answer to a 
 Check which questions are already answered (marked ANSWERED in the section overview) before asking about them. Focus on UNANSWERED questions first.
 
 When transitioning to a new section, ALWAYS call read_section first. This signals the UI to switch the user's view to that section.
-
-Share relevant teaching moments naturally when they connect to what the team is discussing — not as lectures, but as prompts for reflection: "There was an incident at [company] where something similar happened. What's different about your setup?"
 
 Be direct about gaps you notice. Teams value honesty over false reassurance.
 
@@ -169,16 +179,29 @@ This team has completed ${ctx.sessionSummaries.length} previous session(s) on th
     }
   }
 
-  // Relevant teaching moments
-  if (ctx.teachingMoments.length > 0) {
-    parts.push("\n## Relevant Teaching Moments (from industry incidents)");
-    for (const tm of ctx.teachingMoments) {
-      parts.push(`\n### ${tm.title}`);
-      parts.push(tm.content);
-      if (tm.systemPattern) parts.push(`Pattern: ${tm.systemPattern}`);
-      if (tm.failureMode) parts.push(`Failure mode: ${tm.failureMode}`);
+  // Relevant teaching moments and case studies
+  if (ctx.teachingMoments.length > 0 || ctx.caseStudies.length > 0) {
+    parts.push("\n## Real Incidents & Patterns (use these in conversation)");
+    parts.push("Reference these when the team's discussion connects to a pattern or incident. Frame them as reflection prompts: \"At [company], [what happened]. What's different about your setup?\" Don't dump all of them — pick the one most relevant to what was just said.");
+
+    if (ctx.caseStudies.length > 0) {
+      parts.push("\n### Real-World Incidents");
+      for (const cs of ctx.caseStudies) {
+        parts.push(`\n**${cs.title}** (${cs.company}, ${cs.year})`);
+        parts.push(cs.summary);
+        parts.push(`Lessons: ${cs.lessons.join(" | ")}`);
+      }
     }
-    parts.push("\nUse these teaching moments naturally in conversation when relevant. Don't force them.");
+
+    if (ctx.teachingMoments.length > 0) {
+      parts.push("\n### Industry Patterns");
+      for (const tm of ctx.teachingMoments) {
+        parts.push(`\n**${tm.title}**`);
+        parts.push(tm.content);
+        if (tm.systemPattern) parts.push(`Pattern: ${tm.systemPattern}`);
+        if (tm.failureMode) parts.push(`Failure mode: ${tm.failureMode}`);
+      }
+    }
   }
 
   // Code exploration guidance (only when a repository is configured)
