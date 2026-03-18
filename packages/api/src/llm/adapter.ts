@@ -29,7 +29,7 @@ export interface LLMToolDef {
 }
 
 export interface StreamChunk {
-  type: "content" | "tool_call_start" | "tool_call_args" | "tool_call_end" | "done" | "retry";
+  type: "content" | "tool_call_start" | "tool_call_args" | "tool_call_end" | "done" | "retry" | "fallback";
   content?: string;
   toolCallId?: string;
   toolName?: string;

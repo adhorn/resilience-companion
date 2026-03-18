@@ -1,7 +1,8 @@
 /**
  * Retry wrapper for LLM adapters.
  * Retries on transient errors (rate limits, server errors, timeouts)
- * with exponential backoff. Emits status events so callers can inform users.
+ * with exponential backoff. On overload exhaustion, falls back to a
+ * secondary model if configured.
  */
 
 import type { LLMAdapter, LLMMessage, LLMToolDef, StreamChunk } from "./adapter.js";
@@ -15,6 +16,12 @@ export interface RetryEvent {
   maxRetries: number;
   delayMs: number;
   reason: string;
+}
+
+function isOverloadError(err: unknown): boolean {
+  const msg = (err as Error)?.message || String(err);
+  const status = (err as any)?.status || (err as any)?.statusCode;
+  return status === 529 || msg.includes("overloaded") || msg.includes("Overloaded");
 }
 
 function isRetriableError(err: unknown): { retriable: boolean; reason: string } {
@@ -60,11 +67,16 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Wraps an LLM adapter with retry logic.
- * Yields RetryEvent chunks between attempts so the caller can inform the user.
+ * Wraps an LLM adapter with retry logic and optional model fallback.
+ * On overload after retries exhausted, falls back to the secondary adapter
+ * instead of failing. Yields status events so callers can inform users.
  */
 export class RetryAdapter implements LLMAdapter {
-  constructor(private inner: LLMAdapter) {}
+  constructor(
+    private inner: LLMAdapter,
+    private fallback?: LLMAdapter,
+    private fallbackLabel?: string,
+  ) {}
 
   async *chat(
     messages: LLMMessage[],
@@ -84,7 +96,7 @@ export class RetryAdapter implements LLMAdapter {
         const { retriable, reason } = isRetriableError(err);
 
         if (!retriable || attempt === MAX_RETRIES) {
-          throw err; // non-retriable or exhausted retries
+          break; // fall through to fallback check
         }
 
         const delayMs = BASE_DELAY_MS * Math.pow(2, attempt);
@@ -99,6 +111,43 @@ export class RetryAdapter implements LLMAdapter {
         } satisfies StreamChunk;
 
         await sleep(delayMs);
+      }
+    }
+
+    // If we have a fallback and the error was overload/server, try it
+    if (this.fallback && lastError && (isOverloadError(lastError) || isRetriableError(lastError).retriable)) {
+      const label = this.fallbackLabel || "fallback model";
+      console.warn(`Primary model exhausted retries. Falling back to ${label}.`);
+
+      yield {
+        type: "fallback",
+        reason: `Primary model unavailable, using ${label}`,
+      } satisfies StreamChunk;
+
+      // Fallback gets its own retry cycle
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const stream = this.fallback.chat(messages, tools);
+          for await (const chunk of stream) {
+            yield chunk;
+          }
+          return; // success
+        } catch (err) {
+          const { retriable, reason } = isRetriableError(err);
+          if (!retriable || attempt === MAX_RETRIES) {
+            throw err;
+          }
+          const delayMs = BASE_DELAY_MS * Math.pow(2, attempt);
+          console.warn(`Fallback retry ${attempt + 1}/${MAX_RETRIES}: ${reason} — waiting ${delayMs}ms`);
+          yield {
+            type: "retry",
+            attempt: attempt + 1,
+            maxRetries: MAX_RETRIES,
+            delayMs,
+            reason: `Fallback: ${reason}`,
+          } satisfies StreamChunk;
+          await sleep(delayMs);
+        }
       }
     }
 

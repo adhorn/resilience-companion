@@ -90,11 +90,18 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
       const stream = llm.chat(messages, AGENT_TOOLS);
 
       for await (const chunk of stream) {
-        // RetryAdapter emits retry events between attempts
+        // RetryAdapter emits retry/fallback events between attempts
         if (chunk.type === "retry") {
           yield {
             type: "status",
             message: `${chunk.reason}. Retrying (${chunk.attempt}/${chunk.maxRetries})...`,
+          } as SSEEvent;
+          continue;
+        }
+        if (chunk.type === "fallback") {
+          yield {
+            type: "status",
+            message: `${chunk.reason}. Response quality may differ slightly.`,
           } as SSEEvent;
           continue;
         }
