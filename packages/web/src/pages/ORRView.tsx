@@ -12,6 +12,45 @@ interface Message {
   content: string;
 }
 
+interface SlashCommand {
+  name: string;
+  description: string;
+  prompt: string;
+}
+
+const SLASH_COMMANDS: SlashCommand[] = [
+  {
+    name: "dependencies",
+    description: "Map all dependencies from what we've discussed",
+    prompt: "Review everything we've discussed so far across all sections. Identify every service, database, API, queue, cache, or infrastructure component that was mentioned as a dependency — and call record_dependency for each one you haven't already recorded. Give me a summary of what you found.",
+  },
+  {
+    name: "summarize",
+    description: "Summarize the review so far",
+    prompt: "Summarize our review progress so far. For each section we've discussed, give a brief overview of what we covered, the current depth assessment, and any key risks or gaps identified. Highlight what's going well and where we need more work.",
+  },
+  {
+    name: "depth",
+    description: "Assess depth of the current section",
+    prompt: "Based on our conversation about this section, give me your honest depth assessment. What indicators did you observe? What would it take to move deeper? Be specific about what evidence you're basing this on.",
+  },
+  {
+    name: "incidents",
+    description: "Find relevant real-world incidents",
+    prompt: "Based on what we've discussed in this section, search for relevant real-world incidents and case studies that connect to our architecture and approach. Use query_case_studies and query_teaching_moments to find matches, then share the most relevant ones and ask how our setup compares.",
+  },
+  {
+    name: "status",
+    description: "Show overall ORR review status",
+    prompt: "Give me a status overview of this entire ORR. For each section: depth level, number of questions answered, any flags raised. Then highlight the top 3 things we should focus on next and why.",
+  },
+  {
+    name: "risks",
+    description: "List all identified risks and gaps",
+    prompt: "List every risk and gap that's been flagged across all sections. Group them by severity. For each one, remind me what the concern is and whether it has a deadline or resolution. What's the most critical thing we haven't addressed?",
+  },
+];
+
 const DEPTH_COLORS: Record<string, string> = {
   UNKNOWN: "bg-gray-200",
   SURFACE: "bg-yellow-400",
@@ -156,6 +195,11 @@ export function ORRView() {
   const speech = useSpeechRecognition((text) => {
     setInput((prev) => (prev ? prev + " " + text : text));
   });
+  // Slash commands
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashFilter, setSlashFilter] = useState("");
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   // Repo connection
   const [showRepoForm, setShowRepoForm] = useState(false);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("review");
@@ -411,13 +455,72 @@ export function ORRView() {
     setStreaming(false);
   }, [id, sessionId, activeSection, streaming, reloadSections, debouncedReload]);
 
+  const filteredSlashCommands = SLASH_COMMANDS.filter((cmd) =>
+    cmd.name.startsWith(slashFilter.toLowerCase()),
+  );
+
+  const handleSlashSelect = useCallback((cmd: SlashCommand) => {
+    setInput("");
+    setShowSlashMenu(false);
+    setSlashFilter("");
+    setSlashSelectedIndex(0);
+    // Show the command name as the user message, send the expanded prompt
+    setMessages((prev) => [...prev, { role: "user", content: `/${cmd.name}` }]);
+    doSend(cmd.prompt);
+  }, [doSend]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    if (val === "/") {
+      setShowSlashMenu(true);
+      setSlashFilter("");
+      setSlashSelectedIndex(0);
+    } else if (val.startsWith("/") && !val.includes(" ")) {
+      setShowSlashMenu(true);
+      setSlashFilter(val.slice(1));
+      setSlashSelectedIndex(0);
+    } else {
+      setShowSlashMenu(false);
+    }
+  }, []);
+
   const handleSend = useCallback(async () => {
     if (!input.trim() || !id || !sessionId || streaming) return;
+    setShowSlashMenu(false);
     const userMessage = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     await doSend(userMessage);
   }, [input, id, sessionId, streaming, doSend]);
+
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (showSlashMenu && filteredSlashCommands.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => Math.min(prev + 1, filteredSlashCommands.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        handleSlashSelect(filteredSlashCommands[slashSelectedIndex]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowSlashMenu(false);
+        return;
+      }
+    }
+    if (e.key === "Enter" && !e.shiftKey) {
+      handleSend();
+    }
+  }, [showSlashMenu, filteredSlashCommands, slashSelectedIndex, handleSlashSelect, handleSend]);
 
   const handleRetry = useCallback(async () => {
     if (!lastUserMessageRef.current || streaming) return;
@@ -632,7 +735,7 @@ export function ORRView() {
         {activeTab === "traces" ? (
           <TracesPanel orrId={id!} />
         ) : activeTab === "dependencies" ? (
-          <DependenciesPanel orrId={id!} sections={sections} />
+          <DependenciesPanel orrId={id!} serviceName={orr.serviceName} sections={sections} />
         ) : currentSection ? (
           <>
             {/* Section header */}
@@ -931,13 +1034,38 @@ export function ORRView() {
         {/* Input */}
         {sessionId && (
           <div className="p-4 border-t border-gray-200">
-            <div className="flex gap-2">
+            <div className="flex gap-2 relative">
+              {/* Slash command dropdown */}
+              {showSlashMenu && filteredSlashCommands.length > 0 && (
+                <div className="absolute bottom-full left-0 mb-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-10">
+                  <div className="px-3 py-1.5 text-[10px] text-gray-400 uppercase tracking-wide border-b border-gray-100">
+                    Commands
+                  </div>
+                  {filteredSlashCommands.map((cmd, i) => (
+                    <button
+                      key={cmd.name}
+                      onClick={() => handleSlashSelect(cmd)}
+                      onMouseEnter={() => setSlashSelectedIndex(i)}
+                      className={`w-full text-left px-3 py-2 flex items-center gap-3 text-sm ${
+                        i === slashSelectedIndex
+                          ? "bg-blue-50 text-blue-700"
+                          : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className="font-mono text-xs text-blue-500">/{cmd.name}</span>
+                      <span className="text-xs text-gray-500">{cmd.description}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <input
+                ref={inputRef}
                 type="text"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-                placeholder={speech.isListening ? "Listening..." : "Type or use mic..."}
+                onChange={handleInputChange}
+                onKeyDown={handleInputKeyDown}
+                onBlur={() => setTimeout(() => setShowSlashMenu(false), 150)}
+                placeholder={speech.isListening ? "Listening..." : "Type a message or / for commands..."}
                 disabled={streaming}
                 className={`flex-1 px-3 py-2 border rounded text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 ${
                   speech.isListening ? "border-red-400 bg-red-50" : "border-gray-300"
