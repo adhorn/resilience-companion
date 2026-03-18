@@ -59,9 +59,20 @@ export function Dashboard() {
         </div>
         <div className="bg-white p-4 rounded-lg shadow-sm border">
           <div className="text-2xl font-bold text-purple-600">
-            {stats.totalTokens > 0 ? `${Math.round(stats.totalTokens / 1000)}k` : "0"}
+            {stats.dailyTokens > 0 ? `${Math.round(stats.dailyTokens / 1000)}k` : "0"}
+            <span className="text-sm font-normal text-gray-400">
+              {" "}/ {Math.round((stats.dailyTokenLimit || 2000000) / 1000)}k
+            </span>
           </div>
-          <div className="text-sm text-gray-500">Tokens Used</div>
+          <div className="text-sm text-gray-500">Today's Tokens</div>
+          {stats.dailyTokenLimit > 0 && (
+            <div className="mt-1.5 w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${stats.dailyTokens / stats.dailyTokenLimit > 0.8 ? "bg-red-500" : "bg-purple-500"}`}
+                style={{ width: `${Math.min(100, (stats.dailyTokens / stats.dailyTokenLimit) * 100)}%` }}
+              />
+            </div>
+          )}
         </div>
       </div>
 
