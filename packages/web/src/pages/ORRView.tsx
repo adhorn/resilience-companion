@@ -3,6 +3,9 @@ import { useParams, Link } from "react-router-dom";
 import { api, sendMessage } from "../api/client";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { TracesPanel } from "../components/TracesPanel";
+import { DependenciesPanel } from "../components/DependenciesPanel";
+
+type WorkspaceTab = "review" | "traces" | "dependencies";
 
 interface Message {
   role: "user" | "assistant";
@@ -155,7 +158,7 @@ export function ORRView() {
   });
   // Repo connection
   const [showRepoForm, setShowRepoForm] = useState(false);
-  const [showTraces, setShowTraces] = useState(false);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("review");
   const [repoUrl, setRepoUrl] = useState("");
   const [repoToken, setRepoToken] = useState("");
   const [repoSaving, setRepoSaving] = useState(false);
@@ -594,26 +597,19 @@ export function ORRView() {
         {/* Tab bar */}
         <div className="flex items-center border-b border-gray-200 bg-white px-1">
           <div className="flex">
-            <button
-              onClick={() => setShowTraces(false)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                !showTraces
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              Review
-            </button>
-            <button
-              onClick={() => setShowTraces(true)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                showTraces
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              Traces
-            </button>
+            {(["review", "dependencies", "traces"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${
+                  activeTab === tab
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
           <div className="ml-auto flex items-center gap-1 pr-2">
             <a
@@ -633,8 +629,10 @@ export function ORRView() {
           </div>
         </div>
 
-        {showTraces ? (
+        {activeTab === "traces" ? (
           <TracesPanel orrId={id!} />
+        ) : activeTab === "dependencies" ? (
+          <DependenciesPanel orrId={id!} sections={sections} />
         ) : currentSection ? (
           <>
             {/* Section header */}

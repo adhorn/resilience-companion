@@ -218,6 +218,29 @@ export const agentSpans = sqliteTable("agent_spans", {
   createdAt: text("created_at").notNull(),
 });
 
+// --- Dependencies (discovered by agent during conversation) ---
+
+export const dependencies = sqliteTable("dependencies", {
+  id: text("id").primaryKey(),
+  orrId: text("orr_id")
+    .notNull()
+    .references(() => orrs.id, { onDelete: "cascade" }),
+  sectionId: text("section_id"),
+  name: text("name").notNull(),
+  type: text("type", {
+    enum: [
+      "database", "cache", "queue", "api", "storage",
+      "cdn", "dns", "auth", "internal_service", "external_service", "infrastructure", "other",
+    ],
+  }).notNull(),
+  direction: text("direction", { enum: ["inbound", "outbound", "both"] }).notNull().default("outbound"),
+  criticality: text("criticality", { enum: ["critical", "important", "optional"] }).notNull().default("important"),
+  hasFallback: integer("has_fallback").notNull().default(0),
+  fallbackDescription: text("fallback_description"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+});
+
 // --- ORR Versions (snapshots) ---
 
 export const orrVersions = sqliteTable("orr_versions", {
