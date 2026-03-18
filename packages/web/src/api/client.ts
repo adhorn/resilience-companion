@@ -151,12 +151,16 @@ export async function sendMessage(
     },
   );
 
-  if (!res.ok) throw new Error("Failed to send message");
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message || "Failed to send message");
+  }
   if (!res.body) throw new Error("No response body");
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let hasContent = false;
 
   try {
     while (true) {
@@ -175,7 +179,15 @@ export async function sendMessage(
         if (line.startsWith("data:")) {
           try {
             const data = JSON.parse(line.slice(5).trim());
+            if (data.type === "content_delta") hasContent = true;
             onEvent(data);
+
+            // If we got a fatal error with no content, abort the stream
+            // immediately instead of waiting for it to close
+            if (data.type === "error" && !hasContent) {
+              controller.abort();
+              return;
+            }
           } catch {
             // Skip malformed events
           }

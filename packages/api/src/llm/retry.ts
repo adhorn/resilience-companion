@@ -33,6 +33,9 @@ function isRetriableError(err: unknown): { retriable: boolean; reason: string } 
   if (msg.includes("500") || msg.includes("502") || msg.includes("503") || msg.includes("529")) {
     return { retriable: true, reason: "AI provider server error" };
   }
+  if (msg.toLowerCase().includes("internal server error") || msg.includes("api_error")) {
+    return { retriable: true, reason: "AI provider server error" };
+  }
 
   // Overloaded
   if (msg.includes("overloaded") || msg.includes("Overloaded")) {
