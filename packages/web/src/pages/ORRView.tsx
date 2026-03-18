@@ -483,26 +483,6 @@ export function ORRView() {
           <Link to="/orrs" className="text-[10px] text-gray-400 hover:text-blue-600">&larr; All ORRs</Link>
           <h2 className="font-bold text-sm text-gray-900 truncate mt-1">{orr.serviceName}</h2>
           <div className="text-[10px] text-gray-500 mt-1">{orr.status.replace("_", " ")}</div>
-          <div className="flex gap-3 mt-2">
-            <a
-              href={`/api/v1/orrs/${id}/export/markdown`}
-              className="text-[10px] text-blue-600 hover:underline"
-            >
-              Export doc
-            </a>
-            <a
-              href={`/api/v1/orrs/${id}/export/conversation`}
-              className="text-[10px] text-blue-600 hover:underline"
-            >
-              Export conversation
-            </a>
-            <button
-              onClick={() => setShowTraces(!showTraces)}
-              className="text-[10px] text-blue-600 hover:underline"
-            >
-              {showTraces ? "Hide traces" : "Traces"}
-            </button>
-          </div>
 
           {/* Repo connection */}
           {orr.repositoryPath ? (
@@ -609,12 +589,53 @@ export function ORRView() {
         </div>
       </div>
 
-      {/* Column 2: Questions workspace or Traces panel */}
-      {showTraces ? (
-        <TracesPanel orrId={id!} />
-      ) : (
+      {/* Column 2: Tabbed workspace */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {currentSection ? (
+        {/* Tab bar */}
+        <div className="flex items-center border-b border-gray-200 bg-white px-1">
+          <div className="flex">
+            <button
+              onClick={() => setShowTraces(false)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                !showTraces
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Review
+            </button>
+            <button
+              onClick={() => setShowTraces(true)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                showTraces
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Traces
+            </button>
+          </div>
+          <div className="ml-auto flex items-center gap-1 pr-2">
+            <a
+              href={`/api/v1/orrs/${id}/export/markdown`}
+              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+              title="Export ORR document as Markdown"
+            >
+              Export Doc
+            </a>
+            <a
+              href={`/api/v1/orrs/${id}/export/conversation`}
+              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+              title="Export conversation transcript"
+            >
+              Export Chat
+            </a>
+          </div>
+        </div>
+
+        {showTraces ? (
+          <TracesPanel orrId={id!} />
+        ) : currentSection ? (
           <>
             {/* Section header */}
             <div className="p-4 border-b border-gray-200 bg-white">
@@ -810,7 +831,6 @@ export function ORRView() {
           </div>
         )}
       </div>
-      )}
 
       {/* Column 3: AI conversation */}
       <div className="w-[40%] flex-shrink-0 flex flex-col bg-white border-l border-gray-200">
