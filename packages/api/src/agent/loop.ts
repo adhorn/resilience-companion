@@ -16,6 +16,9 @@ function categorizeError(msg: string): string {
   if (lower.includes("overloaded") || lower.includes("529")) {
     return "The AI provider is currently overloaded. This is temporary — try again in a minute.";
   }
+  if (lower.includes("credit balance") || lower.includes("billing") || lower.includes("purchase credits")) {
+    return "AI provider billing issue — your API credit balance may be too low. Top up credits and try again.";
+  }
   if (lower.includes("401") || lower.includes("authentication") || lower.includes("unauthorized")) {
     return "AI authentication failed. Check that LLM_API_KEY is valid.";
   }
@@ -25,7 +28,7 @@ function categorizeError(msg: string): string {
   if (lower.includes("econnrefused") || lower.includes("enotfound") || lower.includes("fetch failed")) {
     return "Cannot reach the AI provider. Check your network connection.";
   }
-  if (lower.includes("500") || lower.includes("502") || lower.includes("503")) {
+  if (lower.includes("500") || lower.includes("502") || lower.includes("503") || lower.includes("internal server error") || lower.includes("api_error")) {
     return "The AI provider had a server error. This is on their end — try again shortly.";
   }
   return `AI error: ${msg}`;

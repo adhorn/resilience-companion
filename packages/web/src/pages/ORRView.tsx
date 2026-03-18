@@ -82,9 +82,9 @@ function renderMarkdown(text: string): React.ReactNode {
     flushList();
 
     if (trimmed === "") {
-      elements.push(<div key={key++} className="h-2" />);
+      elements.push(<div key={key++} className="h-3" />);
     } else {
-      elements.push(<p key={key++}>{renderInline(trimmed)}</p>);
+      elements.push(<p key={key++} className="mb-2 last:mb-0">{renderInline(trimmed)}</p>);
     }
   }
   flushList();
@@ -373,7 +373,8 @@ export function ORRView() {
         }
       });
     } catch (err) {
-      setLastError("Connection lost. Your conversation is saved — reload the page to continue.");
+      // Don't overwrite a more specific error from the SSE stream
+      setLastError((prev) => prev || "Connection lost. Your conversation is saved — reload the page to continue.");
     }
 
     setStreamStatus(null);
@@ -466,18 +467,24 @@ export function ORRView() {
   return (
     <div className="flex h-screen">
       {/* Column 1: Section sidebar */}
-      <div className="w-48 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 overflow-hidden">
+      <div className="w-56 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 overflow-hidden">
         {/* Header */}
         <div className="p-3 border-b border-gray-200">
           <Link to="/orrs" className="text-[10px] text-gray-400 hover:text-blue-600">&larr; All ORRs</Link>
           <h2 className="font-bold text-sm text-gray-900 truncate mt-1">{orr.serviceName}</h2>
-          <div className="flex items-center justify-between mt-1">
-            <span className="text-[10px] text-gray-500">{orr.status.replace("_", " ")}</span>
+          <div className="text-[10px] text-gray-500 mt-1">{orr.status.replace("_", " ")}</div>
+          <div className="flex gap-3 mt-2">
             <a
               href={`/api/v1/orrs/${id}/export/markdown`}
               className="text-[10px] text-blue-600 hover:underline"
             >
-              Export
+              Export doc
+            </a>
+            <a
+              href={`/api/v1/orrs/${id}/export/conversation`}
+              className="text-[10px] text-blue-600 hover:underline"
+            >
+              Export conversation
             </a>
           </div>
 

@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { nanoid } from "nanoid";
-import { eq, and } from "drizzle-orm";
-import { MAX_SESSION_TOKENS } from "@orr/shared";
+import { eq, and, gte, sql } from "drizzle-orm";
+import { MAX_SESSION_TOKENS, MAX_DAILY_TOKENS } from "@orr/shared";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
 import { runAgent } from "../agent/loop.js";
@@ -167,11 +167,19 @@ sessionRoutes.get("/:sessionId/messages", (c) => {
     return c.json({ error: "not_found", message: "ORR not found" }, 404);
   }
 
-  const messages = db
+  const rawMessages = db
     .select()
     .from(schema.sessionMessages)
     .where(eq(schema.sessionMessages.sessionId, sessionId))
     .all();
+
+  // Deduplicate: collapse consecutive user messages with identical content
+  // (caused by retries saving the message before the agent failed)
+  const messages = rawMessages.filter((msg, i) => {
+    if (i === 0) return true;
+    const prev = rawMessages[i - 1];
+    return !(msg.role === "user" && prev.role === "user" && msg.content === prev.content);
+  });
 
   return c.json({ messages });
 });
@@ -214,6 +222,29 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
 
   if (!session || session.status !== "ACTIVE") {
     return c.json({ error: "bad_request", message: "Session not active" }, 400);
+  }
+
+  // Daily token cap: sum all session token usage for this team today
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const dailyUsageResult = db
+    .select({ total: sql<number>`coalesce(sum(${schema.sessions.tokenUsage}), 0)` })
+    .from(schema.sessions)
+    .innerJoin(schema.orrs, eq(schema.sessions.orrId, schema.orrs.id))
+    .where(
+      and(
+        eq(schema.orrs.teamId, user.teamId),
+        gte(schema.sessions.startedAt, todayStart.toISOString()),
+      ),
+    )
+    .get();
+
+  const dailyTokens = dailyUsageResult?.total ?? 0;
+  if (dailyTokens >= MAX_DAILY_TOKENS) {
+    return c.json({
+      error: "token_limit",
+      message: `Daily token limit reached (${Math.round(dailyTokens / 1000)}k / ${Math.round(MAX_DAILY_TOKENS / 1000)}k). Resets at midnight. You can still view and edit the ORR document manually.`,
+    }, 429);
   }
 
   // Auto-renew session if token budget exceeded
@@ -295,17 +326,29 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
     console.log(`Session auto-renewed: ${sessionId} → ${activeSessionId} (token limit ${session.tokenUsage}/${MAX_SESSION_TOKENS}, carried ${recentMessages.length} messages)`);
   }
 
-  // Save user message to the active session
+  // Save user message — but deduplicate on retry.
+  // If the last message in the session is an identical user message (i.e. the
+  // previous attempt failed before the agent responded), skip the insert.
   const now = new Date().toISOString();
-  db.insert(schema.sessionMessages)
-    .values({
-      id: nanoid(),
-      sessionId: activeSessionId,
-      role: "user",
-      content,
-      createdAt: now,
-    })
-    .run();
+  const lastMsg = db
+    .select()
+    .from(schema.sessionMessages)
+    .where(eq(schema.sessionMessages.sessionId, activeSessionId))
+    .all()
+    .at(-1);
+
+  const isDuplicate = lastMsg && lastMsg.role === "user" && lastMsg.content === content;
+  if (!isDuplicate) {
+    db.insert(schema.sessionMessages)
+      .values({
+        id: nanoid(),
+        sessionId: activeSessionId,
+        role: "user",
+        content,
+        createdAt: now,
+      })
+      .run();
+  }
 
   // Track section discussed
   if (sectionId) {
