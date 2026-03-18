@@ -199,7 +199,7 @@ export function ORRView() {
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState("");
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   // Repo connection
   const [showRepoForm, setShowRepoForm] = useState(false);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("review");
@@ -469,7 +469,7 @@ export function ORRView() {
     doSend(cmd.prompt);
   }, [doSend]);
 
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInput(val);
     if (val === "/") {
@@ -494,7 +494,7 @@ export function ORRView() {
     await doSend(userMessage);
   }, [input, id, sessionId, streaming, doSend]);
 
-  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showSlashMenu && filteredSlashCommands.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -518,6 +518,7 @@ export function ORRView() {
       }
     }
     if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
       handleSend();
     }
   }, [showSlashMenu, filteredSlashCommands, slashSelectedIndex, handleSlashSelect, handleSend]);
@@ -1058,18 +1059,24 @@ export function ORRView() {
                   ))}
                 </div>
               )}
-              <input
+              <textarea
                 ref={inputRef}
-                type="text"
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleInputKeyDown}
                 onBlur={() => setTimeout(() => setShowSlashMenu(false), 150)}
-                placeholder={speech.isListening ? "Listening..." : "Type a message or / for commands..."}
+                placeholder={speech.isListening ? "Listening..." : "Type a message or / for commands... (Shift+Enter for new line)"}
                 disabled={streaming}
-                className={`flex-1 px-3 py-2 border rounded text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 ${
+                rows={1}
+                className={`flex-1 px-3 py-2 border rounded text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 resize-none overflow-hidden ${
                   speech.isListening ? "border-red-400 bg-red-50" : "border-gray-300"
                 }`}
+                style={{ minHeight: "38px", maxHeight: "160px" }}
+                onInput={(e) => {
+                  const el = e.currentTarget;
+                  el.style.height = "auto";
+                  el.style.height = Math.min(el.scrollHeight, 160) + "px";
+                }}
               />
               {speech.isSupported && (
                 <button
