@@ -7,7 +7,6 @@ import { buildORRContext } from "./context.js";
 import { AGENT_TOOLS, executeTool } from "./tools.js";
 import { nanoid } from "nanoid";
 import { TraceCollector } from "./trace.js";
-import { getDb, schema } from "../db/index.js";
 import { log } from "../logger.js";
 
 /** Translate raw LLM errors into user-friendly messages */
@@ -37,20 +36,9 @@ function categorizeError(msg: string): string {
   return `AI error: ${msg}`;
 }
 
-/** Persist a completed trace + spans to the database in a single transaction */
-function persistTrace(collector: TraceCollector): void {
-  try {
-    const { trace, spans } = collector.finalize();
-    const db = getDb();
-    db.transaction(() => {
-      db.insert(schema.agentTraces).values(trace).run();
-      for (const span of spans) {
-        db.insert(schema.agentSpans).values(span).run();
-      }
-    });
-  } catch (err) {
-    log("error", "Failed to persist agent trace", { error: (err as Error).message });
-  }
+/** Finalize trace — updates the trace row with final totals. Spans already persisted eagerly. */
+function finalizeTrace(collector: TraceCollector): void {
+  collector.finalize();
 }
 
 export interface AgentInput {
@@ -171,7 +159,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
       log("error", "Agent LLM error", { iteration, error: errMsg, traceId: trace.id });
       trace.errorLLMCall(llmSpanId, errMsg, "llm_error");
       trace.setError(errMsg, "llm_error");
-      persistTrace(trace);
+      finalizeTrace(trace);
       const userMessage = categorizeError(errMsg);
       yield {
         type: "error",
@@ -183,7 +171,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
 
     // If no tool calls, we're done
     if (pendingToolCalls.length === 0) {
-      persistTrace(trace);
+      finalizeTrace(trace);
       yield { type: "message_end", tokenUsage: totalUsage };
       return;
     }
@@ -302,6 +290,6 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
     };
   }
 
-  persistTrace(trace);
+  finalizeTrace(trace);
   yield { type: "message_end", tokenUsage: totalUsage };
 }
