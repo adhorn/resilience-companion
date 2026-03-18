@@ -5,16 +5,17 @@ import type {
   SectionSummary,
   ActiveSectionDetail,
   TeachingMomentSummary,
+  CaseStudySummary,
 } from "./system-prompt.js";
 
-// In-memory cache for published teaching moments.
-// These are seed data that rarely change — no need to hit the DB on every message.
+// In-memory caches for seed data that rarely changes.
 let tmCache: { data: Array<typeof schema.teachingMoments.$inferSelect>; loadedAt: number } | null = null;
-const TM_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+let csCache: { data: Array<typeof schema.caseStudies.$inferSelect>; loadedAt: number } | null = null;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 function getPublishedTeachingMoments() {
   const now = Date.now();
-  if (tmCache && now - tmCache.loadedAt < TM_CACHE_TTL_MS) {
+  if (tmCache && now - tmCache.loadedAt < CACHE_TTL_MS) {
     return tmCache.data;
   }
   const db = getDb();
@@ -24,6 +25,17 @@ function getPublishedTeachingMoments() {
     .where(eq(schema.teachingMoments.status, "PUBLISHED"))
     .all();
   tmCache = { data, loadedAt: now };
+  return data;
+}
+
+function getAllCaseStudies() {
+  const now = Date.now();
+  if (csCache && now - csCache.loadedAt < CACHE_TTL_MS) {
+    return csCache.data;
+  }
+  const db = getDb();
+  const data = db.select().from(schema.caseStudies).all();
+  csCache = { data, loadedAt: now };
   return data;
 }
 
@@ -111,27 +123,38 @@ export function buildORRContext(
     (s) => s.summary!,
   );
 
-  // Load relevant teaching moments (match by active section tags)
+  // Load relevant teaching moments and case studies (match by active section tags)
   let teachingMoments: TeachingMomentSummary[] = [];
+  let caseStudies: CaseStudySummary[] = [];
   if (activeSection) {
-    const allTM = getPublishedTeachingMoments();
+    const matchesSection = (tags: unknown) => {
+      const parsed = typeof tags === "string" ? JSON.parse(tags) : tags;
+      return (parsed as string[]).some((tag) =>
+        activeSection!.title.toLowerCase().includes(tag.toLowerCase()) ||
+        tag.toLowerCase().includes(activeSection!.title.toLowerCase())
+      );
+    };
 
-    teachingMoments = allTM
-      .filter((tm) => {
-        const tags = typeof tm.sectionTags === "string"
-          ? JSON.parse(tm.sectionTags)
-          : tm.sectionTags;
-        return (tags as string[]).some((tag) =>
-          activeSection!.title.toLowerCase().includes(tag.toLowerCase()) ||
-          tag.toLowerCase().includes(activeSection!.title.toLowerCase())
-        );
-      })
+    teachingMoments = getPublishedTeachingMoments()
+      .filter((tm) => matchesSection(tm.sectionTags))
       .slice(0, 5)
       .map((tm) => ({
         title: tm.title,
         content: tm.content,
         systemPattern: tm.systemPattern,
         failureMode: tm.failureMode,
+      }));
+
+    caseStudies = getAllCaseStudies()
+      .filter((cs) => matchesSection(cs.sectionTags))
+      .slice(0, 3)
+      .map((cs) => ({
+        title: cs.title,
+        company: cs.company,
+        year: cs.year,
+        summary: cs.summary,
+        lessons: typeof cs.lessons === "string" ? JSON.parse(cs.lessons) : cs.lessons,
+        failureCategory: cs.failureCategory,
       }));
   }
 
@@ -144,6 +167,7 @@ export function buildORRContext(
     activeSection,
     sessionSummaries,
     teachingMoments,
+    caseStudies,
     isReturningSession: completedSessions.length > 0,
     hasRepositoryPath: !!orr.repositoryPath,
   };
