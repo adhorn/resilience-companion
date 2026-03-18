@@ -6,6 +6,9 @@ import { buildSystemPrompt } from "./system-prompt.js";
 import { buildORRContext } from "./context.js";
 import { AGENT_TOOLS, executeTool } from "./tools.js";
 import { nanoid } from "nanoid";
+import { TraceCollector } from "./trace.js";
+import { getDb, schema } from "../db/index.js";
+import { log } from "../logger.js";
 
 /** Translate raw LLM errors into user-friendly messages */
 function categorizeError(msg: string): string {
@@ -32,6 +35,22 @@ function categorizeError(msg: string): string {
     return "The AI provider had a server error. This is on their end — try again shortly.";
   }
   return `AI error: ${msg}`;
+}
+
+/** Persist a completed trace + spans to the database in a single transaction */
+function persistTrace(collector: TraceCollector): void {
+  try {
+    const { trace, spans } = collector.finalize();
+    const db = getDb();
+    db.transaction(() => {
+      db.insert(schema.agentTraces).values(trace).run();
+      for (const span of spans) {
+        db.insert(schema.agentSpans).values(span).run();
+      }
+    });
+  } catch (err) {
+    log("error", "Failed to persist agent trace", { error: (err as Error).message });
+  }
 }
 
 export interface AgentInput {
@@ -66,6 +85,9 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
   ];
 
   const messageId = nanoid();
+  const model = process.env.LLM_MODEL || "sonnet";
+  const trace = new TraceCollector(orrId, sessionId, messageId, model);
+
   yield { type: "message_start", messageId };
 
   let totalUsage = 0;
@@ -74,7 +96,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
   for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration++) {
     // Check token budget before each LLM call
     if (iteration > 0 && cumulativeTokens() >= MAX_SESSION_TOKENS) {
-      console.log(`Session ${sessionId} hit token budget mid-turn (${cumulativeTokens()}/${MAX_SESSION_TOKENS}). Wrapping up.`);
+      log("info", "Session hit token budget mid-turn", { sessionId, tokens: cumulativeTokens(), max: MAX_SESSION_TOKENS });
       break; // falls through to the graceful wrap-up below
     }
 
@@ -85,6 +107,8 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
       args: string;
     }> = [];
 
+    const llmSpanId = trace.startLLMCall(iteration, model);
+
     // Call LLM
     try {
       const stream = llm.chat(messages, AGENT_TOOLS);
@@ -92,6 +116,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
       for await (const chunk of stream) {
         // RetryAdapter emits retry/fallback events between attempts
         if (chunk.type === "retry") {
+          trace.addRetry(chunk.attempt!, chunk.reason!, chunk.delayMs!);
           yield {
             type: "status",
             message: `${chunk.reason}. Retrying (${chunk.attempt}/${chunk.maxRetries})...`,
@@ -99,6 +124,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
           continue;
         }
         if (chunk.type === "fallback") {
+          trace.addFallback(chunk.reason || "unknown", chunk.reason || "");
           yield {
             type: "status",
             message: `${chunk.reason}. Response quality may differ slightly.`,
@@ -135,14 +161,17 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
           case "done":
             if (chunk.usage) {
               totalUsage += chunk.usage.promptTokens + chunk.usage.completionTokens;
+              trace.endLLMCall(llmSpanId, chunk.usage);
             }
             break;
         }
       }
     } catch (err) {
       const errMsg = (err as Error).message || "Unknown error";
-      console.error(`Agent LLM error [iter ${iteration}]:`, errMsg);
-      // Categorize the error for the user
+      log("error", "Agent LLM error", { iteration, error: errMsg, traceId: trace.id });
+      trace.errorLLMCall(llmSpanId, errMsg, "llm_error");
+      trace.setError(errMsg, "llm_error");
+      persistTrace(trace);
       const userMessage = categorizeError(errMsg);
       yield {
         type: "error",
@@ -154,6 +183,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
 
     // If no tool calls, we're done
     if (pendingToolCalls.length === 0) {
+      persistTrace(trace);
       yield { type: "message_end", tokenUsage: totalUsage };
       return;
     }
@@ -180,25 +210,29 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
 
       yield { type: "tool_call", tool: tc.name, args };
 
-      console.log(`Agent tool call [iter ${iteration}]: ${tc.name}(${JSON.stringify(args).slice(0, 200)})`);
+      log("info", "Agent tool call", { iteration, tool: tc.name, args, traceId: trace.id });
+
+      const toolSpanId = trace.startToolCall(iteration, tc.name, args);
 
       let result: string;
       let parsedResult: Record<string, unknown>;
       try {
         result = executeTool(tc.name, args, orrId, sessionId);
         parsedResult = JSON.parse(result);
+        trace.endToolCall(toolSpanId, result.slice(0, 500));
       } catch (err) {
         const errMsg = (err as Error).message || "Unknown tool error";
-        console.error(`Tool execution failed [${tc.name}]:`, errMsg);
+        log("error", "Tool execution failed", { tool: tc.name, error: errMsg, traceId: trace.id });
         result = JSON.stringify({ error: `Tool failed: ${errMsg}` });
         parsedResult = { error: `Tool failed: ${errMsg}` };
+        trace.endToolCall(toolSpanId, result, errMsg);
         yield {
           type: "error",
           message: `Tool "${tc.name}" failed: ${errMsg}`,
         } as SSEEvent;
       }
 
-      console.log(`Agent tool result: ${result.slice(0, 200)}`);
+      log("info", "Agent tool result", { tool: tc.name, result: result.slice(0, 200), traceId: trace.id });
 
       yield { type: "tool_result", tool: tc.name, result: parsedResult };
 
@@ -236,6 +270,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
 
   // Hit max iterations — give the LLM one final text-only turn (no tools)
   // so it can wrap up coherently instead of being cut off mid-thought.
+  const wrapUpSpanId = trace.startLLMCall(MAX_AGENT_ITERATIONS, model);
   try {
     messages.push({
       role: "user",
@@ -249,11 +284,13 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
       }
       if (chunk.type === "done" && chunk.usage) {
         totalUsage += chunk.usage.promptTokens + chunk.usage.completionTokens;
+        trace.endLLMCall(wrapUpSpanId, chunk.usage);
       }
     }
   } catch (err) {
     const errMsg = (err as Error).message || "Unknown error";
-    console.error("Agent wrap-up error:", errMsg);
+    log("error", "Agent wrap-up error", { error: errMsg, traceId: trace.id });
+    trace.errorLLMCall(wrapUpSpanId, errMsg, "llm_error");
     yield {
       type: "error",
       message: `Could not generate summary: ${categorizeError(errMsg)}`,
@@ -265,5 +302,6 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
     };
   }
 
+  persistTrace(trace);
   yield { type: "message_end", tokenUsage: totalUsage };
 }

@@ -3,6 +3,7 @@ import { OpenAICompatibleAdapter } from "./openai-compatible.js";
 import { AnthropicAdapter } from "./anthropic.js";
 import { NoOpAdapter } from "./noop.js";
 import { RetryAdapter } from "./retry.js";
+import { log } from "../logger.js";
 
 export type { LLMAdapter, LLMMessage, LLMToolDef, LLMToolCall, StreamChunk } from "./adapter.js";
 export type { RetryEvent } from "./retry.js";
@@ -39,10 +40,10 @@ export function getLLM(): LLMAdapter {
             new AnthropicAdapter(apiKey, fallbackModel),
             fallbackModel,
           );
-          console.log(`LLM adapter: Anthropic (model: ${model}, fallback: ${fallbackModel}) with retry`);
+          log("info", "LLM adapter initialized", { provider: "anthropic", model, fallbackModel });
         } else {
           _adapter = new RetryAdapter(new AnthropicAdapter(apiKey, model));
-          console.log(`LLM adapter: Anthropic (model: ${model}) with retry`);
+          log("info", "LLM adapter initialized", { provider: "anthropic", model });
         }
       } else {
         _adapter = new RetryAdapter(new OpenAICompatibleAdapter(
@@ -50,13 +51,11 @@ export function getLLM(): LLMAdapter {
           process.env.LLM_BASE_URL,
           process.env.LLM_MODEL,
         ));
-        console.log(
-          `LLM adapter: OpenAI-compatible (model: ${process.env.LLM_MODEL || "gpt-4o"}) with retry`,
-        );
+        log("info", "LLM adapter initialized", { provider: "openai-compatible", model: process.env.LLM_MODEL || "gpt-4o" });
       }
     } else {
       _adapter = new NoOpAdapter();
-      console.log("LLM adapter: NoOp (no LLM_API_KEY configured)");
+      log("info", "LLM adapter initialized", { provider: "noop" });
     }
   }
   return _adapter;
