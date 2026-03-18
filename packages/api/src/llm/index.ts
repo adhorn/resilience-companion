@@ -30,8 +30,20 @@ export function getLLM(): LLMAdapter {
       if (isAnthropicKey(apiKey)) {
         const modelInput = process.env.LLM_MODEL || "sonnet";
         const model = ANTHROPIC_MODEL_MAP[modelInput] || modelInput;
-        _adapter = new RetryAdapter(new AnthropicAdapter(apiKey, model));
-        console.log(`LLM adapter: Anthropic (model: ${model}) with retry`);
+        const fallbackModelInput = process.env.LLM_FALLBACK_MODEL;
+
+        if (fallbackModelInput && fallbackModelInput !== modelInput) {
+          const fallbackModel = ANTHROPIC_MODEL_MAP[fallbackModelInput] || fallbackModelInput;
+          _adapter = new RetryAdapter(
+            new AnthropicAdapter(apiKey, model),
+            new AnthropicAdapter(apiKey, fallbackModel),
+            fallbackModel,
+          );
+          console.log(`LLM adapter: Anthropic (model: ${model}, fallback: ${fallbackModel}) with retry`);
+        } else {
+          _adapter = new RetryAdapter(new AnthropicAdapter(apiKey, model));
+          console.log(`LLM adapter: Anthropic (model: ${model}) with retry`);
+        }
       } else {
         _adapter = new RetryAdapter(new OpenAICompatibleAdapter(
           apiKey,
