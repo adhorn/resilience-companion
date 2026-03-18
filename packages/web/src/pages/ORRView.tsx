@@ -188,15 +188,18 @@ export function ORRView() {
         if (activeSession) {
           setSessionId(activeSession.id);
           setSessionTokens(activeSession.tokenUsage || 0);
-          const msgRes = await api.sessions.getMessages(id!, activeSession.id);
-          if (msgRes.messages.length > 0) {
-            setMessages(
-              msgRes.messages.map((m: any) => ({
-                role: m.role as "user" | "assistant",
-                content: m.content,
-              })),
-            );
-          }
+        }
+
+        // Load ALL messages across all sessions for this ORR
+        // (preserves full conversation history across session renewals)
+        const msgRes = await api.sessions.getAllMessages(id!);
+        if (msgRes.messages.length > 0) {
+          setMessages(
+            msgRes.messages.map((m: any) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content,
+            })),
+          );
         }
       } finally {
         setLoading(false);
@@ -381,13 +384,18 @@ export function ORRView() {
 
     setStreamStatus(null);
 
-    // If the stream completed but produced no content, show fallback
+    // If the stream completed but produced no content, replace the empty
+    // placeholder with an inline error so the user sees what happened
     if (!assistantContent.trim()) {
       setLastError((prev) => prev || "No response received. The AI may be overloaded.");
-      // Remove empty assistant message
       setMessages((prev) => {
         if (prev.length > 0 && prev[prev.length - 1].role === "assistant" && !prev[prev.length - 1].content.trim()) {
-          return prev.slice(0, -1);
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            role: "assistant",
+            content: "*Failed to generate a response. Use the Retry button above to try again.*",
+          };
+          return updated;
         }
         return prev;
       });

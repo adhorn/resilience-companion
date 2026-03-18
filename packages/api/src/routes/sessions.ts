@@ -147,6 +147,94 @@ sessionRoutes.get("/", (c) => {
 });
 
 /**
+ * GET /api/v1/orrs/:orrId/sessions/all-messages
+ * Get all messages across ALL sessions for an ORR, chronologically.
+ * Used by the frontend to show full conversation history across session renewals.
+ */
+sessionRoutes.get("/all-messages", (c) => {
+  const user = c.get("user");
+  const orrId = c.req.param("orrId")!;
+  const db = getDb();
+
+  const orr = db
+    .select()
+    .from(schema.orrs)
+    .where(and(eq(schema.orrs.id, orrId), eq(schema.orrs.teamId, user.teamId)))
+    .get();
+
+  if (!orr) {
+    return c.json({ error: "not_found", message: "ORR not found" }, 404);
+  }
+
+  // Get all sessions ordered by start time
+  const sessions = db
+    .select()
+    .from(schema.sessions)
+    .where(eq(schema.sessions.orrId, orrId))
+    .all()
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+
+  // Build a deduplicated message list across all sessions.
+  // When sessions renew, the last ~20 messages are copied into the new session.
+  // We skip those carried-over messages by comparing the start of each session
+  // against the tail of the previous session's messages.
+  const allMessages: Array<{ role: string; content: string; sessionId: string; createdAt: string }> = [];
+  let prevSessionTail: Array<{ role: string; content: string }> = [];
+
+  for (const session of sessions) {
+    const rawMessages = db
+      .select()
+      .from(schema.sessionMessages)
+      .where(eq(schema.sessionMessages.sessionId, session.id))
+      .all();
+
+    // Deduplicate consecutive identical user messages (retry artifacts)
+    const messages = rawMessages.filter((msg, i) => {
+      if (i === 0) return true;
+      const prev = rawMessages[i - 1];
+      return !(msg.role === "user" && prev.role === "user" && msg.content === prev.content);
+    });
+
+    // Find how many messages at the start of this session were carried over
+    // from the previous session (they'll match the tail of prevSessionTail)
+    let skipCount = 0;
+    if (prevSessionTail.length > 0 && messages.length > 0) {
+      // Try to find the longest prefix of this session's messages that
+      // matches a suffix of the previous session's messages
+      for (let prefixLen = Math.min(messages.length, prevSessionTail.length); prefixLen > 0; prefixLen--) {
+        const suffixStart = prevSessionTail.length - prefixLen;
+        let matches = true;
+        for (let j = 0; j < prefixLen; j++) {
+          if (messages[j].role !== prevSessionTail[suffixStart + j].role ||
+              messages[j].content !== prevSessionTail[suffixStart + j].content) {
+            matches = false;
+            break;
+          }
+        }
+        if (matches) {
+          skipCount = prefixLen;
+          break;
+        }
+      }
+    }
+
+    for (let i = skipCount; i < messages.length; i++) {
+      allMessages.push({
+        role: messages[i].role,
+        content: messages[i].content,
+        sessionId: session.id,
+        createdAt: messages[i].createdAt,
+      });
+    }
+
+    // Remember this session's messages for the next iteration
+    prevSessionTail = messages.map((m) => ({ role: m.role, content: m.content }));
+  }
+
+  return c.json({ messages: allMessages });
+});
+
+/**
  * GET /api/v1/orrs/:orrId/sessions/:sessionId/messages
  * Get messages for a session.
  */
