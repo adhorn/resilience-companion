@@ -1,10 +1,16 @@
 /**
  * Lightweight trace collector for agent turns.
- * Accumulates spans in memory during a turn and finalizes into
- * persistable rows for agent_traces + agent_spans tables.
+ * Writes eagerly: trace row inserted on creation, spans written as they
+ * complete, trace row updated at the end with final totals.
+ *
+ * This means trace data survives mid-turn crashes — exactly the scenarios
+ * where you most need it.
  */
 
 import { nanoid } from "nanoid";
+import { getDb, schema } from "../db/index.js";
+import { eq } from "drizzle-orm";
+import { log } from "../logger.js";
 
 export interface TraceRow {
   id: string;
@@ -50,7 +56,6 @@ export interface SpanRow {
 export class TraceCollector {
   private traceId: string;
   private startTime: number;
-  private spans: SpanRow[] = [];
   private totalPromptTokens = 0;
   private totalCompletionTokens = 0;
   private retryCount = 0;
@@ -72,10 +77,46 @@ export class TraceCollector {
   ) {
     this.traceId = nanoid();
     this.startTime = Date.now();
+
+    // Write trace row immediately — partial data, updated at finalize
+    try {
+      const db = getDb();
+      db.insert(schema.agentTraces).values({
+        id: this.traceId,
+        orrId: this.orrId,
+        sessionId: this.sessionId,
+        messageId: this.messageId,
+        model: this.model,
+        fallbackModel: null,
+        totalTokens: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        iterationCount: 0,
+        toolCallsCount: 0,
+        retryCount: 0,
+        fallbackUsed: 0,
+        error: null,
+        errorCategory: null,
+        durationMs: 0,
+        createdAt: new Date(this.startTime).toISOString(),
+      }).run();
+    } catch (err) {
+      log("error", "Failed to insert initial trace row", { error: (err as Error).message });
+    }
   }
 
   get id(): string {
     return this.traceId;
+  }
+
+  /** Write a completed span to the database immediately */
+  private persistSpan(span: SpanRow): void {
+    try {
+      const db = getDb();
+      db.insert(schema.agentSpans).values(span).run();
+    } catch (err) {
+      log("error", "Failed to persist span", { spanId: span.id, type: span.type, error: (err as Error).message });
+    }
   }
 
   startLLMCall(iteration: number, model: string): string {
@@ -104,7 +145,7 @@ export class TraceCollector {
     this.totalPromptTokens += prompt;
     this.totalCompletionTokens += completion;
 
-    this.spans.push({
+    this.persistSpan({
       id: active.span.id!,
       traceId: this.traceId,
       type: "llm_call",
@@ -132,7 +173,7 @@ export class TraceCollector {
     if (!active) return;
     this.activeSpans.delete(spanId);
 
-    this.spans.push({
+    this.persistSpan({
       id: active.span.id!,
       traceId: this.traceId,
       type: "llm_call",
@@ -156,7 +197,7 @@ export class TraceCollector {
 
   addRetry(attempt: number, reason: string, delayMs: number): void {
     this.retryCount++;
-    this.spans.push({
+    this.persistSpan({
       id: nanoid(),
       traceId: this.traceId,
       type: "retry",
@@ -181,7 +222,7 @@ export class TraceCollector {
   addFallback(model: string, reason: string): void {
     this.fallbackUsed = true;
     this.fallbackModel = model;
-    this.spans.push({
+    this.persistSpan({
       id: nanoid(),
       traceId: this.traceId,
       type: "fallback",
@@ -227,7 +268,7 @@ export class TraceCollector {
     if (!active) return;
     this.activeSpans.delete(spanId);
 
-    this.spans.push({
+    this.persistSpan({
       id: active.span.id!,
       traceId: this.traceId,
       type: "tool_call",
@@ -254,30 +295,31 @@ export class TraceCollector {
     this.errorCategory = category || null;
   }
 
-  finalize(): { trace: TraceRow; spans: SpanRow[] } {
+  /** Update the trace row with final totals. Spans are already persisted. */
+  finalize(): void {
     const now = Date.now();
     const totalTokens = this.totalPromptTokens + this.totalCompletionTokens;
 
-    const trace: TraceRow = {
-      id: this.traceId,
-      orrId: this.orrId,
-      sessionId: this.sessionId,
-      messageId: this.messageId,
-      model: this.model,
-      fallbackModel: this.fallbackModel,
-      totalTokens,
-      promptTokens: this.totalPromptTokens,
-      completionTokens: this.totalCompletionTokens,
-      iterationCount: this.iterationCount,
-      toolCallsCount: this.toolCallsCount,
-      retryCount: this.retryCount,
-      fallbackUsed: this.fallbackUsed ? 1 : 0,
-      error: this.error,
-      errorCategory: this.errorCategory,
-      durationMs: now - this.startTime,
-      createdAt: new Date(this.startTime).toISOString(),
-    };
-
-    return { trace, spans: this.spans };
+    try {
+      const db = getDb();
+      db.update(schema.agentTraces)
+        .set({
+          fallbackModel: this.fallbackModel,
+          totalTokens,
+          promptTokens: this.totalPromptTokens,
+          completionTokens: this.totalCompletionTokens,
+          iterationCount: this.iterationCount,
+          toolCallsCount: this.toolCallsCount,
+          retryCount: this.retryCount,
+          fallbackUsed: this.fallbackUsed ? 1 : 0,
+          error: this.error,
+          errorCategory: this.errorCategory,
+          durationMs: now - this.startTime,
+        })
+        .where(eq(schema.agentTraces.id, this.traceId))
+        .run();
+    } catch (err) {
+      log("error", "Failed to finalize trace", { traceId: this.traceId, error: (err as Error).message });
+    }
   }
 }
