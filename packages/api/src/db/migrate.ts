@@ -176,6 +176,22 @@ export function migrate(db: Db) {
     created_at TEXT NOT NULL
   )`);
 
+  db.run(sql`CREATE TABLE IF NOT EXISTS dependencies (
+    id TEXT PRIMARY KEY,
+    orr_id TEXT NOT NULL REFERENCES orrs(id) ON DELETE CASCADE,
+    section_id TEXT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    direction TEXT NOT NULL DEFAULT 'outbound',
+    criticality TEXT NOT NULL DEFAULT 'important',
+    has_fallback INTEGER NOT NULL DEFAULT 0,
+    fallback_description TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL
+  )`);
+
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_dependencies_orr ON dependencies(orr_id)`);
+
   // Indexes for common trace queries
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_agent_traces_orr ON agent_traces(orr_id)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_agent_traces_session ON agent_traces(session_id)`);

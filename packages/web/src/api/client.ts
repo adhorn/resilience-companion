@@ -107,6 +107,14 @@ export const api = {
       request<any>(`/orrs/${orrId}/traces/stats`),
   },
 
+  // Dependencies
+  dependencies: {
+    list: (orrId: string) =>
+      request<{ dependencies: any[] }>(`/orrs/${orrId}/dependencies`),
+    delete: (orrId: string, depId: string) =>
+      request<{ deleted: boolean }>(`/orrs/${orrId}/dependencies/${depId}`, { method: "DELETE" }),
+  },
+
   // Templates
   templates: {
     list: () => request<{ templates: any[] }>("/templates"),
