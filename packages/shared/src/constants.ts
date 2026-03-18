@@ -92,3 +92,8 @@ export const MAX_AGENT_ITERATIONS = 5;
 // ~200k tokens ≈ $1-3 depending on model. Covers a full ORR review
 // (11 sections × ~15k tokens each) with headroom.
 export const MAX_SESSION_TOKENS = 200_000;
+
+// Daily token budget: hard cap across all sessions per team per day.
+// 2M tokens ≈ ~10 full ORR reviews on Sonnet (~$10-20/day).
+// Prevents runaway sessions from eating the monthly budget.
+export const MAX_DAILY_TOKENS = 2_000_000;

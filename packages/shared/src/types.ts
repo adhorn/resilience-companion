@@ -213,6 +213,8 @@ export interface DashboardStats {
   aging: number;
   recentActivity: DashboardORRSummary[];
   totalTokens: number; // cumulative tokens across all sessions
+  dailyTokens: number; // tokens used today
+  dailyTokenLimit: number; // daily cap
 }
 
 export interface DashboardORRSummary {

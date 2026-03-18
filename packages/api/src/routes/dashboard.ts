@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
-import { STALENESS_MONTHS, AGING_MONTHS } from "@orr/shared";
+import { eq, gte, and, sql } from "drizzle-orm";
+import { STALENESS_MONTHS, AGING_MONTHS, MAX_DAILY_TOKENS } from "@orr/shared";
 import type { DashboardStats, DashboardORRSummary, ORRStatus } from "@orr/shared";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -85,6 +85,22 @@ dashboardRoutes.get("/", (c) => {
     : [];
   const totalTokens = allSessions.reduce((sum, s) => sum + s.tokenUsage, 0);
 
+  // Today's token usage for daily cap visibility
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const dailyUsageResult = db
+    .select({ total: sql<number>`coalesce(sum(${schema.sessions.tokenUsage}), 0)` })
+    .from(schema.sessions)
+    .innerJoin(schema.orrs, eq(schema.sessions.orrId, schema.orrs.id))
+    .where(
+      and(
+        eq(schema.orrs.teamId, user.teamId),
+        gte(schema.sessions.startedAt, todayStart.toISOString()),
+      ),
+    )
+    .get();
+  const dailyTokens = dailyUsageResult?.total ?? 0;
+
   const stats: DashboardStats = {
     totalOrrs: orrs.length,
     byStatus,
@@ -92,6 +108,8 @@ dashboardRoutes.get("/", (c) => {
     aging,
     recentActivity: summaries,
     totalTokens,
+    dailyTokens,
+    dailyTokenLimit: MAX_DAILY_TOKENS,
   };
 
   return c.json({ dashboard: stats });
