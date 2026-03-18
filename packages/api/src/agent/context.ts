@@ -7,6 +7,26 @@ import type {
   TeachingMomentSummary,
 } from "./system-prompt.js";
 
+// In-memory cache for published teaching moments.
+// These are seed data that rarely change — no need to hit the DB on every message.
+let tmCache: { data: Array<typeof schema.teachingMoments.$inferSelect>; loadedAt: number } | null = null;
+const TM_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function getPublishedTeachingMoments() {
+  const now = Date.now();
+  if (tmCache && now - tmCache.loadedAt < TM_CACHE_TTL_MS) {
+    return tmCache.data;
+  }
+  const db = getDb();
+  const data = db
+    .select()
+    .from(schema.teachingMoments)
+    .where(eq(schema.teachingMoments.status, "PUBLISHED"))
+    .all();
+  tmCache = { data, loadedAt: now };
+  return data;
+}
+
 /**
  * Build the ORR context for the agent system prompt.
  * Loads: ORR details, all section summaries, active section in full,
@@ -94,11 +114,7 @@ export function buildORRContext(
   // Load relevant teaching moments (match by active section tags)
   let teachingMoments: TeachingMomentSummary[] = [];
   if (activeSection) {
-    const allTM = db
-      .select()
-      .from(schema.teachingMoments)
-      .where(eq(schema.teachingMoments.status, "PUBLISHED"))
-      .all();
+    const allTM = getPublishedTeachingMoments();
 
     teachingMoments = allTM
       .filter((tm) => {

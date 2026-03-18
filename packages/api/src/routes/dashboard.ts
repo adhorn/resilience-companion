@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, gte, and, sql } from "drizzle-orm";
+import { eq, gte, and, sql, inArray } from "drizzle-orm";
 import { STALENESS_MONTHS, AGING_MONTHS, MAX_DAILY_TOKENS } from "@orr/shared";
 import type { DashboardStats, DashboardORRSummary, ORRStatus } from "@orr/shared";
 import { getDb, schema } from "../db/index.js";
@@ -45,6 +45,18 @@ dashboardRoutes.get("/", (c) => {
   let stale = 0;
   let aging = 0;
 
+  // Batch-load all sections for all team ORRs in one query (avoids N+1)
+  const orrIds = orrs.map((o) => o.id);
+  const allSections = orrIds.length > 0
+    ? db.select().from(schema.sections).where(inArray(schema.sections.orrId, orrIds)).all()
+    : [];
+  const sectionsByOrr = new Map<string, typeof allSections>();
+  for (const sec of allSections) {
+    const list = sectionsByOrr.get(sec.orrId) || [];
+    list.push(sec);
+    sectionsByOrr.set(sec.orrId, list);
+  }
+
   const summaries: DashboardORRSummary[] = orrs.map((orr) => {
     byStatus[orr.status as ORRStatus]++;
 
@@ -52,13 +64,7 @@ dashboardRoutes.get("/", (c) => {
     if (staleness === "stale") stale++;
     if (staleness === "aging") aging++;
 
-    // Calculate coverage
-    const sections = db
-      .select()
-      .from(schema.sections)
-      .where(eq(schema.sections.orrId, orr.id))
-      .all();
-
+    const sections = sectionsByOrr.get(orr.id) || [];
     const covered = sections.filter((s) => s.depth !== "UNKNOWN").length;
     const coveragePercent =
       sections.length > 0 ? Math.round((covered / sections.length) * 100) : 0;
@@ -79,7 +85,6 @@ dashboardRoutes.get("/", (c) => {
   );
 
   // Total token usage across all sessions for this team's ORRs
-  const orrIds = orrs.map((o) => o.id);
   const allSessions = orrIds.length > 0
     ? db.select().from(schema.sessions).all().filter((s) => orrIds.includes(s.orrId))
     : [];
