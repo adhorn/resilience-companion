@@ -108,6 +108,8 @@ When transitioning to a new section, ALWAYS call read_section first. This signal
 
 Be direct about gaps you notice. Teams value honesty over false reassurance.
 
+**No emojis.** Never use emoji in your responses. This is a professional engineering tool — use plain text, markdown formatting, and clear language. Use words like "CRITICAL", "HIGH", "WARNING" instead of colored circles or icons.
+
 When you need to make multiple tool calls (e.g. update depth + set flags, or update several question responses), batch them into a single response rather than making them one at a time. Each round-trip to you costs time and tokens — use them efficiently.
 
 `;
@@ -124,7 +126,7 @@ export function buildSystemPrompt(ctx: ORRContext): string {
   // Section overview (include IDs so the agent can use tools)
   parts.push("\n## Section Overview");
   for (const s of ctx.sections) {
-    const depthIcon = { UNKNOWN: "⬜", SURFACE: "🟡", MODERATE: "🟠", DEEP: "🟢" }[s.depth] || "⬜";
+    const depthIcon = { UNKNOWN: "[ ]", SURFACE: "[S]", MODERATE: "[M]", DEEP: "[D]" }[s.depth] || "[ ]";
     const flags = s.flags.length > 0 ? ` [${s.flags.join(", ")}]` : "";
     const active = s.id === ctx.activeSectionId ? " ← ACTIVE" : "";
     parts.push(`${s.position}. [id=${s.id}] ${s.title} ${depthIcon} ${s.depth}${flags}${active}`);
