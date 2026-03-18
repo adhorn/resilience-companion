@@ -13,6 +13,7 @@ import { sessionRoutes } from "./routes/sessions.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { flagsRoutes } from "./routes/flags.js";
 import { exportRoutes } from "./routes/export.js";
+import { traceRoutes } from "./routes/traces.js";
 
 export const app = new Hono();
 
@@ -38,6 +39,7 @@ app.route("/api/v1/orrs/:orrId/sessions", sessionRoutes);
 app.route("/api/v1/dashboard", dashboardRoutes);
 app.route("/api/v1/flags", flagsRoutes);
 app.route("/api/v1/orrs/:orrId/export", exportRoutes);
+app.route("/api/v1/orrs/:orrId/traces", traceRoutes);
 
 // Serve frontend — either built static files or proxy to Vite dev server
 const __dirname = dirname(fileURLToPath(import.meta.url));

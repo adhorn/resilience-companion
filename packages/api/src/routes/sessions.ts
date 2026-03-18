@@ -7,6 +7,7 @@ import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
 import { runAgent } from "../agent/loop.js";
 import type { LLMMessage } from "../llm/index.js";
+import { log } from "../logger.js";
 
 /**
  * Trim conversation history to fit within a token budget.
@@ -38,9 +39,7 @@ function trimHistory(
   const trimmed = messages.slice(keepFrom);
 
   if (keepFrom > 0 && trimmed.length < messages.length) {
-    console.log(
-      `History trimmed: kept ${trimmed.length}/${messages.length} messages (~${tokenCount} tokens est.)`,
-    );
+    log("info", "History trimmed", { kept: trimmed.length, total: messages.length, estimatedTokens: tokenCount });
   }
 
   return trimmed;
@@ -323,7 +322,7 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
 
     activeTokenUsage = 0;
     sessionRenewed = true;
-    console.log(`Session auto-renewed: ${sessionId} → ${activeSessionId} (token limit ${session.tokenUsage}/${MAX_SESSION_TOKENS}, carried ${recentMessages.length} messages)`);
+    log("info", "Session auto-renewed", { oldSession: sessionId, newSession: activeSessionId, tokenUsage: session.tokenUsage, maxTokens: MAX_SESSION_TOKENS, carriedMessages: recentMessages.length });
   }
 
   // Save user message — but deduplicate on retry.

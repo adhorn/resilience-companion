@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, sendMessage } from "../api/client";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { TracesPanel } from "../components/TracesPanel";
 
 interface Message {
   role: "user" | "assistant";
@@ -154,6 +155,7 @@ export function ORRView() {
   });
   // Repo connection
   const [showRepoForm, setShowRepoForm] = useState(false);
+  const [showTraces, setShowTraces] = useState(false);
   const [repoUrl, setRepoUrl] = useState("");
   const [repoToken, setRepoToken] = useState("");
   const [repoSaving, setRepoSaving] = useState(false);
@@ -486,6 +488,12 @@ export function ORRView() {
             >
               Export conversation
             </a>
+            <button
+              onClick={() => setShowTraces(!showTraces)}
+              className="text-[10px] text-blue-600 hover:underline"
+            >
+              {showTraces ? "Hide traces" : "Traces"}
+            </button>
           </div>
 
           {/* Repo connection */}
@@ -593,7 +601,10 @@ export function ORRView() {
         </div>
       </div>
 
-      {/* Column 2: Questions workspace */}
+      {/* Column 2: Questions workspace or Traces panel */}
+      {showTraces ? (
+        <TracesPanel orrId={id!} />
+      ) : (
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {currentSection ? (
           <>
@@ -791,6 +802,7 @@ export function ORRView() {
           </div>
         )}
       </div>
+      )}
 
       {/* Column 3: AI conversation */}
       <div className="w-[40%] flex-shrink-0 flex flex-col bg-white border-l border-gray-200">

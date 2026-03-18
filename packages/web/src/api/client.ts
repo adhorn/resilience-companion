@@ -89,6 +89,22 @@ export const api = {
       }),
   },
 
+  // Traces
+  traces: {
+    list: (orrId: string, params?: { sessionId?: string; hasError?: boolean; fallbackUsed?: boolean }) => {
+      const qs = new URLSearchParams();
+      if (params?.sessionId) qs.set("sessionId", params.sessionId);
+      if (params?.hasError) qs.set("hasError", "true");
+      if (params?.fallbackUsed) qs.set("fallbackUsed", "true");
+      const query = qs.toString();
+      return request<any[]>(`/orrs/${orrId}/traces${query ? `?${query}` : ""}`);
+    },
+    get: (orrId: string, traceId: string) =>
+      request<any>(`/orrs/${orrId}/traces/${traceId}`),
+    stats: (orrId: string) =>
+      request<any>(`/orrs/${orrId}/traces/stats`),
+  },
+
   // Templates
   templates: {
     list: () => request<{ templates: any[] }>("/templates"),

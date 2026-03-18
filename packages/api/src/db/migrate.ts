@@ -134,4 +134,52 @@ export function migrate(db: Db) {
     reason TEXT NOT NULL,
     created_at TEXT NOT NULL
   )`);
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS agent_traces (
+    id TEXT PRIMARY KEY,
+    orr_id TEXT NOT NULL REFERENCES orrs(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    message_id TEXT,
+    model TEXT NOT NULL,
+    fallback_model TEXT,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    prompt_tokens INTEGER NOT NULL DEFAULT 0,
+    completion_tokens INTEGER NOT NULL DEFAULT 0,
+    iteration_count INTEGER NOT NULL DEFAULT 0,
+    tool_calls_count INTEGER NOT NULL DEFAULT 0,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    fallback_used INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    error_category TEXT,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  )`);
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS agent_spans (
+    id TEXT PRIMARY KEY,
+    trace_id TEXT NOT NULL REFERENCES agent_traces(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    iteration INTEGER NOT NULL DEFAULT 0,
+    model TEXT,
+    tool_name TEXT,
+    tool_args TEXT,
+    tool_result_summary TEXT,
+    section_id TEXT,
+    prompt_tokens INTEGER NOT NULL DEFAULT 0,
+    completion_tokens INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    retry_attempt INTEGER,
+    retry_reason TEXT,
+    retry_delay_ms INTEGER,
+    error TEXT,
+    error_category TEXT,
+    created_at TEXT NOT NULL
+  )`);
+
+  // Indexes for common trace queries
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_agent_traces_orr ON agent_traces(orr_id)`);
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_agent_traces_session ON agent_traces(session_id)`);
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_agent_spans_trace ON agent_spans(trace_id)`);
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_agent_spans_type ON agent_spans(type)`);
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_agent_spans_tool ON agent_spans(tool_name)`);
 }

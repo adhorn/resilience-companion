@@ -6,6 +6,7 @@
  */
 
 import type { LLMAdapter, LLMMessage, LLMToolDef, StreamChunk } from "./adapter.js";
+import { log } from "../logger.js";
 
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 2000; // 2s, 4s, 8s
@@ -100,7 +101,7 @@ export class RetryAdapter implements LLMAdapter {
         }
 
         const delayMs = BASE_DELAY_MS * Math.pow(2, attempt);
-        console.warn(`LLM retry ${attempt + 1}/${MAX_RETRIES}: ${reason} — waiting ${delayMs}ms`);
+        log("warn", "LLM retry", { attempt: attempt + 1, maxRetries: MAX_RETRIES, reason, delayMs });
 
         yield {
           type: "retry",
@@ -117,7 +118,7 @@ export class RetryAdapter implements LLMAdapter {
     // If we have a fallback and the error was overload/server, try it
     if (this.fallback && lastError && (isOverloadError(lastError) || isRetriableError(lastError).retriable)) {
       const label = this.fallbackLabel || "fallback model";
-      console.warn(`Primary model exhausted retries. Falling back to ${label}.`);
+      log("warn", "Primary model exhausted retries, falling back", { fallbackModel: label });
 
       yield {
         type: "fallback",
@@ -138,7 +139,7 @@ export class RetryAdapter implements LLMAdapter {
             throw err;
           }
           const delayMs = BASE_DELAY_MS * Math.pow(2, attempt);
-          console.warn(`Fallback retry ${attempt + 1}/${MAX_RETRIES}: ${reason} — waiting ${delayMs}ms`);
+          log("warn", "Fallback retry", { attempt: attempt + 1, maxRetries: MAX_RETRIES, reason, delayMs });
           yield {
             type: "retry",
             attempt: attempt + 1,

@@ -167,6 +167,57 @@ export const caseStudies = sqliteTable("case_studies", {
   createdAt: text("created_at").notNull(),
 });
 
+// --- Agent Traces ---
+
+export const agentTraces = sqliteTable("agent_traces", {
+  id: text("id").primaryKey(),
+  orrId: text("orr_id")
+    .notNull()
+    .references(() => orrs.id, { onDelete: "cascade" }),
+  sessionId: text("session_id")
+    .notNull()
+    .references(() => sessions.id, { onDelete: "cascade" }),
+  messageId: text("message_id"),
+  model: text("model").notNull(),
+  fallbackModel: text("fallback_model"),
+  totalTokens: integer("total_tokens").notNull().default(0),
+  promptTokens: integer("prompt_tokens").notNull().default(0),
+  completionTokens: integer("completion_tokens").notNull().default(0),
+  iterationCount: integer("iteration_count").notNull().default(0),
+  toolCallsCount: integer("tool_calls_count").notNull().default(0),
+  retryCount: integer("retry_count").notNull().default(0),
+  fallbackUsed: integer("fallback_used").notNull().default(0),
+  error: text("error"),
+  errorCategory: text("error_category"),
+  durationMs: integer("duration_ms").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});
+
+// --- Agent Spans ---
+
+export const agentSpans = sqliteTable("agent_spans", {
+  id: text("id").primaryKey(),
+  traceId: text("trace_id")
+    .notNull()
+    .references(() => agentTraces.id, { onDelete: "cascade" }),
+  type: text("type", { enum: ["llm_call", "tool_call", "retry", "fallback"] }).notNull(),
+  iteration: integer("iteration").notNull().default(0),
+  model: text("model"),
+  toolName: text("tool_name"),
+  toolArgs: text("tool_args"),
+  toolResultSummary: text("tool_result_summary"),
+  sectionId: text("section_id"),
+  promptTokens: integer("prompt_tokens").notNull().default(0),
+  completionTokens: integer("completion_tokens").notNull().default(0),
+  durationMs: integer("duration_ms").notNull().default(0),
+  retryAttempt: integer("retry_attempt"),
+  retryReason: text("retry_reason"),
+  retryDelayMs: integer("retry_delay_ms"),
+  error: text("error"),
+  errorCategory: text("error_category"),
+  createdAt: text("created_at").notNull(),
+});
+
 // --- ORR Versions (snapshots) ---
 
 export const orrVersions = sqliteTable("orr_versions", {
