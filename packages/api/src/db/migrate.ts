@@ -53,6 +53,7 @@ export function migrate(db: Db) {
     ["orrs", "repository_local_path", "TEXT"],
     ["sections", "prompt_responses", "TEXT NOT NULL DEFAULT '{}'"],
     ["session_messages", "metadata", "TEXT"],
+    ["orrs", "steering_tier", "TEXT NOT NULL DEFAULT 'thorough'"],
   ];
   for (const [table, col, type] of migrations) {
     try {

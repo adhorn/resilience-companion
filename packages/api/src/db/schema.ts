@@ -57,6 +57,9 @@ export const orrs = sqliteTable("orrs", {
   repositoryPath: text("repository_path"), // git URL (e.g. https://github.com/org/repo)
   repositoryToken: text("repository_token"), // encrypted PAT for private repos
   repositoryLocalPath: text("repository_local_path"), // local clone path (set by backend after clone)
+  steeringTier: text("steering_tier", { enum: ["standard", "thorough", "rigorous"] })
+    .notNull()
+    .default("thorough"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   completedAt: text("completed_at"),

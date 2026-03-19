@@ -29,7 +29,7 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    update: (id: string, data: { status?: string; serviceName?: string; repositoryUrl?: string; repositoryToken?: string }) =>
+    update: (id: string, data: { status?: string; serviceName?: string; repositoryUrl?: string; repositoryToken?: string; steeringTier?: string }) =>
       request<{ orr: any }>(`/orrs/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),

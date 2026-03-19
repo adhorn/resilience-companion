@@ -8,6 +8,11 @@ import { AGENT_TOOLS, executeTool } from "./tools.js";
 import { nanoid } from "nanoid";
 import { TraceCollector } from "./trace.js";
 import { log } from "../logger.js";
+import { runBeforeHooks, runAfterHooks } from "./steering.js";
+import type { SteeringTier, ToolLedgerEntry } from "./steering.js";
+import { getHooksForTier } from "./hooks/index.js";
+import { getDb, schema } from "../db/index.js";
+import { eq } from "drizzle-orm";
 
 /** Translate raw LLM errors into user-friendly messages */
 function categorizeError(msg: string): string {
@@ -60,6 +65,16 @@ export interface AgentInput {
 export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
   const { orrId, sessionId, activeSectionId, conversationHistory, userMessage, sessionTokenUsage } = input;
   const llm = getLLM();
+
+  // Load steering tier from ORR and assemble hooks
+  const db = getDb();
+  const orrRow = db.select({ steeringTier: schema.orrs.steeringTier })
+    .from(schema.orrs)
+    .where(eq(schema.orrs.id, orrId))
+    .get();
+  const tier: SteeringTier = (orrRow?.steeringTier as SteeringTier) || "thorough";
+  const steeringHooks = getHooksForTier(tier);
+  const toolLedger: ToolLedgerEntry[] = [];
 
   // Build context and system prompt
   const context = buildORRContext(orrId, activeSectionId);
@@ -204,21 +219,41 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
 
       let result: string;
       let parsedResult: Record<string, unknown>;
-      try {
-        result = executeTool(tc.name, args, orrId, sessionId);
-        parsedResult = JSON.parse(result);
-        trace.endToolCall(toolSpanId, result.slice(0, 500));
-      } catch (err) {
-        const errMsg = (err as Error).message || "Unknown tool error";
-        log("error", "Tool execution failed", { tool: tc.name, error: errMsg, traceId: trace.id });
-        result = JSON.stringify({ error: `Tool failed: ${errMsg}` });
-        parsedResult = { error: `Tool failed: ${errMsg}` };
-        trace.endToolCall(toolSpanId, result, errMsg);
-        yield {
-          type: "error",
-          message: `Tool "${tc.name}" failed: ${errMsg}`,
-        } as SSEEvent;
+
+      // Steering: run before-hooks (security, ordering, validation)
+      const ledger = { calls: toolLedger, currentIteration: iteration };
+      const steering = runBeforeHooks(steeringHooks, tc.name, args, ledger);
+
+      if (steering.action === "guide") {
+        // Return guidance as tool error — LLM sees it and can adjust
+        result = JSON.stringify({ error: steering.reason });
+        parsedResult = { error: steering.reason };
+        trace.endToolCall(toolSpanId, result.slice(0, 500), `steered:${steering.hookName}`);
+        log("info", "Steering guided tool call", {
+          hook: steering.hookName, tool: tc.name, reason: steering.reason, traceId: trace.id,
+        });
+      } else {
+        try {
+          result = executeTool(tc.name, args, orrId, sessionId);
+          // Steering: run after-hooks (credential redaction, size caps, directory filtering)
+          result = runAfterHooks(steeringHooks, tc.name, args, result);
+          parsedResult = JSON.parse(result);
+          trace.endToolCall(toolSpanId, result.slice(0, 500));
+        } catch (err) {
+          const errMsg = (err as Error).message || "Unknown tool error";
+          log("error", "Tool execution failed", { tool: tc.name, error: errMsg, traceId: trace.id });
+          result = JSON.stringify({ error: `Tool failed: ${errMsg}` });
+          parsedResult = { error: `Tool failed: ${errMsg}` };
+          trace.endToolCall(toolSpanId, result, errMsg);
+          yield {
+            type: "error",
+            message: `Tool "${tc.name}" failed: ${errMsg}`,
+          } as SSEEvent;
+        }
       }
+
+      // Record in ledger for subsequent hooks in this turn
+      toolLedger.push({ tool: tc.name, args, result, iteration });
 
       log("info", "Agent tool result", { tool: tc.name, result: result.slice(0, 200), traceId: trace.id });
 

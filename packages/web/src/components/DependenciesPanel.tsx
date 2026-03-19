@@ -265,12 +265,12 @@ export function DependenciesPanel({ orrId, serviceName, sections }: Props) {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Graph area */}
-        <div ref={containerRef} className="flex-1 bg-gray-50 relative">
+        <div ref={containerRef} className="flex-1 min-w-0 bg-gray-50 relative overflow-hidden">
           <svg
             ref={svgRef}
             width={dimensions.width}
             height={dimensions.height}
-            className="cursor-grab active:cursor-grabbing"
+            className="cursor-grab active:cursor-grabbing select-none"
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}

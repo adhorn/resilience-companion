@@ -591,6 +591,22 @@ export function ORRView() {
           <h2 className="font-bold text-sm text-gray-900 truncate mt-1">{orr.serviceName}</h2>
           <div className="text-[10px] text-gray-500 mt-1">{orr.status.replace("_", " ")}</div>
 
+          {/* Steering tier */}
+          <select
+            value={orr.steeringTier || "thorough"}
+            onChange={async (e) => {
+              const tier = e.target.value;
+              setOrr({ ...orr, steeringTier: tier });
+              await api.orrs.update(id!, { steeringTier: tier });
+            }}
+            className="mt-1.5 w-full text-[10px] px-1.5 py-0.5 border border-gray-300 rounded bg-white text-gray-700"
+            title="Agent steering rigor — controls how strictly the AI follows review workflow rules"
+          >
+            <option value="standard">Standard — fast, fewer checks</option>
+            <option value="thorough">Thorough — balanced (default)</option>
+            <option value="rigorous">Rigorous — strict validation</option>
+          </select>
+
           {/* Repo connection */}
           {orr.repositoryPath ? (
             <div className="mt-1.5 flex items-center gap-1 text-[10px] text-green-600" title={orr.repositoryPath}>
