@@ -219,6 +219,9 @@ orrRoutes.patch("/:id", async (c) => {
   if (body.serviceName) {
     updates.serviceName = body.serviceName;
   }
+  if (body.steeringTier && ["standard", "thorough", "rigorous"].includes(body.steeringTier)) {
+    updates.steeringTier = body.steeringTier;
+  }
   if (body.repositoryUrl !== undefined) {
     if (body.repositoryUrl) {
       const validation = validateGitUrl(body.repositoryUrl);

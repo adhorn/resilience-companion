@@ -1,9 +1,9 @@
 import { eq, and, sql } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import type { LLMToolDef } from "../llm/index.js";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 /**
  * Tool definitions for the Review Facilitator agent.
@@ -292,19 +292,41 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
     return { error: "No repository path configured for this ORR. Ask the team to set one." };
   }
 
-  const repoRoot = resolve(orr.repositoryLocalPath);
-  if (!existsSync(repoRoot) || !statSync(repoRoot).isDirectory()) {
-    return { error: `Repository path does not exist or is not a directory: ${repoRoot}` };
+  const logicalRoot = resolve(orr.repositoryLocalPath);
+  if (!existsSync(logicalRoot) || !statSync(logicalRoot).isDirectory()) {
+    return { error: `Repository path does not exist or is not a directory: ${logicalRoot}` };
   }
 
-  const absPath = resolve(repoRoot, relativePath);
+  // Resolve symlinks to prevent escape via symlinked paths
+  let realRoot: string;
+  try {
+    realRoot = realpathSync(logicalRoot);
+  } catch {
+    return { error: "Could not resolve repository path." };
+  }
 
-  // Path traversal protection: resolved path must stay within repo root
-  if (!absPath.startsWith(repoRoot + "/") && absPath !== repoRoot) {
+  const logicalPath = resolve(logicalRoot, relativePath);
+
+  // First check logical path (catches ../../../etc/passwd)
+  if (!logicalPath.startsWith(logicalRoot + "/") && logicalPath !== logicalRoot) {
     return { error: "Path escapes the repository root. Access denied." };
   }
 
-  return { absPath, repoRoot };
+  // Then resolve symlinks on the target and check real path
+  let realPath: string;
+  try {
+    realPath = realpathSync(logicalPath);
+  } catch {
+    // Target doesn't exist — that's fine for list_directory pre-checks,
+    // callers will handle existence checks themselves
+    return { absPath: logicalPath, repoRoot: logicalRoot };
+  }
+
+  if (!realPath.startsWith(realRoot + "/") && realPath !== realRoot) {
+    return { error: "Path escapes the repository root via symlink. Access denied." };
+  }
+
+  return { absPath: realPath, repoRoot: realRoot };
 }
 
 /**
@@ -562,14 +584,14 @@ export function executeTool(
       const depName = args.name as string;
       const depType = args.type as string;
 
-      // Check if this dependency already exists for this ORR (upsert by name)
+      // Check if this dependency already exists for this ORR (case-insensitive upsert by name)
       const existing = db
         .select()
         .from(schema.dependencies)
         .where(
           and(
             eq(schema.dependencies.orrId, orrId),
-            eq(schema.dependencies.name, depName),
+            sql`LOWER(${schema.dependencies.name}) = LOWER(${depName})`,
           ),
         )
         .get();
@@ -622,20 +644,28 @@ export function executeTool(
       const query = args.query as string;
       const filePattern = args.file_pattern as string | undefined;
 
+      // Build grep args as array — no shell interpretation, prevents command injection
+      const grepArgs = ["-rn", "--color=never"];
+      if (filePattern) {
+        // Only allow safe glob-like patterns (alphanumeric, *, ?, ., /, -, _)
+        if (/^[a-zA-Z0-9.*?\/\-_{}]+$/.test(filePattern)) {
+          grepArgs.push(`--include=${filePattern}`);
+        }
+        // Invalid patterns silently ignored — search proceeds without filter
+      }
+      grepArgs.push("--", query, ".");
+
       try {
-        const output = execSync(
-          `grep -rn ${filePattern ? `--include='${filePattern.replace(/'/g, "")}'` : ""} -- ${JSON.stringify(query)} .`,
-          {
-            cwd: result.repoRoot,
-            encoding: "utf-8",
-            timeout: 10_000,
-            maxBuffer: 512 * 1024,
-          },
-        );
+        const output = execFileSync("grep", grepArgs, {
+          cwd: result.repoRoot,
+          encoding: "utf-8",
+          timeout: 10_000,
+          maxBuffer: 512 * 1024,
+        });
 
         // Parse grep output into structured results, limit to 20 matches
         const lines = output.trim().split("\n").slice(0, 20);
-        const matches = lines.map((line) => {
+        const matches = lines.map((line: string) => {
           const firstColon = line.indexOf(":");
           const secondColon = line.indexOf(":", firstColon + 1);
           return {

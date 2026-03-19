@@ -16,6 +16,7 @@ export interface ORRContext {
   caseStudies: CaseStudySummary[];
   isReturningSession: boolean;
   hasRepositoryPath: boolean;
+  existingDependencies: Array<{ name: string; type: string; criticality: string }>;
 }
 
 export interface SectionSummary {
@@ -205,6 +206,15 @@ This team has completed ${ctx.sessionSummaries.length} previous session(s) on th
         if (tm.systemPattern) parts.push(`Pattern: ${tm.systemPattern}`);
         if (tm.failureMode) parts.push(`Failure mode: ${tm.failureMode}`);
       }
+    }
+  }
+
+  // Already-recorded dependencies (so the agent doesn't re-record them)
+  if (ctx.existingDependencies.length > 0) {
+    parts.push("\n## Already Recorded Dependencies");
+    parts.push("These dependencies have already been recorded for this ORR. Do NOT call record_dependency for any of these again — only record NEW dependencies not in this list.");
+    for (const dep of ctx.existingDependencies) {
+      parts.push(`- ${dep.name} (${dep.type}, ${dep.criticality})`);
     }
   }
 

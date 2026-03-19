@@ -158,6 +158,17 @@ export function buildORRContext(
       }));
   }
 
+  // Load existing dependencies so the agent knows what's already recorded
+  const existingDeps = db
+    .select({
+      name: schema.dependencies.name,
+      type: schema.dependencies.type,
+      criticality: schema.dependencies.criticality,
+    })
+    .from(schema.dependencies)
+    .where(eq(schema.dependencies.orrId, orrId))
+    .all();
+
   return {
     serviceName: orr.serviceName,
     teamName: team?.name || "Unknown",
@@ -170,5 +181,6 @@ export function buildORRContext(
     caseStudies,
     isReturningSession: completedSessions.length > 0,
     hasRepositoryPath: !!orr.repositoryPath,
+    existingDependencies: existingDeps,
   };
 }
