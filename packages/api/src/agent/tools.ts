@@ -457,7 +457,7 @@ export function executeTool(
 
       db.update(schema.sections)
         .set({
-          flags: JSON.stringify(flags),
+          flags: flags as any,
           updatedAt: now,
         })
         .where(

@@ -4,6 +4,7 @@ import { Link, useLocation, Outlet } from "react-router-dom";
 const NAV_ITEMS = [
   { path: "/dashboard", label: "Dashboard" },
   { path: "/orrs", label: "ORRs" },
+  { path: "/incidents", label: "Incidents" },
   { path: "/flags", label: "Flags" },
   { path: "/learn", label: "Learn" },
 ];
@@ -16,8 +17,8 @@ export function Layout() {
       {/* Sidebar */}
       <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <h1 className="text-lg font-bold text-gray-900">ORR Companion</h1>
-          <p className="text-xs text-gray-500 mt-1">Operational Readiness</p>
+          <h1 className="text-lg font-bold text-gray-900">Resilience Companion</h1>
+          <p className="text-xs text-gray-500 mt-1">ORRs & Incident Analysis</p>
         </div>
 
         <nav className="flex-1 p-2">

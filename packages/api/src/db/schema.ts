@@ -93,15 +93,14 @@ export const sections = sqliteTable("sections", {
 
 export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(),
-  orrId: text("orr_id")
-    .notNull()
-    .references(() => orrs.id, { onDelete: "cascade" }),
+  orrId: text("orr_id").notNull(), // polymorphic: holds orrId or incidentId
   userId: text("user_id")
     .notNull()
     .references(() => users.id),
   agentProfile: text("agent_profile", {
     enum: [
       "REVIEW_FACILITATOR",
+      "INCIDENT_LEARNING_FACILITATOR",
       "SESSION_ASSISTANT",
       "TRANSCRIPT_PROCESSOR",
       "DRIFT_ANALYST",
@@ -174,9 +173,7 @@ export const caseStudies = sqliteTable("case_studies", {
 
 export const agentTraces = sqliteTable("agent_traces", {
   id: text("id").primaryKey(),
-  orrId: text("orr_id")
-    .notNull()
-    .references(() => orrs.id, { onDelete: "cascade" }),
+  orrId: text("orr_id").notNull(), // polymorphic: holds orrId or incidentId
   sessionId: text("session_id")
     .notNull()
     .references(() => sessions.id, { onDelete: "cascade" }),
@@ -241,6 +238,146 @@ export const dependencies = sqliteTable("dependencies", {
   hasFallback: integer("has_fallback").notNull().default(0),
   fallbackDescription: text("fallback_description"),
   notes: text("notes"),
+  createdAt: text("created_at").notNull(),
+});
+
+// --- Incidents ---
+
+export const incidents = sqliteTable("incidents", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  teamId: text("team_id")
+    .notNull()
+    .references(() => teams.id),
+  serviceName: text("service_name"),
+  incidentDate: text("incident_date"),
+  durationMinutes: integer("duration_minutes"),
+  severity: text("severity", { enum: ["HIGH", "MEDIUM", "LOW"] }),
+  detectionMethod: text("detection_method"),
+  incidentType: text("incident_type", {
+    enum: ["OUTAGE", "DEGRADATION", "NEAR_MISS", "SURPRISING_BEHAVIOR"],
+  }),
+  steeringTier: text("steering_tier", { enum: ["standard", "thorough", "rigorous"] })
+    .notNull()
+    .default("thorough"),
+  status: text("status", {
+    enum: ["DRAFT", "IN_PROGRESS", "IN_REVIEW", "PUBLISHED", "ARCHIVED"],
+  })
+    .notNull()
+    .default("DRAFT"),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  publishedAt: text("published_at"),
+});
+
+// --- Incident Sections ---
+
+export const incidentSections = sqliteTable("incident_sections", {
+  id: text("id").primaryKey(),
+  incidentId: text("incident_id")
+    .notNull()
+    .references(() => incidents.id, { onDelete: "cascade" }),
+  position: integer("position").notNull(),
+  title: text("title").notNull(),
+  prompts: text("prompts", { mode: "json" }).notNull(), // string[]
+  content: text("content").notNull().default(""),
+  depth: text("depth", {
+    enum: ["UNKNOWN", "SURFACE", "MODERATE", "DEEP"],
+  })
+    .notNull()
+    .default("UNKNOWN"),
+  depthRationale: text("depth_rationale"),
+  promptResponses: text("prompt_responses", { mode: "json" }).notNull().default("{}"),
+  flags: text("flags", { mode: "json" }).notNull().default("[]"),
+  conversationSnippet: text("conversation_snippet"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// --- Timeline Events ---
+
+export const timelineEvents = sqliteTable("timeline_events", {
+  id: text("id").primaryKey(),
+  incidentId: text("incident_id")
+    .notNull()
+    .references(() => incidents.id, { onDelete: "cascade" }),
+  position: integer("position").notNull(),
+  timestamp: text("timestamp").notNull(),
+  description: text("description").notNull(),
+  evidence: text("evidence"),
+  actor: text("actor"),
+  eventType: text("event_type", {
+    enum: ["detection", "escalation", "action", "communication", "resolution", "other"],
+  })
+    .notNull()
+    .default("other"),
+  createdAt: text("created_at").notNull(),
+});
+
+// --- Contributing Factors ---
+
+export const contributingFactors = sqliteTable("contributing_factors", {
+  id: text("id").primaryKey(),
+  incidentId: text("incident_id")
+    .notNull()
+    .references(() => incidents.id, { onDelete: "cascade" }),
+  category: text("category", {
+    enum: ["technical", "process", "organizational", "human_factors", "communication", "knowledge"],
+  }).notNull(),
+  description: text("description").notNull(),
+  context: text("context"),
+  isSystemic: integer("is_systemic", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+
+// --- Factor-Event Links ---
+
+export const factorEventLinks = sqliteTable("factor_event_links", {
+  factorId: text("factor_id")
+    .notNull()
+    .references(() => contributingFactors.id, { onDelete: "cascade" }),
+  eventId: text("event_id")
+    .notNull()
+    .references(() => timelineEvents.id, { onDelete: "cascade" }),
+});
+
+// --- Action Items (shared across practices) ---
+
+export const actionItems = sqliteTable("action_items", {
+  id: text("id").primaryKey(),
+  practiceType: text("practice_type", { enum: ["orr", "incident"] }).notNull(),
+  practiceId: text("practice_id").notNull(),
+  title: text("title").notNull(),
+  owner: text("owner"),
+  dueDate: text("due_date"),
+  priority: text("priority", { enum: ["high", "medium", "low"] }).notNull().default("medium"),
+  type: text("type", { enum: ["technical", "process", "organizational", "learning"] }).notNull(),
+  contributingFactorId: text("contributing_factor_id"),
+  successCriteria: text("success_criteria"),
+  backlogLink: text("backlog_link"),
+  status: text("status", { enum: ["open", "in_progress", "done"] }).notNull().default("open"),
+  createdAt: text("created_at").notNull(),
+  completedAt: text("completed_at"),
+});
+
+// --- Cross-Practice Suggestions (shared) ---
+
+export const crossPracticeSuggestions = sqliteTable("cross_practice_suggestions", {
+  id: text("id").primaryKey(),
+  sourcePracticeType: text("source_practice_type", { enum: ["orr", "incident"] }).notNull(),
+  sourcePracticeId: text("source_practice_id").notNull(),
+  targetPracticeType: text("target_practice_type", {
+    enum: ["chaos_engineering", "load_testing", "orr", "incident_analysis", "gameday"],
+  }).notNull(),
+  suggestion: text("suggestion").notNull(),
+  rationale: text("rationale").notNull(),
+  linkedPracticeId: text("linked_practice_id"),
+  linkedSectionId: text("linked_section_id"),
+  status: text("status", { enum: ["suggested", "accepted", "dismissed"] })
+    .notNull()
+    .default("suggested"),
   createdAt: text("created_at").notNull(),
 });
 

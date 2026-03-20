@@ -2,17 +2,12 @@ import { MAX_AGENT_ITERATIONS, MAX_SESSION_TOKENS } from "@orr/shared";
 import { getLLM } from "../llm/index.js";
 import type { LLMMessage } from "../llm/index.js";
 import type { SSEEvent } from "@orr/shared";
-import { buildSystemPrompt } from "./system-prompt.js";
-import { buildORRContext } from "./context.js";
-import { AGENT_TOOLS, executeTool } from "./tools.js";
+import type { PracticeConfig } from "./practice.js";
 import { nanoid } from "nanoid";
 import { TraceCollector } from "./trace.js";
 import { log } from "../logger.js";
 import { runBeforeHooks, runAfterHooks } from "./steering.js";
-import type { SteeringTier, ToolLedgerEntry } from "./steering.js";
-import { getHooksForTier } from "./hooks/index.js";
-import { getDb, schema } from "../db/index.js";
-import { eq } from "drizzle-orm";
+import type { ToolLedgerEntry } from "./steering.js";
 
 /** Translate raw LLM errors into user-friendly messages */
 function categorizeError(msg: string): string {
@@ -47,7 +42,8 @@ function finalizeTrace(collector: TraceCollector): void {
 }
 
 export interface AgentInput {
-  orrId: string;
+  practiceConfig: PracticeConfig;
+  practiceId: string;
   sessionId: string;
   activeSectionId: string | null;
   conversationHistory: LLMMessage[];
@@ -63,22 +59,17 @@ export interface AgentInput {
  * 4. Yield SSE events throughout for streaming to client
  */
 export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
-  const { orrId, sessionId, activeSectionId, conversationHistory, userMessage, sessionTokenUsage } = input;
+  const { practiceConfig, practiceId, sessionId, activeSectionId, conversationHistory, userMessage, sessionTokenUsage } = input;
   const llm = getLLM();
 
-  // Load steering tier from ORR and assemble hooks
-  const db = getDb();
-  const orrRow = db.select({ steeringTier: schema.orrs.steeringTier })
-    .from(schema.orrs)
-    .where(eq(schema.orrs.id, orrId))
-    .get();
-  const tier: SteeringTier = (orrRow?.steeringTier as SteeringTier) || "thorough";
-  const steeringHooks = getHooksForTier(tier);
+  // Load steering tier and assemble hooks via practice config
+  const tier = practiceConfig.loadSteeringTier(practiceId);
+  const steeringHooks = practiceConfig.getHooks(tier);
   const toolLedger: ToolLedgerEntry[] = [];
 
-  // Build context and system prompt
-  const context = buildORRContext(orrId, activeSectionId);
-  const systemPrompt = buildSystemPrompt(context);
+  // Build context and system prompt via practice config
+  const context = practiceConfig.buildContext(practiceId, activeSectionId);
+  const systemPrompt = practiceConfig.buildSystemPrompt(context);
 
   // Build messages array
   const messages: LLMMessage[] = [
@@ -89,7 +80,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
 
   const messageId = nanoid();
   const model = process.env.LLM_MODEL || "sonnet";
-  const trace = new TraceCollector(orrId, sessionId, messageId, model);
+  const trace = new TraceCollector(practiceId, sessionId, messageId, model);
 
   yield { type: "message_start", messageId };
 
@@ -114,7 +105,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
 
     // Call LLM
     try {
-      const stream = llm.chat(messages, AGENT_TOOLS);
+      const stream = llm.chat(messages, practiceConfig.tools);
 
       for await (const chunk of stream) {
         // RetryAdapter emits retry/fallback events between attempts
@@ -234,7 +225,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
         });
       } else {
         try {
-          result = executeTool(tc.name, args, orrId, sessionId);
+          result = practiceConfig.executeTool(tc.name, args, practiceId, sessionId);
           // Steering: run after-hooks (credential redaction, size caps, directory filtering)
           result = runAfterHooks(steeringHooks, tc.name, args, result);
           parsedResult = JSON.parse(result);
@@ -261,19 +252,10 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
 
       // Emit section_updated events for write operations
       if (
-        ["update_section_content", "update_depth_assessment", "set_flags", "update_question_response"].includes(
-          tc.name,
-        ) &&
+        practiceConfig.sectionUpdateTools.includes(tc.name) &&
         parsedResult.success
       ) {
-        const field =
-          tc.name === "update_section_content"
-            ? "content"
-            : tc.name === "update_depth_assessment"
-              ? "depth"
-              : tc.name === "update_question_response"
-                ? "promptResponses"
-                : "flags";
+        const field = practiceConfig.sectionUpdateFieldMap[tc.name] || tc.name;
         yield {
           type: "section_updated",
           sectionId: args.section_id as string,
