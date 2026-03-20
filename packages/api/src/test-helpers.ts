@@ -97,6 +97,55 @@ export function seedTestOrr(db: Db) {
 /**
  * Seed an active session for the given ORR and user.
  */
+/**
+ * Seed a minimal incident with team, user, incident, and 3 sections.
+ * Returns all IDs needed for incident tool tests.
+ */
+export function seedTestIncident(db: Db) {
+  const now = new Date().toISOString();
+  const teamId = "test-team";
+  const userId = "test-user";
+  const incidentId = "test-incident";
+  const sectionIds = ["isec-1", "isec-2", "isec-3"];
+
+  // Team + User (skip if already seeded)
+  const existingTeam = db.select().from(schema.teams).all();
+  if (existingTeam.length === 0) {
+    db.insert(schema.teams).values({ id: teamId, name: "Test Team", createdAt: now }).run();
+    db.insert(schema.users).values({
+      id: userId, name: "Test User", email: "test@test.com",
+      passwordHash: "n/a", teamId, role: "ADMIN", authProvider: "local", createdAt: now,
+    }).run();
+  }
+
+  db.insert(schema.incidents).values({
+    id: incidentId, title: "DB Connection Exhaustion", teamId,
+    serviceName: "Payment Service", severity: "HIGH",
+    incidentType: "DEGRADATION", incidentDate: "2024-03-15T14:30:00Z",
+    steeringTier: "thorough", status: "IN_PROGRESS", createdBy: userId,
+    createdAt: now, updatedAt: now,
+  }).run();
+
+  const sections = [
+    { id: sectionIds[0], title: "Incident Details", prompts: ["When?", "Duration?"], position: 1 },
+    { id: sectionIds[1], title: "Timeline", prompts: ["Walk me through it"], position: 9 },
+    { id: sectionIds[2], title: "Contributing Factors", prompts: ["What happened?"], position: 10 },
+  ];
+
+  for (const s of sections) {
+    db.insert(schema.incidentSections).values({
+      id: s.id, incidentId, position: s.position, title: s.title,
+      prompts: s.prompts as any, content: "", depth: "UNKNOWN",
+      promptResponses: {} as any, flags: [] as any, updatedAt: now,
+    }).run();
+  }
+
+  return { teamId, userId, incidentId, sectionIds };
+}
+
+/**
+ * Seed an active session for the given practice and user.
+ */
 export function seedTestSession(db: Db, orrId: string, userId: string) {
   const sessionId = "test-session";
   db.insert(schema.sessions).values({

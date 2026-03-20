@@ -5,3 +5,6 @@ data/
 *.db
 *.db-journal
 *.db-wal
+reports/
+.stryker-tmp/
+stryker-incremental.json
