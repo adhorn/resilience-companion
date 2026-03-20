@@ -10,9 +10,13 @@
     "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @orr/api\" \"npm run dev -w @orr/web\"",
     "build": "npm run build -w @orr/shared && npm run build -w @orr/api && npm run build -w @orr/web",
     "test": "vitest run",
+    "test:mutate": "stryker run",
     "lint": "tsc --noEmit -p packages/api/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.6.0",
+    "@stryker-mutator/typescript-checker": "^9.6.0",
+    "@stryker-mutator/vitest-runner": "^9.6.0",
     "concurrently": "^9.1.2",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
