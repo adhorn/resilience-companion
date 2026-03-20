@@ -1,3 +1,8 @@
+/**
+ * Incident Analysis session routes.
+ * Same SSE streaming pattern as ORR sessions, but uses incident practice config.
+ * Mirrors sessions.ts feature-for-feature: auto-stitch, trim, dedup, token caps.
+ */
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { nanoid } from "nanoid";
@@ -6,7 +11,7 @@ import { MAX_SESSION_TOKENS, MAX_DAILY_TOKENS } from "@orr/shared";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
 import { runAgent } from "../agent/loop.js";
-import { orrPracticeConfig } from "../practices/orr/config.js";
+import { incidentPracticeConfig } from "../practices/incident/config.js";
 import type { LLMMessage } from "../llm/index.js";
 import { log } from "../logger.js";
 
@@ -46,41 +51,68 @@ function trimHistory(
   return trimmed;
 }
 
-export const sessionRoutes = new Hono();
-
-sessionRoutes.use("*", requireAuth);
-
 /**
- * POST /api/v1/orrs/:orrId/sessions
- * Start a new AI session for an ORR.
+ * Compute daily token usage across ALL practices for a team.
+ * Sums token usage from sessions started today, joining on both orrs and incidents tables.
  */
-sessionRoutes.post("/", async (c) => {
-  const user = c.get("user");
-  const orrId = c.req.param("orrId")!;
-  const db = getDb();
+function getDailyTokenUsage(db: ReturnType<typeof getDb>, teamId: string): number {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayISO = todayStart.toISOString();
 
-  // Verify ORR belongs to user's team
-  const orr = db
-    .select()
-    .from(schema.orrs)
-    .where(and(eq(schema.orrs.id, orrId), eq(schema.orrs.teamId, user.teamId)))
+  // Sum from ORR sessions
+  const orrUsage = db
+    .select({ total: sql<number>`coalesce(sum(${schema.sessions.tokenUsage}), 0)` })
+    .from(schema.sessions)
+    .innerJoin(schema.orrs, eq(schema.sessions.orrId, schema.orrs.id))
+    .where(and(
+      eq(schema.orrs.teamId, teamId),
+      gte(schema.sessions.startedAt, todayISO),
+    ))
     .get();
 
-  if (!orr) {
-    return c.json({ error: "not_found", message: "ORR not found" }, 404);
+  // Sum from incident sessions
+  const incidentUsage = db
+    .select({ total: sql<number>`coalesce(sum(${schema.sessions.tokenUsage}), 0)` })
+    .from(schema.sessions)
+    .innerJoin(schema.incidents, eq(schema.sessions.orrId, schema.incidents.id))
+    .where(and(
+      eq(schema.incidents.teamId, teamId),
+      gte(schema.sessions.startedAt, todayISO),
+    ))
+    .get();
+
+  return (orrUsage?.total ?? 0) + (incidentUsage?.total ?? 0);
+}
+
+export const incidentSessionRoutes = new Hono();
+incidentSessionRoutes.use("*", requireAuth);
+
+/**
+ * POST /api/v1/incidents/:incidentId/sessions
+ * Start a new AI session for an incident analysis.
+ */
+incidentSessionRoutes.post("/", async (c) => {
+  const user = c.get("user");
+  const incidentId = c.req.param("incidentId")!;
+  const db = getDb();
+
+  // Verify incident belongs to user's team
+  const incident = db.select().from(schema.incidents)
+    .where(and(eq(schema.incidents.id, incidentId), eq(schema.incidents.teamId, user.teamId)))
+    .get();
+
+  if (!incident) {
+    return c.json({ error: "not_found", message: "Incident not found" }, 404);
   }
 
-  // End any existing active sessions for this ORR+user
-  const activeSessions = db
-    .select()
-    .from(schema.sessions)
-    .where(
-      and(
-        eq(schema.sessions.orrId, orrId),
-        eq(schema.sessions.userId, user.sub),
-        eq(schema.sessions.status, "ACTIVE"),
-      ),
-    )
+  // End any existing active sessions for this incident+user
+  const activeSessions = db.select().from(schema.sessions)
+    .where(and(
+      eq(schema.sessions.orrId, incidentId),
+      eq(schema.sessions.userId, user.sub),
+      eq(schema.sessions.status, "ACTIVE"),
+    ))
     .all();
 
   const now = new Date().toISOString();
@@ -93,26 +125,24 @@ sessionRoutes.post("/", async (c) => {
 
   // Create new session
   const sessionId = nanoid();
-  db.insert(schema.sessions)
-    .values({
-      id: sessionId,
-      orrId,
-      userId: user.sub,
-      agentProfile: "REVIEW_FACILITATOR",
-      summary: null,
-      sectionsDiscussed: JSON.stringify([]),
-      status: "ACTIVE",
-      tokenUsage: 0,
-      startedAt: now,
-      endedAt: null,
-    })
-    .run();
+  db.insert(schema.sessions).values({
+    id: sessionId,
+    orrId: incidentId, // polymorphic: orrId holds practice_id
+    userId: user.sub,
+    agentProfile: "INCIDENT_LEARNING_FACILITATOR",
+    summary: null,
+    sectionsDiscussed: JSON.stringify([]),
+    status: "ACTIVE",
+    tokenUsage: 0,
+    startedAt: now,
+    endedAt: null,
+  }).run();
 
-  // Update ORR status to IN_PROGRESS if still DRAFT
-  if (orr.status === "DRAFT") {
-    db.update(schema.orrs)
+  // Update incident status to IN_PROGRESS if still DRAFT
+  if (incident.status === "DRAFT") {
+    db.update(schema.incidents)
       .set({ status: "IN_PROGRESS", updatedAt: now })
-      .where(eq(schema.orrs.id, orrId))
+      .where(eq(schema.incidents.id, incidentId))
       .run();
   }
 
@@ -120,58 +150,43 @@ sessionRoutes.post("/", async (c) => {
 });
 
 /**
- * GET /api/v1/orrs/:orrId/sessions
- * List sessions for an ORR.
+ * GET /api/v1/incidents/:incidentId/sessions
+ * List sessions for an incident.
  */
-sessionRoutes.get("/", (c) => {
+incidentSessionRoutes.get("/", (c) => {
   const user = c.get("user");
-  const orrId = c.req.param("orrId")!;
+  const incidentId = c.req.param("incidentId")!;
   const db = getDb();
 
-  const orr = db
-    .select()
-    .from(schema.orrs)
-    .where(and(eq(schema.orrs.id, orrId), eq(schema.orrs.teamId, user.teamId)))
+  const incident = db.select().from(schema.incidents)
+    .where(and(eq(schema.incidents.id, incidentId), eq(schema.incidents.teamId, user.teamId)))
     .get();
+  if (!incident) return c.json({ error: "not_found", message: "Incident not found" }, 404);
 
-  if (!orr) {
-    return c.json({ error: "not_found", message: "ORR not found" }, 404);
-  }
-
-  const rows = db
-    .select()
-    .from(schema.sessions)
-    .where(eq(schema.sessions.orrId, orrId))
+  const rows = db.select().from(schema.sessions)
+    .where(eq(schema.sessions.orrId, incidentId))
     .all();
-
   return c.json({ sessions: rows });
 });
 
 /**
- * GET /api/v1/orrs/:orrId/sessions/all-messages
- * Get all messages across ALL sessions for an ORR, chronologically.
+ * GET /api/v1/incidents/:incidentId/sessions/all-messages
+ * Get all messages across ALL sessions for an incident, chronologically.
  * Used by the frontend to show full conversation history across session renewals.
  */
-sessionRoutes.get("/all-messages", (c) => {
+incidentSessionRoutes.get("/all-messages", (c) => {
   const user = c.get("user");
-  const orrId = c.req.param("orrId")!;
+  const incidentId = c.req.param("incidentId")!;
   const db = getDb();
 
-  const orr = db
-    .select()
-    .from(schema.orrs)
-    .where(and(eq(schema.orrs.id, orrId), eq(schema.orrs.teamId, user.teamId)))
+  const incident = db.select().from(schema.incidents)
+    .where(and(eq(schema.incidents.id, incidentId), eq(schema.incidents.teamId, user.teamId)))
     .get();
-
-  if (!orr) {
-    return c.json({ error: "not_found", message: "ORR not found" }, 404);
-  }
+  if (!incident) return c.json({ error: "not_found", message: "Incident not found" }, 404);
 
   // Get all sessions ordered by start time
-  const sessions = db
-    .select()
-    .from(schema.sessions)
-    .where(eq(schema.sessions.orrId, orrId))
+  const sessions = db.select().from(schema.sessions)
+    .where(eq(schema.sessions.orrId, incidentId))
     .all()
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 
@@ -183,9 +198,7 @@ sessionRoutes.get("/all-messages", (c) => {
   let prevSessionTail: Array<{ role: string; content: string }> = [];
 
   for (const session of sessions) {
-    const rawMessages = db
-      .select()
-      .from(schema.sessionMessages)
+    const rawMessages = db.select().from(schema.sessionMessages)
       .where(eq(schema.sessionMessages.sessionId, session.id))
       .all();
 
@@ -200,8 +213,6 @@ sessionRoutes.get("/all-messages", (c) => {
     // from the previous session (they'll match the tail of prevSessionTail)
     let skipCount = 0;
     if (prevSessionTail.length > 0 && messages.length > 0) {
-      // Try to find the longest prefix of this session's messages that
-      // matches a suffix of the previous session's messages
       for (let prefixLen = Math.min(messages.length, prevSessionTail.length); prefixLen > 0; prefixLen--) {
         const suffixStart = prevSessionTail.length - prefixLen;
         let matches = true;
@@ -212,10 +223,7 @@ sessionRoutes.get("/all-messages", (c) => {
             break;
           }
         }
-        if (matches) {
-          skipCount = prefixLen;
-          break;
-        }
+        if (matches) { skipCount = prefixLen; break; }
       }
     }
 
@@ -236,28 +244,25 @@ sessionRoutes.get("/all-messages", (c) => {
 });
 
 /**
- * GET /api/v1/orrs/:orrId/sessions/:sessionId/messages
+ * GET /api/v1/incidents/:incidentId/sessions/:sessionId/messages
  * Get messages for a session.
  */
-sessionRoutes.get("/:sessionId/messages", (c) => {
+incidentSessionRoutes.get("/:sessionId/messages", (c) => {
   const user = c.get("user");
-  const orrId = c.req.param("orrId")!;
+  const incidentId = c.req.param("incidentId")!;
   const sessionId = c.req.param("sessionId")!;
   const db = getDb();
 
-  const orr = db
-    .select()
-    .from(schema.orrs)
-    .where(and(eq(schema.orrs.id, orrId), eq(schema.orrs.teamId, user.teamId)))
+  // Verify incident belongs to user's team
+  const incident = db.select().from(schema.incidents)
+    .where(and(eq(schema.incidents.id, incidentId), eq(schema.incidents.teamId, user.teamId)))
     .get();
 
-  if (!orr) {
-    return c.json({ error: "not_found", message: "ORR not found" }, 404);
+  if (!incident) {
+    return c.json({ error: "not_found", message: "Incident not found" }, 404);
   }
 
-  const rawMessages = db
-    .select()
-    .from(schema.sessionMessages)
+  const rawMessages = db.select().from(schema.sessionMessages)
     .where(eq(schema.sessionMessages.sessionId, sessionId))
     .all();
 
@@ -273,12 +278,12 @@ sessionRoutes.get("/:sessionId/messages", (c) => {
 });
 
 /**
- * POST /api/v1/orrs/:orrId/sessions/:sessionId/messages
+ * POST /api/v1/incidents/:incidentId/sessions/:sessionId/messages
  * Send a message and get AI response via SSE.
  */
-sessionRoutes.post("/:sessionId/messages", async (c) => {
+incidentSessionRoutes.post("/:sessionId/messages", async (c) => {
   const user = c.get("user");
-  const orrId = c.req.param("orrId")!;
+  const incidentId = c.req.param("incidentId")!;
   const sessionId = c.req.param("sessionId")!;
   const body = await c.req.json();
   const { content, sectionId } = body;
@@ -289,49 +294,29 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
 
   const db = getDb();
 
-  // Verify ORR + session
-  const orr = db
-    .select()
-    .from(schema.orrs)
-    .where(and(eq(schema.orrs.id, orrId), eq(schema.orrs.teamId, user.teamId)))
+  // Verify incident + session
+  const incident = db.select().from(schema.incidents)
+    .where(and(eq(schema.incidents.id, incidentId), eq(schema.incidents.teamId, user.teamId)))
     .get();
 
-  if (!orr) {
-    return c.json({ error: "not_found", message: "ORR not found" }, 404);
+  if (!incident) {
+    return c.json({ error: "not_found", message: "Incident not found" }, 404);
   }
 
-  const session = db
-    .select()
-    .from(schema.sessions)
-    .where(
-      and(eq(schema.sessions.id, sessionId), eq(schema.sessions.orrId, orrId)),
-    )
+  const session = db.select().from(schema.sessions)
+    .where(and(eq(schema.sessions.id, sessionId), eq(schema.sessions.orrId, incidentId)))
     .get();
 
   if (!session || session.status !== "ACTIVE") {
     return c.json({ error: "bad_request", message: "Session not active" }, 400);
   }
 
-  // Daily token cap: sum all session token usage for this team today
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const dailyUsageResult = db
-    .select({ total: sql<number>`coalesce(sum(${schema.sessions.tokenUsage}), 0)` })
-    .from(schema.sessions)
-    .innerJoin(schema.orrs, eq(schema.sessions.orrId, schema.orrs.id))
-    .where(
-      and(
-        eq(schema.orrs.teamId, user.teamId),
-        gte(schema.sessions.startedAt, todayStart.toISOString()),
-      ),
-    )
-    .get();
-
-  const dailyTokens = dailyUsageResult?.total ?? 0;
+  // Daily token cap: sum across ALL practices for this team
+  const dailyTokens = getDailyTokenUsage(db, user.teamId);
   if (dailyTokens >= MAX_DAILY_TOKENS) {
     return c.json({
       error: "token_limit",
-      message: `Daily token limit reached (${Math.round(dailyTokens / 1000)}k / ${Math.round(MAX_DAILY_TOKENS / 1000)}k). Resets at midnight. You can still view and edit the ORR document manually.`,
+      message: `Daily token limit reached (${Math.round(dailyTokens / 1000)}k / ${Math.round(MAX_DAILY_TOKENS / 1000)}k). Resets at midnight. You can still view and edit the incident analysis manually.`,
     }, 429);
   }
 
@@ -344,9 +329,7 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
     const now = new Date().toISOString();
 
     // Build a summary for the old session from its recent messages
-    const oldMessages = db
-      .select()
-      .from(schema.sessionMessages)
+    const oldMessages = db.select().from(schema.sessionMessages)
       .where(eq(schema.sessionMessages.sessionId, sessionId))
       .all();
     const oldDiscussed = typeof session.sectionsDiscussed === "string"
@@ -360,53 +343,33 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
       .where(eq(schema.sessions.id, sessionId))
       .run();
 
-    // Snapshot ORR at session boundary
-    const snapshotSections = db
-      .select()
-      .from(schema.sections)
-      .where(eq(schema.sections.orrId, orrId))
-      .all();
-    db.insert(schema.orrVersions)
-      .values({
-        id: nanoid(),
-        orrId,
-        snapshot: JSON.stringify({ orr, sections: snapshotSections }),
-        reason: `Session auto-renewed (token limit)`,
-        createdAt: now,
-      })
-      .run();
-
     // Create new session, carrying forward sectionsDiscussed
     activeSessionId = nanoid();
-    db.insert(schema.sessions)
-      .values({
-        id: activeSessionId,
-        orrId,
-        userId: user.sub,
-        agentProfile: "REVIEW_FACILITATOR",
-        summary: null,
-        sectionsDiscussed: JSON.stringify(oldDiscussed),
-        status: "ACTIVE",
-        tokenUsage: 0,
-        startedAt: now,
-        endedAt: null,
-      })
-      .run();
+    db.insert(schema.sessions).values({
+      id: activeSessionId,
+      orrId: incidentId,
+      userId: user.sub,
+      agentProfile: "INCIDENT_LEARNING_FACILITATOR",
+      summary: null,
+      sectionsDiscussed: JSON.stringify(oldDiscussed),
+      status: "ACTIVE",
+      tokenUsage: 0,
+      startedAt: now,
+      endedAt: null,
+    }).run();
 
     // Carry recent conversation into the new session for continuity.
-    // The system prompt already has the full ORR document state, so we only
+    // The system prompt already has the full incident state, so we only
     // need enough messages for conversational context (last ~20 messages).
     const recentMessages = oldMessages.slice(-20);
     for (const msg of recentMessages) {
-      db.insert(schema.sessionMessages)
-        .values({
-          id: nanoid(),
-          sessionId: activeSessionId,
-          role: msg.role,
-          content: msg.content,
-          createdAt: msg.createdAt,
-        })
-        .run();
+      db.insert(schema.sessionMessages).values({
+        id: nanoid(),
+        sessionId: activeSessionId,
+        role: msg.role,
+        content: msg.content,
+        createdAt: msg.createdAt,
+      }).run();
     }
 
     activeTokenUsage = 0;
@@ -418,31 +381,25 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
   // If the last message in the session is an identical user message (i.e. the
   // previous attempt failed before the agent responded), skip the insert.
   const now = new Date().toISOString();
-  const lastMsg = db
-    .select()
-    .from(schema.sessionMessages)
+  const lastMsg = db.select().from(schema.sessionMessages)
     .where(eq(schema.sessionMessages.sessionId, activeSessionId))
     .all()
     .at(-1);
 
   const isDuplicate = lastMsg && lastMsg.role === "user" && lastMsg.content === content;
   if (!isDuplicate) {
-    db.insert(schema.sessionMessages)
-      .values({
-        id: nanoid(),
-        sessionId: activeSessionId,
-        role: "user",
-        content,
-        createdAt: now,
-      })
-      .run();
+    db.insert(schema.sessionMessages).values({
+      id: nanoid(),
+      sessionId: activeSessionId,
+      role: "user",
+      content,
+      createdAt: now,
+    }).run();
   }
 
   // Track section discussed
   if (sectionId) {
-    const activeSession = db
-      .select()
-      .from(schema.sessions)
+    const activeSession = db.select().from(schema.sessions)
       .where(eq(schema.sessions.id, activeSessionId))
       .get();
     const discussed = typeof activeSession!.sectionsDiscussed === "string"
@@ -458,24 +415,18 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
   }
 
   // Build conversation history from persisted messages
-  const allMessages = db
-    .select()
-    .from(schema.sessionMessages)
+  const allMessages = db.select().from(schema.sessionMessages)
     .where(eq(schema.sessionMessages.sessionId, activeSessionId))
     .all();
 
   // Don't include the user message we just saved — it goes as the new user message
   const fullHistory: LLMMessage[] = allMessages
     .slice(0, -1)
-    .map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    }));
+    .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-  // Smart history trimming: the system prompt already contains the full ORR
-  // document state (sections, content, depth, flags, session summaries), so
-  // conversation history only provides conversational continuity. We keep
-  // recent messages within a token budget to avoid rate limits on large models.
+  // Smart history trimming: the system prompt already contains the full incident
+  // state (sections, timeline, factors, session summaries), so conversation
+  // history only provides conversational continuity.
   const MAX_HISTORY_TOKENS = 10_000;
   const CHARS_PER_TOKEN = 4;
   const history = trimHistory(fullHistory, MAX_HISTORY_TOKENS, CHARS_PER_TOKEN);
@@ -499,8 +450,8 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
 
     try {
       const agentStream = runAgent({
-        practiceConfig: orrPracticeConfig,
-        practiceId: orrId,
+        practiceConfig: incidentPracticeConfig,
+        practiceId: incidentId,
         sessionId: activeSessionId,
         activeSectionId: sectionId || null,
         conversationHistory: history,
@@ -556,77 +507,45 @@ sessionRoutes.post("/:sessionId/messages", async (c) => {
     } finally {
       // Always persist assistant response, even on disconnect/error
       if (fullResponse) {
-        db.insert(schema.sessionMessages)
-          .values({
-            id: nanoid(),
-            sessionId: activeSessionId,
-            role: "assistant",
-            content: fullResponse,
-            metadata: toolCalls.length > 0 ? JSON.stringify({ toolCalls }) : null,
-            createdAt: new Date().toISOString(),
-          })
-          .run();
+        db.insert(schema.sessionMessages).values({
+          id: nanoid(),
+          sessionId: activeSessionId,
+          role: "assistant",
+          content: fullResponse,
+          metadata: toolCalls.length > 0 ? JSON.stringify({ toolCalls }) : null,
+          createdAt: new Date().toISOString(),
+        }).run();
       }
     }
   });
 });
 
 /**
- * POST /api/v1/orrs/:orrId/sessions/:sessionId/end
- * End a session. Creates an ORR version snapshot.
+ * POST /api/v1/incidents/:incidentId/sessions/:sessionId/end
+ * End a session.
  */
-sessionRoutes.post("/:sessionId/end", async (c) => {
+incidentSessionRoutes.post("/:sessionId/end", async (c) => {
   const user = c.get("user");
-  const orrId = c.req.param("orrId")!;
+  const incidentId = c.req.param("incidentId")!;
   const sessionId = c.req.param("sessionId")!;
   const db = getDb();
 
-  const orr = db
-    .select()
-    .from(schema.orrs)
-    .where(and(eq(schema.orrs.id, orrId), eq(schema.orrs.teamId, user.teamId)))
+  const incident = db.select().from(schema.incidents)
+    .where(and(eq(schema.incidents.id, incidentId), eq(schema.incidents.teamId, user.teamId)))
     .get();
+  if (!incident) return c.json({ error: "not_found", message: "Incident not found" }, 404);
 
-  if (!orr) {
-    return c.json({ error: "not_found", message: "ORR not found" }, 404);
-  }
-
-  const session = db
-    .select()
-    .from(schema.sessions)
-    .where(
-      and(eq(schema.sessions.id, sessionId), eq(schema.sessions.orrId, orrId)),
-    )
+  const session = db.select().from(schema.sessions)
+    .where(and(eq(schema.sessions.id, sessionId), eq(schema.sessions.orrId, incidentId)))
     .get();
-
   if (!session || session.status !== "ACTIVE") {
     return c.json({ error: "bad_request", message: "Session not active" }, 400);
   }
 
-  const now = new Date().toISOString();
-
-  // End session
   db.update(schema.sessions)
-    .set({ status: "COMPLETED", endedAt: now })
+    .set({ status: "COMPLETED", endedAt: new Date().toISOString() })
     .where(eq(schema.sessions.id, sessionId))
     .run();
 
-  // Create ORR version snapshot
-  const sections = db
-    .select()
-    .from(schema.sections)
-    .where(eq(schema.sections.orrId, orrId))
-    .all();
-
-  db.insert(schema.orrVersions)
-    .values({
-      id: nanoid(),
-      orrId,
-      snapshot: JSON.stringify({ orr, sections }),
-      reason: `Session ended by ${user.email}`,
-      createdAt: now,
-    })
-    .run();
-
-  return c.json({ ended: true, versionCreated: true });
+  return c.json({ ended: true });
 });

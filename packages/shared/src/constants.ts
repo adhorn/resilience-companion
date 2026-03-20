@@ -71,15 +71,109 @@ export const UserRole = {
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
-// Agent profiles (MVP: only REVIEW_FACILITATOR)
+// Agent profiles
 export const AgentProfile = {
   REVIEW_FACILITATOR: "REVIEW_FACILITATOR",
+  INCIDENT_LEARNING_FACILITATOR: "INCIDENT_LEARNING_FACILITATOR",
   SESSION_ASSISTANT: "SESSION_ASSISTANT",
   TRANSCRIPT_PROCESSOR: "TRANSCRIPT_PROCESSOR",
   DRIFT_ANALYST: "DRIFT_ANALYST",
   PREP_BRIEF_GENERATOR: "PREP_BRIEF_GENERATOR",
 } as const;
 export type AgentProfile = (typeof AgentProfile)[keyof typeof AgentProfile];
+
+// Practice types
+export const PracticeType = {
+  ORR: "orr",
+  INCIDENT: "incident",
+} as const;
+export type PracticeType = (typeof PracticeType)[keyof typeof PracticeType];
+
+// Incident lifecycle status
+export const IncidentStatus = {
+  DRAFT: "DRAFT",
+  IN_PROGRESS: "IN_PROGRESS",
+  IN_REVIEW: "IN_REVIEW",
+  PUBLISHED: "PUBLISHED",
+  ARCHIVED: "ARCHIVED",
+} as const;
+export type IncidentStatus = (typeof IncidentStatus)[keyof typeof IncidentStatus];
+
+// Incident severity
+export const IncidentSeverity = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+export type IncidentSeverity = (typeof IncidentSeverity)[keyof typeof IncidentSeverity];
+
+// Incident type classification
+export const IncidentType = {
+  OUTAGE: "OUTAGE",
+  DEGRADATION: "DEGRADATION",
+  NEAR_MISS: "NEAR_MISS",
+  SURPRISING_BEHAVIOR: "SURPRISING_BEHAVIOR",
+} as const;
+export type IncidentType = (typeof IncidentType)[keyof typeof IncidentType];
+
+// Timeline event types
+export const TimelineEventType = {
+  DETECTION: "detection",
+  ESCALATION: "escalation",
+  ACTION: "action",
+  COMMUNICATION: "communication",
+  RESOLUTION: "resolution",
+  OTHER: "other",
+} as const;
+export type TimelineEventType = (typeof TimelineEventType)[keyof typeof TimelineEventType];
+
+// Contributing factor categories
+export const ContributingFactorCategory = {
+  TECHNICAL: "technical",
+  PROCESS: "process",
+  ORGANIZATIONAL: "organizational",
+  HUMAN_FACTORS: "human_factors",
+  COMMUNICATION: "communication",
+  KNOWLEDGE: "knowledge",
+} as const;
+export type ContributingFactorCategory =
+  (typeof ContributingFactorCategory)[keyof typeof ContributingFactorCategory];
+
+// Action item status
+export const ActionItemStatus = {
+  OPEN: "open",
+  IN_PROGRESS: "in_progress",
+  DONE: "done",
+} as const;
+export type ActionItemStatus = (typeof ActionItemStatus)[keyof typeof ActionItemStatus];
+
+// Action item type
+export const ActionItemType = {
+  TECHNICAL: "technical",
+  PROCESS: "process",
+  ORGANIZATIONAL: "organizational",
+  LEARNING: "learning",
+} as const;
+export type ActionItemType = (typeof ActionItemType)[keyof typeof ActionItemType];
+
+// Cross-practice suggestion status
+export const SuggestionStatus = {
+  SUGGESTED: "suggested",
+  ACCEPTED: "accepted",
+  DISMISSED: "dismissed",
+} as const;
+export type SuggestionStatus = (typeof SuggestionStatus)[keyof typeof SuggestionStatus];
+
+// Cross-practice target types
+export const CrossPracticeTarget = {
+  CHAOS_ENGINEERING: "chaos_engineering",
+  LOAD_TESTING: "load_testing",
+  ORR: "orr",
+  INCIDENT_ANALYSIS: "incident_analysis",
+  GAMEDAY: "gameday",
+} as const;
+export type CrossPracticeTarget =
+  (typeof CrossPracticeTarget)[keyof typeof CrossPracticeTarget];
 
 // Staleness thresholds
 export const STALENESS_MONTHS = 12;

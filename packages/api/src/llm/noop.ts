@@ -12,7 +12,7 @@ export class NoOpAdapter implements LLMAdapter {
     yield {
       type: "content",
       content:
-        "AI assistance is not configured. You can still use the ORR Companion to work through sections manually — edit content directly and use the template prompts as your guide. To enable AI, set LLM_API_KEY in your environment.",
+        "AI assistance is not configured. You can still use the Resilience Companion to work through sections manually — edit content directly and use the prompts as your guide. To enable AI, set LLM_API_KEY in your environment.",
     };
     yield { type: "done", usage: { promptTokens: 0, completionTokens: 0 } };
   }

@@ -32,6 +32,11 @@ export function getDb() {
   return _db;
 }
 
+/** Override the singleton DB instance — for tests only. */
+export function setTestDb(db: ReturnType<typeof createConnection>) {
+  _db = db;
+}
+
 // For tests — create in-memory DB
 export function createTestDb() {
   const sqlite = new Database(":memory:");

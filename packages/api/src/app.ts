@@ -15,6 +15,10 @@ import { flagsRoutes } from "./routes/flags.js";
 import { exportRoutes } from "./routes/export.js";
 import { traceRoutes } from "./routes/traces.js";
 import { dependencyRoutes } from "./routes/dependencies.js";
+import { incidentRoutes } from "./routes/incidents.js";
+import { incidentSectionRoutes } from "./routes/incident-sections.js";
+import { incidentSessionRoutes } from "./routes/incident-sessions.js";
+import { incidentExportRoutes } from "./routes/incident-export.js";
 
 export const app = new Hono();
 
@@ -42,6 +46,10 @@ app.route("/api/v1/flags", flagsRoutes);
 app.route("/api/v1/orrs/:orrId/export", exportRoutes);
 app.route("/api/v1/orrs/:orrId/traces", traceRoutes);
 app.route("/api/v1/orrs/:orrId/dependencies", dependencyRoutes);
+app.route("/api/v1/incidents", incidentRoutes);
+app.route("/api/v1/incidents/:incidentId/sections", incidentSectionRoutes);
+app.route("/api/v1/incidents/:incidentId/sessions", incidentSessionRoutes);
+app.route("/api/v1/incidents/:incidentId/export", incidentExportRoutes);
 
 // Serve frontend — either built static files or proxy to Vite dev server
 const __dirname = dirname(fileURLToPath(import.meta.url));

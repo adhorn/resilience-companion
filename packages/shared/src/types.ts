@@ -9,6 +9,16 @@ import type {
   TeachingMomentSource,
   UserRole,
   AgentProfile,
+  PracticeType,
+  IncidentStatus,
+  IncidentSeverity,
+  IncidentType,
+  TimelineEventType,
+  ContributingFactorCategory,
+  ActionItemStatus,
+  ActionItemType,
+  SuggestionStatus,
+  CrossPracticeTarget,
 } from "./constants.js";
 
 // --- Core entities ---
@@ -249,4 +259,108 @@ export interface FlagsSummary {
 export interface FlagsResponse {
   summary: FlagsSummary;
   flags: FlagWithContext[];
+}
+
+// --- Incident Analysis entities ---
+
+export interface Incident {
+  id: string;
+  title: string;
+  teamId: string;
+  serviceName: string | null;
+  incidentDate: string | null; // ISO 8601
+  durationMinutes: number | null;
+  severity: IncidentSeverity | null;
+  detectionMethod: string | null;
+  incidentType: IncidentType | null;
+  steeringTier: "standard" | "thorough" | "rigorous";
+  status: IncidentStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+}
+
+export interface IncidentSection {
+  id: string;
+  incidentId: string;
+  position: number;
+  title: string;
+  prompts: string[];
+  content: string;
+  depth: SectionDepth;
+  depthRationale: string | null;
+  promptResponses: Record<string, PromptResponse>;
+  flags: SectionFlagEntry[];
+  conversationSnippet: string | null;
+  updatedAt: string;
+}
+
+export interface TimelineEvent {
+  id: string;
+  incidentId: string;
+  position: number;
+  timestamp: string; // ISO 8601 with timezone
+  description: string;
+  evidence: string | null;
+  actor: string | null;
+  eventType: TimelineEventType;
+  createdAt: string;
+}
+
+export interface ContributingFactor {
+  id: string;
+  incidentId: string;
+  category: ContributingFactorCategory;
+  description: string;
+  context: string | null;
+  isSystemic: boolean;
+  createdAt: string;
+}
+
+export interface FactorEventLink {
+  factorId: string;
+  eventId: string;
+}
+
+// --- Shared cross-practice entities ---
+
+export interface ActionItem {
+  id: string;
+  practiceType: PracticeType;
+  practiceId: string;
+  title: string;
+  owner: string | null;
+  dueDate: string | null;
+  priority: "high" | "medium" | "low";
+  type: ActionItemType;
+  contributingFactorId: string | null;
+  successCriteria: string | null;
+  backlogLink: string | null;
+  status: ActionItemStatus;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface CrossPracticeSuggestion {
+  id: string;
+  sourcePracticeType: PracticeType;
+  sourcePracticeId: string;
+  targetPracticeType: CrossPracticeTarget;
+  suggestion: string;
+  rationale: string;
+  linkedPracticeId: string | null;
+  linkedSectionId: string | null;
+  status: SuggestionStatus;
+  createdAt: string;
+}
+
+// --- Incident API types ---
+
+export interface CreateIncidentInput {
+  title: string;
+  serviceName?: string;
+  incidentDate?: string;
+  severity?: IncidentSeverity;
+  incidentType?: IncidentType;
 }
