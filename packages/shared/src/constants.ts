@@ -175,6 +175,33 @@ export const CrossPracticeTarget = {
 export type CrossPracticeTarget =
   (typeof CrossPracticeTarget)[keyof typeof CrossPracticeTarget];
 
+// Experiment suggestion types
+export const ExperimentType = {
+  CHAOS_EXPERIMENT: "chaos_experiment",
+  LOAD_TEST: "load_test",
+  GAMEDAY: "gameday",
+} as const;
+export type ExperimentType = (typeof ExperimentType)[keyof typeof ExperimentType];
+
+// Experiment suggestion priority
+export const ExperimentPriority = {
+  CRITICAL: "critical",
+  HIGH: "high",
+  MEDIUM: "medium",
+  LOW: "low",
+} as const;
+export type ExperimentPriority = (typeof ExperimentPriority)[keyof typeof ExperimentPriority];
+
+// Experiment suggestion lifecycle
+export const ExperimentStatus = {
+  SUGGESTED: "suggested",
+  ACCEPTED: "accepted",
+  SCHEDULED: "scheduled",
+  COMPLETED: "completed",
+  DISMISSED: "dismissed",
+} as const;
+export type ExperimentStatus = (typeof ExperimentStatus)[keyof typeof ExperimentStatus];
+
 // Staleness thresholds
 export const STALENESS_MONTHS = 12;
 export const AGING_MONTHS = 6;

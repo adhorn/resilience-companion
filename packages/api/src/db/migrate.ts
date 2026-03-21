@@ -32,9 +32,20 @@ export function migrate(db: Db) {
     created_at TEXT NOT NULL
   )`);
 
+  // Services must be created before orrs (orrs.service_id references services)
+  db.run(sql`CREATE TABLE IF NOT EXISTS services (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    team_id TEXT NOT NULL REFERENCES teams(id),
+    description TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`);
+
   db.run(sql`CREATE TABLE IF NOT EXISTS orrs (
     id TEXT PRIMARY KEY,
     service_name TEXT NOT NULL,
+    service_id TEXT REFERENCES services(id),
     team_id TEXT NOT NULL REFERENCES teams(id),
     template_version TEXT NOT NULL REFERENCES templates(id),
     status TEXT NOT NULL DEFAULT 'DRAFT',
@@ -170,6 +181,7 @@ export function migrate(db: Db) {
     title TEXT NOT NULL,
     team_id TEXT NOT NULL REFERENCES teams(id),
     service_name TEXT,
+    service_id TEXT REFERENCES services(id),
     incident_date TEXT,
     duration_minutes INTEGER,
     severity TEXT,
@@ -271,6 +283,29 @@ export function migrate(db: Db) {
     created_at TEXT NOT NULL
   )`);
 
+  // --- Experiment Suggestions ---
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS experiment_suggestions (
+    id TEXT PRIMARY KEY,
+    service_id TEXT NOT NULL REFERENCES services(id),
+    source_practice_type TEXT NOT NULL,
+    source_practice_id TEXT NOT NULL,
+    source_section_id TEXT,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    hypothesis TEXT NOT NULL,
+    rationale TEXT NOT NULL,
+    priority TEXT NOT NULL,
+    priority_reasoning TEXT NOT NULL,
+    blast_radius_notes TEXT,
+    status TEXT NOT NULL DEFAULT 'suggested',
+    dismissed_reason TEXT,
+    completed_at TEXT,
+    completed_notes TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`);
+
   // --- Indexes ---
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_dependencies_orr ON dependencies(orr_id)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_incidents_team ON incidents(team_id)`);
@@ -279,6 +314,11 @@ export function migrate(db: Db) {
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_contributing_factors_incident ON contributing_factors(incident_id)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_action_items_practice ON action_items(practice_type, practice_id)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_cross_practice_source ON cross_practice_suggestions(source_practice_type, source_practice_id)`);
+  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_services_team_name ON services(team_id, name)`);
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_experiment_suggestions_service ON experiment_suggestions(service_id)`);
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_experiment_suggestions_source ON experiment_suggestions(source_practice_type, source_practice_id)`);
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_orrs_service ON orrs(service_id)`);
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_incidents_service ON incidents(service_id)`);
 
   // Backward-compat ALTERs for existing databases that were created before
   // these columns were added to the CREATE TABLE statements above.
@@ -289,6 +329,8 @@ export function migrate(db: Db) {
     ["orrs", "steering_tier", "TEXT NOT NULL DEFAULT 'thorough'"],
     ["sections", "prompt_responses", "TEXT NOT NULL DEFAULT '{}'"],
     ["session_messages", "metadata", "TEXT"],
+    ["orrs", "service_id", "TEXT REFERENCES services(id)"],
+    ["incidents", "service_id", "TEXT REFERENCES services(id)"],
   ];
   for (const [table, col, type] of migrations) {
     try {
@@ -296,6 +338,59 @@ export function migrate(db: Db) {
     } catch (_) {
       // Column already exists — expected for fresh DBs
     }
+  }
+
+  // Backfill: auto-create services from existing serviceName values and link them.
+  // Uses INSERT OR IGNORE so it's idempotent — safe to run on every startup.
+  try {
+    const now = new Date().toISOString();
+
+    // Create services from ORRs (distinct team_id + service_name pairs)
+    const orrServices = db.all(sql.raw(
+      `SELECT DISTINCT team_id, service_name FROM orrs WHERE service_id IS NULL AND service_name IS NOT NULL`
+    )) as any[];
+    for (const row of orrServices) {
+      const existing = db.all(sql.raw(
+        `SELECT id FROM services WHERE team_id = '${row.team_id}' AND name = '${row.service_name}'`
+      )) as any[];
+      let serviceId: string;
+      if (existing.length > 0) {
+        serviceId = existing[0].id;
+      } else {
+        // Generate a simple ID — nanoid not available here, use hex timestamp + random
+        serviceId = `svc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+        db.run(sql.raw(
+          `INSERT INTO services (id, name, team_id, created_at, updated_at) VALUES ('${serviceId}', '${row.service_name}', '${row.team_id}', '${now}', '${now}')`
+        ));
+      }
+      db.run(sql.raw(
+        `UPDATE orrs SET service_id = '${serviceId}' WHERE team_id = '${row.team_id}' AND service_name = '${row.service_name}' AND service_id IS NULL`
+      ));
+    }
+
+    // Create services from incidents
+    const incidentServices = db.all(sql.raw(
+      `SELECT DISTINCT team_id, service_name FROM incidents WHERE service_id IS NULL AND service_name IS NOT NULL`
+    )) as any[];
+    for (const row of incidentServices) {
+      const existing = db.all(sql.raw(
+        `SELECT id FROM services WHERE team_id = '${row.team_id}' AND name = '${row.service_name}'`
+      )) as any[];
+      let serviceId: string;
+      if (existing.length > 0) {
+        serviceId = existing[0].id;
+      } else {
+        serviceId = `svc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+        db.run(sql.raw(
+          `INSERT INTO services (id, name, team_id, created_at, updated_at) VALUES ('${serviceId}', '${row.service_name}', '${row.team_id}', '${now}', '${now}')`
+        ));
+      }
+      db.run(sql.raw(
+        `UPDATE incidents SET service_id = '${serviceId}' WHERE team_id = '${row.team_id}' AND service_name = '${row.service_name}' AND service_id IS NULL`
+      ));
+    }
+  } catch (_) {
+    // Backfill is best-effort — don't block startup
   }
 
   // Indexes for common trace queries
