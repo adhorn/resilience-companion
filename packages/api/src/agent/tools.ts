@@ -1,4 +1,5 @@
 import { eq, and, sql } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { getDb, schema } from "../db/index.js";
 import type { LLMToolDef } from "../llm/index.js";
 import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from "node:fs";
@@ -219,6 +220,51 @@ export const AGENT_TOOLS: LLMToolDef[] = [
           section_id: { type: "string", description: "The section where this dependency was discussed" },
         },
         required: ["name", "type"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "suggest_experiment",
+      description:
+        "Suggest a chaos experiment, load test, or gameday based on validation gaps discovered during the review. Use when the team claims resilience but hasn't validated it, when blast radius is high and failure modes are untested, or when the team uses hedging language about system behavior. Prioritize by ROI: largest blast radius + lowest confidence = highest priority.",
+      parameters: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["chaos_experiment", "load_test", "gameday"],
+            description: "chaos_experiment: test failure modes. load_test: validate scaling claims. gameday: exercise team response.",
+          },
+          title: { type: "string", description: "Short description of the experiment" },
+          hypothesis: {
+            type: "string",
+            description: "What you expect to happen, e.g. 'When Stripe is unavailable, checkout degrades to cached prices without losing orders'",
+          },
+          rationale: {
+            type: "string",
+            description: "Why this matters — reference specific findings from the review",
+          },
+          priority: {
+            type: "string",
+            enum: ["critical", "high", "medium", "low"],
+            description: "critical: unvalidated + large blast radius + customer-facing. high: untested failure mode with significant blast radius. medium: known gap with moderate impact. low: minor gap or partially covered.",
+          },
+          priority_reasoning: {
+            type: "string",
+            description: "Why this priority level — cite blast radius, confidence level, customer impact",
+          },
+          blast_radius_notes: {
+            type: "string",
+            description: "What's at stake if the hypothesis is wrong",
+          },
+          section_id: {
+            type: "string",
+            description: "The section that triggered this suggestion",
+          },
+        },
+        required: ["type", "title", "hypothesis", "rationale", "priority", "priority_reasoning"],
       },
     },
   },
@@ -577,6 +623,82 @@ export function executeTool(
         success: true,
         questionIndex: args.question_index,
         responseLength: (args.response as string).length,
+      });
+    }
+
+    case "suggest_experiment": {
+      // Resolve the service for this ORR
+      const orr = db
+        .select()
+        .from(schema.orrs)
+        .where(eq(schema.orrs.id, orrId))
+        .get();
+
+      if (!orr) return JSON.stringify({ error: "ORR not found" });
+
+      let serviceId = orr.serviceId;
+
+      // Auto-create service if not linked yet
+      if (!serviceId && orr.serviceName) {
+        const existing = db
+          .select()
+          .from(schema.services)
+          .where(
+            and(
+              eq(schema.services.teamId, orr.teamId),
+              eq(schema.services.name, orr.serviceName),
+            ),
+          )
+          .get();
+
+        if (existing) {
+          serviceId = existing.id;
+        } else {
+          serviceId = nanoid();
+          db.insert(schema.services).values({
+            id: serviceId,
+            name: orr.serviceName,
+            teamId: orr.teamId,
+            createdAt: now,
+            updatedAt: now,
+          }).run();
+        }
+
+        // Link the ORR to the service
+        db.update(schema.orrs)
+          .set({ serviceId })
+          .where(eq(schema.orrs.id, orrId))
+          .run();
+      }
+
+      if (!serviceId) {
+        return JSON.stringify({ error: "No service associated with this ORR. Cannot create experiment suggestion." });
+      }
+
+      const expId = nanoid();
+      db.insert(schema.experimentSuggestions).values({
+        id: expId,
+        serviceId,
+        sourcePracticeType: "orr",
+        sourcePracticeId: orrId,
+        sourceSectionId: (args.section_id as string) || null,
+        type: args.type as "chaos_experiment" | "load_test" | "gameday",
+        title: args.title as string,
+        hypothesis: args.hypothesis as string,
+        rationale: args.rationale as string,
+        priority: args.priority as "critical" | "high" | "medium" | "low",
+        priorityReasoning: args.priority_reasoning as string,
+        blastRadiusNotes: (args.blast_radius_notes as string) || null,
+        createdAt: now,
+        updatedAt: now,
+      }).run();
+
+      return JSON.stringify({
+        success: true,
+        experimentId: expId,
+        type: args.type,
+        priority: args.priority,
+        title: args.title,
       });
     }
 

@@ -186,6 +186,90 @@ describe("write_session_summary", () => {
   });
 });
 
+describe("suggest_experiment", () => {
+  it("creates experiment suggestion and auto-creates service", () => {
+    const result = JSON.parse(executeTool("suggest_experiment", {
+      type: "chaos_experiment",
+      title: "Test database failover",
+      hypothesis: "When primary DB fails, service switches to read replica within 5s",
+      rationale: "Team claims automatic failover but has never tested it",
+      priority: "high",
+      priority_reasoning: "All write operations affected, untested path",
+      blast_radius_notes: "100% of write traffic",
+      section_id: sectionIds[0],
+    }, orrId, sessionId));
+
+    expect(result.success).toBe(true);
+    expect(result.type).toBe("chaos_experiment");
+    expect(result.priority).toBe("high");
+
+    // Verify service was auto-created
+    const db = getDb();
+    const services = db.select().from(schema.services).all();
+    expect(services.length).toBeGreaterThanOrEqual(1);
+
+    // Verify experiment was stored
+    const experiments = db.select().from(schema.experimentSuggestions).all();
+    expect(experiments).toHaveLength(1);
+    expect(experiments[0].title).toBe("Test database failover");
+    expect(experiments[0].hypothesis).toContain("read replica");
+    expect(experiments[0].sourceSectionId).toBe(sectionIds[0]);
+  });
+
+  it("reuses existing service", () => {
+    const db = getDb();
+    const now = new Date().toISOString();
+
+    // Pre-create service
+    db.insert(schema.services).values({
+      id: "existing-svc",
+      name: "Test Service",
+      teamId: "test-team",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.update(schema.orrs).set({ serviceId: "existing-svc" }).where(eq(schema.orrs.id, orrId)).run();
+
+    const result = JSON.parse(executeTool("suggest_experiment", {
+      type: "load_test",
+      title: "Load test at 3x",
+      hypothesis: "Service handles 3x traffic",
+      rationale: "Scaling claims unvalidated",
+      priority: "medium",
+      priority_reasoning: "Moderate blast radius",
+    }, orrId, sessionId));
+
+    expect(result.success).toBe(true);
+
+    // Verify only one service exists (didn't create a duplicate)
+    const services = db.select().from(schema.services).all();
+    expect(services).toHaveLength(1);
+    expect(services[0].id).toBe("existing-svc");
+
+    // Verify experiment links to existing service
+    const experiments = db.select().from(schema.experimentSuggestions).all();
+    expect(experiments[0].serviceId).toBe("existing-svc");
+  });
+
+  it("returns error when ORR has no service name", () => {
+    const db = getDb();
+    // Create an ORR with no service name (edge case)
+    db.update(schema.orrs).set({ serviceName: "", serviceId: null }).where(eq(schema.orrs.id, orrId)).run();
+
+    const result = JSON.parse(executeTool("suggest_experiment", {
+      type: "gameday",
+      title: "DR exercise",
+      hypothesis: "Team recovers in 30min",
+      rationale: "Never tested",
+      priority: "low",
+      priority_reasoning: "Low blast radius",
+    }, orrId, sessionId));
+
+    // Empty service name won't match, serviceId stays null
+    expect(result.error).toBeTruthy();
+  });
+});
+
 describe("unknown tool", () => {
   it("returns error for unknown tool", () => {
     const result = JSON.parse(executeTool("nonexistent_tool", {}, orrId, sessionId));

@@ -216,6 +216,65 @@ describe("incident tools - cross-practice suggestions", () => {
   });
 });
 
+describe("incident tools - suggest_experiment", () => {
+  it("creates experiment suggestion and auto-creates service from incident", () => {
+    const result = JSON.parse(executeIncidentTool("suggest_experiment", {
+      type: "chaos_experiment",
+      title: "Test connection pool exhaustion recovery",
+      hypothesis: "After fix, connection pool exhaustion triggers graceful degradation",
+      rationale: "This incident was caused by connection pool exhaustion with no graceful handling",
+      priority: "high",
+      priority_reasoning: "Affected all payment processing, likely to recur under load",
+      blast_radius_notes: "100% of payment transactions",
+      section_id: sectionIds[2],
+    }, incidentId, sessionId));
+
+    expect(result.success).toBe(true);
+    expect(result.type).toBe("chaos_experiment");
+
+    // Verify service was auto-created from incident's serviceName
+    const services = db.select().from(schema.services).all();
+    expect(services.length).toBeGreaterThanOrEqual(1);
+    const svc = services.find(s => s.name === "TestSvc");
+    expect(svc).toBeTruthy();
+
+    // Verify experiment links to the service
+    const experiments = db.select().from(schema.experimentSuggestions).all();
+    expect(experiments).toHaveLength(1);
+    expect(experiments[0].serviceId).toBe(svc!.id);
+    expect(experiments[0].sourcePracticeType).toBe("incident");
+    expect(experiments[0].sourcePracticeId).toBe(incidentId);
+  });
+
+  it("reuses existing service when incident already linked", () => {
+    const now = new Date().toISOString();
+
+    // Pre-create service and link incident
+    db.insert(schema.services).values({
+      id: "existing-svc", name: "TestSvc", teamId: "test-team", createdAt: now, updatedAt: now,
+    }).run();
+    db.update(schema.incidents).set({ serviceId: "existing-svc" })
+      .where(eq(schema.incidents.id, incidentId)).run();
+
+    const result = JSON.parse(executeIncidentTool("suggest_experiment", {
+      type: "load_test",
+      title: "Load test at incident trigger level",
+      hypothesis: "Service handles the load that triggered the incident",
+      rationale: "Incident triggered at 1.5x normal load",
+      priority: "medium",
+      priority_reasoning: "Known trigger level",
+    }, incidentId, sessionId));
+
+    expect(result.success).toBe(true);
+
+    const services = db.select().from(schema.services).all();
+    expect(services).toHaveLength(1);
+
+    const experiments = db.select().from(schema.experimentSuggestions).all();
+    expect(experiments[0].serviceId).toBe("existing-svc");
+  });
+});
+
 describe("incident tools - session", () => {
   it("write_session_summary updates session", () => {
     executeIncidentTool("write_session_summary", {
