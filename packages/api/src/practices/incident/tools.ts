@@ -3,6 +3,7 @@
  * Includes shared section tools + incident-specific tools (timeline, factors, actions).
  */
 import { eq, and, sql } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { getDb, schema } from "../../db/index.js";
 import type { LLMToolDef } from "../../llm/index.js";
 
@@ -232,6 +233,51 @@ const INCIDENT_TOOLS: LLMToolDef[] = [
           backlog_link: { type: "string", description: "Link to tracking system" },
         },
         required: ["title", "priority", "type"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "suggest_experiment",
+      description:
+        "Suggest a chaos experiment, load test, or gameday based on findings from this incident. Use when the incident reveals untested failure modes, unvalidated scaling assumptions, or gaps in team response procedures. Prioritize by ROI: largest blast radius + highest recurrence likelihood = highest priority.",
+      parameters: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["chaos_experiment", "load_test", "gameday"],
+            description: "chaos_experiment: validate failure behavior. load_test: validate capacity. gameday: exercise team response.",
+          },
+          title: { type: "string", description: "Short description of the experiment" },
+          hypothesis: {
+            type: "string",
+            description: "What you expect to happen, e.g. 'After the fix, connection pool exhaustion under 2x load triggers graceful degradation instead of cascading failure'",
+          },
+          rationale: {
+            type: "string",
+            description: "Why this matters — reference specific incident findings",
+          },
+          priority: {
+            type: "string",
+            enum: ["critical", "high", "medium", "low"],
+            description: "critical: systemic issue with large blast radius. high: recurring pattern or significant gap. medium: known issue with moderate impact. low: edge case or partially covered.",
+          },
+          priority_reasoning: {
+            type: "string",
+            description: "Why this priority — cite blast radius, recurrence, customer impact",
+          },
+          blast_radius_notes: {
+            type: "string",
+            description: "What's at stake if the hypothesis is wrong",
+          },
+          section_id: {
+            type: "string",
+            description: "The section that triggered this suggestion",
+          },
+        },
+        required: ["type", "title", "hypothesis", "rationale", "priority", "priority_reasoning"],
       },
     },
   },
@@ -493,6 +539,81 @@ export function executeIncidentTool(
         VALUES (${actionId}, 'incident', ${incidentId}, ${args.title as string}, ${(args.owner as string) || null}, ${(args.due_date as string) || null}, ${args.priority as string}, ${args.type as string}, ${(args.contributing_factor_id as string) || null}, ${(args.success_criteria as string) || null}, ${(args.backlog_link as string) || null}, 'open', ${now})`);
 
       return JSON.stringify({ success: true, id: actionId });
+    }
+
+    case "suggest_experiment": {
+      // Resolve the service for this incident
+      const incident = db
+        .select()
+        .from(schema.incidents)
+        .where(eq(schema.incidents.id, incidentId))
+        .get();
+
+      if (!incident) return JSON.stringify({ error: "Incident not found" });
+
+      let serviceId = incident.serviceId;
+
+      // Auto-create service if not linked yet
+      if (!serviceId && incident.serviceName) {
+        const existing = db
+          .select()
+          .from(schema.services)
+          .where(
+            and(
+              eq(schema.services.teamId, incident.teamId),
+              eq(schema.services.name, incident.serviceName),
+            ),
+          )
+          .get();
+
+        if (existing) {
+          serviceId = existing.id;
+        } else {
+          serviceId = nanoid();
+          db.insert(schema.services).values({
+            id: serviceId,
+            name: incident.serviceName,
+            teamId: incident.teamId,
+            createdAt: now,
+            updatedAt: now,
+          }).run();
+        }
+
+        db.update(schema.incidents)
+          .set({ serviceId })
+          .where(eq(schema.incidents.id, incidentId))
+          .run();
+      }
+
+      if (!serviceId) {
+        return JSON.stringify({ error: "No service associated with this incident. Cannot create experiment suggestion." });
+      }
+
+      const expId = nanoid();
+      db.insert(schema.experimentSuggestions).values({
+        id: expId,
+        serviceId,
+        sourcePracticeType: "incident",
+        sourcePracticeId: incidentId,
+        sourceSectionId: (args.section_id as string) || null,
+        type: args.type as "chaos_experiment" | "load_test" | "gameday",
+        title: args.title as string,
+        hypothesis: args.hypothesis as string,
+        rationale: args.rationale as string,
+        priority: args.priority as "critical" | "high" | "medium" | "low",
+        priorityReasoning: args.priority_reasoning as string,
+        blastRadiusNotes: (args.blast_radius_notes as string) || null,
+        createdAt: now,
+        updatedAt: now,
+      }).run();
+
+      return JSON.stringify({
+        success: true,
+        experimentId: expId,
+        type: args.type,
+        priority: args.priority,
+        title: args.title,
+      });
     }
 
     case "suggest_cross_practice_action": {
