@@ -43,6 +43,7 @@ export const templates = sqliteTable("templates", {
 export const orrs = sqliteTable("orrs", {
   id: text("id").primaryKey(),
   serviceName: text("service_name").notNull(),
+  serviceId: text("service_id").references(() => services.id), // nullable during migration
   teamId: text("team_id")
     .notNull()
     .references(() => teams.id),
@@ -250,6 +251,7 @@ export const incidents = sqliteTable("incidents", {
     .notNull()
     .references(() => teams.id),
   serviceName: text("service_name"),
+  serviceId: text("service_id").references(() => services.id), // nullable during migration
   incidentDate: text("incident_date"),
   durationMinutes: integer("duration_minutes"),
   severity: text("severity", { enum: ["HIGH", "MEDIUM", "LOW"] }),
@@ -379,6 +381,48 @@ export const crossPracticeSuggestions = sqliteTable("cross_practice_suggestions"
     .notNull()
     .default("suggested"),
   createdAt: text("created_at").notNull(),
+});
+
+// --- Services (first-class entity connecting all practices) ---
+
+export const services = sqliteTable("services", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  teamId: text("team_id")
+    .notNull()
+    .references(() => teams.id),
+  description: text("description"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// --- Experiment Suggestions (chaos experiments, load tests, gamedays) ---
+
+export const experimentSuggestions = sqliteTable("experiment_suggestions", {
+  id: text("id").primaryKey(),
+  serviceId: text("service_id")
+    .notNull()
+    .references(() => services.id),
+  sourcePracticeType: text("source_practice_type", { enum: ["orr", "incident"] }).notNull(),
+  sourcePracticeId: text("source_practice_id").notNull(),
+  sourceSectionId: text("source_section_id"),
+  type: text("type", { enum: ["chaos_experiment", "load_test", "gameday"] }).notNull(),
+  title: text("title").notNull(),
+  hypothesis: text("hypothesis").notNull(),
+  rationale: text("rationale").notNull(),
+  priority: text("priority", { enum: ["critical", "high", "medium", "low"] }).notNull(),
+  priorityReasoning: text("priority_reasoning").notNull(),
+  blastRadiusNotes: text("blast_radius_notes"),
+  status: text("status", {
+    enum: ["suggested", "accepted", "scheduled", "completed", "dismissed"],
+  })
+    .notNull()
+    .default("suggested"),
+  dismissedReason: text("dismissed_reason"),
+  completedAt: text("completed_at"),
+  completedNotes: text("completed_notes"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
 });
 
 // --- ORR Versions (snapshots) ---
