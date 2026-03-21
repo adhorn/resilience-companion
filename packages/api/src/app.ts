@@ -19,6 +19,7 @@ import { incidentRoutes } from "./routes/incidents.js";
 import { incidentSectionRoutes } from "./routes/incident-sections.js";
 import { incidentSessionRoutes } from "./routes/incident-sessions.js";
 import { incidentExportRoutes } from "./routes/incident-export.js";
+import { serviceRoutes } from "./routes/services.js";
 
 export const app = new Hono();
 
@@ -50,6 +51,7 @@ app.route("/api/v1/incidents", incidentRoutes);
 app.route("/api/v1/incidents/:incidentId/sections", incidentSectionRoutes);
 app.route("/api/v1/incidents/:incidentId/sessions", incidentSessionRoutes);
 app.route("/api/v1/incidents/:incidentId/export", incidentExportRoutes);
+app.route("/api/v1/services", serviceRoutes);
 
 // Serve frontend — either built static files or proxy to Vite dev server
 const __dirname = dirname(fileURLToPath(import.meta.url));
