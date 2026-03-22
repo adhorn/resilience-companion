@@ -1,5 +1,5 @@
 #!/bin/bash
-# ORR Companion — SQLite backup script
+# Resilience Companion — SQLite backup script
 # Copies the database file with a timestamp. Safe to run while the app is running
 # (SQLite WAL mode ensures consistent reads).
 #

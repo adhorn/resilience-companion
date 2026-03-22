@@ -1,10 +1,10 @@
-# ORR Companion — Specification
+# Resilience Companion — Specification
 
 A self-hosted tool that helps organizations run Operational Readiness Reviews focused on learning, knowledge sharing, and conversation — not compliance.
 
 ## Long-Term Vision
 
-The ORR Companion is the first practice in what becomes a unified learning system across all five resilience practices from the book: **Operational Readiness Reviews, Load Testing, Chaos Engineering, GameDays, and Incident Analysis.** Each practice feeds the others — an ORR finding about an untested failure mode becomes a chaos experiment, a chaos experiment reveals a monitoring gap that updates the ORR, an incident analysis surfaces a pattern that informs future GameDays. The book's core argument is that these practices only work as an interconnected learning system, not as isolated activities.
+The Resilience Companion is the first practice in what becomes a unified learning system across all five resilience practices from the book: **Operational Readiness Reviews, Load Testing, Chaos Engineering, GameDays, and Incident Analysis.** Each practice feeds the others — an ORR finding about an untested failure mode becomes a chaos experiment, a chaos experiment reveals a monitoring gap that updates the ORR, an incident analysis surfaces a pattern that informs future GameDays. The book's core argument is that these practices only work as an interconnected learning system, not as isolated activities.
 
 We start with ORRs because they're the broadest practice — they touch every other practice and every part of operational understanding. Ship ORR well, prove the model (agentic facilitation, teaching moment library, API-first platform), then extend the same architecture to the other four practices. The teaching moment library, case studies, dashboard, and API/MCP surface are all designed to grow beyond ORRs.
 
@@ -306,11 +306,11 @@ These suggestions are lightweight — a prompt, not a workflow. Teams can act on
 
 The portal is one client. The API is the product.
 
-Every capability the portal uses must be available through clean, documented REST endpoints. The ORR Companion is a platform primitive in the developer's toolchain, not a walled garden that requires humans to context-switch into a separate UI.
+Every capability the portal uses must be available through clean, documented REST endpoints. The Resilience Companion is a platform primitive in the developer's toolchain, not a walled garden that requires humans to context-switch into a separate UI.
 
 ### Why This Matters
 
-Developer workflows are increasingly agent-assisted. If the ORR Companion requires manual portal visits to be useful, it becomes friction. If an agent can query it, update it, and surface relevant context while the developer is working on their service — it becomes part of the flow.
+Developer workflows are increasingly agent-assisted. If the Resilience Companion requires manual portal visits to be useful, it becomes friction. If an agent can query it, update it, and surface relevant context while the developer is working on their service — it becomes part of the flow.
 
 ### API Surface
 
@@ -327,7 +327,7 @@ The API is authenticated via OAuth tokens (same OIDC provider as portal login). 
 
 ### MCP Server
 
-The ORR Companion exposes itself as an MCP (Model Context Protocol) server. This lets any MCP-compatible agent (Claude Code, Cursor, custom agents) interact with it natively.
+The Resilience Companion exposes itself as an MCP (Model Context Protocol) server. This lets any MCP-compatible agent (Claude Code, Cursor, custom agents) interact with it natively.
 
 **What an agent can do via MCP:**
 
@@ -671,7 +671,7 @@ What's deliberately deferred: Mode 1 (expert-led), Mode 3 (hybrid), transcript p
 
 ### Phase 3: Agent Platform + Maturity
 
-- **MCP server**: Expose ORR Companion as MCP server for external agent integration
+- **MCP server**: Expose Resilience Companion as MCP server for external agent integration
 - **Drift Analyst agent** + side-by-side comparison
 - **Knowledge concentration tracking + contributor map**
 - **Notifications** (email/webhook for staleness)
@@ -708,4 +708,4 @@ What's deliberately deferred: Mode 1 (expert-led), Mode 3 (hybrid), transcript p
 
 6. **Agent auth via OAuth**: Same OIDC provider as portal. No long-lived API keys. Tokens scoped, short-lived, tied to identity. Service accounts for automation.
 
-7. **Name**: ORR Companion. Final.
+7. **Name**: Resilience Companion. Final.

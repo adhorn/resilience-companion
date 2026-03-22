@@ -1,6 +1,6 @@
-# ORR Companion
+# Resilience Companion
 
-A self-hosted web tool for facilitating Operational Readiness Reviews (ORRs). Built as a companion to the book *[Why We Still Suck at Resilience](https://leanpub.com/whywestillsuckatresilience)* by Adrian Hornsby.
+A self-hosted web tool for facilitating resilience practices — Operational Readiness Reviews, incident analysis, and more. Built as a companion to the book *[Why We Still Suck at Resilience](https://leanpub.com/whywestillsuckatresilience)* by Adrian Hornsby.
 
 ORRs are conversations, not checklists. This tool treats the review as a learning experience: an AI facilitator guides your team through structured questions, probes for depth, surfaces relevant industry incidents, and flags risks — while the team retains full ownership of the document.
 

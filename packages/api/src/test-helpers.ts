@@ -1,5 +1,5 @@
 /**
- * Test helpers for ORR Companion API tests.
+ * Test helpers for Resilience Companion API tests.
  * Sets up an in-memory SQLite DB with migrations and minimal seed data.
  */
 import { createTestDb, setTestDb, type Db } from "./db/connection.js";
