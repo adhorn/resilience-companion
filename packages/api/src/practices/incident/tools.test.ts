@@ -198,6 +198,105 @@ describe("incident tools - action items", () => {
   });
 });
 
+describe("incident tools - deduplication", () => {
+  it("deduplicates timeline events with same timestamp + description", () => {
+    const args = {
+      timestamp: "2024-03-15T14:30:00Z",
+      description: "First alert fired",
+      event_type: "detection",
+      actor: "PagerDuty",
+    };
+
+    const first = JSON.parse(executeIncidentTool("record_timeline_event", args, incidentId, sessionId));
+    expect(first.success).toBe(true);
+    expect(first.deduplicated).toBeUndefined();
+
+    const second = JSON.parse(executeIncidentTool("record_timeline_event", args, incidentId, sessionId));
+    expect(second.success).toBe(true);
+    expect(second.deduplicated).toBe(true);
+    expect(second.id).toBe(first.id);
+
+    const events = db.select().from(schema.timelineEvents).where(eq(schema.timelineEvents.incidentId, incidentId)).all();
+    expect(events).toHaveLength(1);
+  });
+
+  it("deduplicates contributing factors with same description", () => {
+    const args = {
+      category: "technical",
+      description: "Connection pool sized for normal load, not peak",
+      context: "Pool size was set 2 years ago",
+      is_systemic: false,
+    };
+
+    const first = JSON.parse(executeIncidentTool("record_contributing_factor", args, incidentId, sessionId));
+    expect(first.success).toBe(true);
+    expect(first.deduplicated).toBeUndefined();
+
+    const second = JSON.parse(executeIncidentTool("record_contributing_factor", args, incidentId, sessionId));
+    expect(second.success).toBe(true);
+    expect(second.deduplicated).toBe(true);
+    expect(second.id).toBe(first.id);
+
+    const factors = db.select().from(schema.contributingFactors).where(eq(schema.contributingFactors.incidentId, incidentId)).all();
+    expect(factors).toHaveLength(1);
+  });
+
+  it("deduplicates action items with same title", () => {
+    const args = {
+      title: "Implement connection pool auto-scaling",
+      priority: "high",
+      type: "technical",
+    };
+
+    const first = JSON.parse(executeIncidentTool("record_action_item", args, incidentId, sessionId));
+    expect(first.success).toBe(true);
+    expect(first.deduplicated).toBeUndefined();
+
+    const second = JSON.parse(executeIncidentTool("record_action_item", args, incidentId, sessionId));
+    expect(second.success).toBe(true);
+    expect(second.deduplicated).toBe(true);
+    expect(second.id).toBe(first.id);
+
+    const items = db.select().from(schema.actionItems).where(eq(schema.actionItems.practiceId, incidentId)).all();
+    expect(items).toHaveLength(1);
+  });
+
+  it("deduplicates experiment suggestions with same title", () => {
+    const args = {
+      type: "chaos_experiment",
+      title: "Test connection pool exhaustion recovery",
+      hypothesis: "After fix, pool exhaustion triggers graceful degradation",
+      rationale: "Incident caused by pool exhaustion",
+      priority: "high",
+      priority_reasoning: "Affected all payments",
+    };
+
+    const first = JSON.parse(executeIncidentTool("suggest_experiment", args, incidentId, sessionId));
+    expect(first.success).toBe(true);
+    expect(first.deduplicated).toBeUndefined();
+
+    const second = JSON.parse(executeIncidentTool("suggest_experiment", args, incidentId, sessionId));
+    expect(second.success).toBe(true);
+    expect(second.deduplicated).toBe(true);
+    expect(second.experimentId).toBe(first.experimentId);
+
+    const experiments = db.select().from(schema.experimentSuggestions).all();
+    expect(experiments).toHaveLength(1);
+  });
+
+  it("allows different titles for same incident", () => {
+    executeIncidentTool("record_action_item", {
+      title: "Action A", priority: "high", type: "technical",
+    }, incidentId, sessionId);
+    executeIncidentTool("record_action_item", {
+      title: "Action B", priority: "medium", type: "process",
+    }, incidentId, sessionId);
+
+    const items = db.select().from(schema.actionItems).where(eq(schema.actionItems.practiceId, incidentId)).all();
+    expect(items).toHaveLength(2);
+  });
+});
+
 describe("incident tools - cross-practice suggestions", () => {
   it("suggest_cross_practice_action creates suggestion", () => {
     const result = JSON.parse(executeIncidentTool("suggest_cross_practice_action", {

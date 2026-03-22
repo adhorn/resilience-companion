@@ -675,6 +675,30 @@ export function executeTool(
         return JSON.stringify({ error: "No service associated with this ORR. Cannot create experiment suggestion." });
       }
 
+      // Dedup: skip if an experiment with the same title already exists for this practice
+      const existingExp = db
+        .select()
+        .from(schema.experimentSuggestions)
+        .where(
+          and(
+            eq(schema.experimentSuggestions.sourcePracticeType, "orr"),
+            eq(schema.experimentSuggestions.sourcePracticeId, orrId),
+            eq(schema.experimentSuggestions.title, args.title as string),
+          ),
+        )
+        .get();
+
+      if (existingExp) {
+        return JSON.stringify({
+          success: true,
+          experimentId: existingExp.id,
+          type: existingExp.type,
+          priority: existingExp.priority,
+          title: existingExp.title,
+          deduplicated: true,
+        });
+      }
+
       const expId = nanoid();
       db.insert(schema.experimentSuggestions).values({
         id: expId,

@@ -209,6 +209,7 @@ export type SSEEvent =
   | { type: "tool_call"; tool: string; args: Record<string, unknown> }
   | { type: "tool_result"; tool: string; result: Record<string, unknown> }
   | { type: "section_updated"; sectionId: string; field: string }
+  | { type: "data_updated"; tool: string }
   | { type: "session_renewed"; oldSessionId: string; newSessionId: string }
   | { type: "message_end"; tokenUsage: number }
   | { type: "status"; message: string }

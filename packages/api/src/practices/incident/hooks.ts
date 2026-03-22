@@ -17,13 +17,17 @@ import { paramValidationHooks } from "../../agent/hooks/param-validation.js";
 const incidentToolOrderingHook: SteeringHook = {
   name: "incident-tool-ordering",
   tools: ["record_action_item", "write_session_summary"],
-  beforeToolCall(toolName: string, _args: Record<string, unknown>, ledger: ToolLedger) {
+  beforeToolCall(toolName: string, args: Record<string, unknown>, ledger: ToolLedger) {
     if (toolName === "record_action_item") {
-      const hasFactors = ledger.calls.some((h) => h.tool === "record_contributing_factor");
-      if (!hasFactors) {
+      // Allow if: (a) a factor was recorded this turn, or (b) a contributing_factor_id
+      // is provided (referencing a factor from a previous turn)
+      const hasFactorsInLedger = ledger.calls.some((h) => h.tool === "record_contributing_factor");
+      const hasFactorRef = !!args.contributing_factor_id;
+
+      if (!hasFactorsInLedger && !hasFactorRef) {
         return {
           action: "guide" as const,
-          reason: "Before recording action items, ensure at least one contributing factor has been identified. Actions should trace to factors — otherwise we're fixing symptoms, not addressing systemic conditions.",
+          reason: "Before recording action items, ensure at least one contributing factor has been identified. Actions should trace to factors — provide a contributing_factor_id linking to an existing factor, or record one first.",
         };
       }
     }

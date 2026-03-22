@@ -157,6 +157,17 @@ export const api = {
       }),
   },
 
+  // Experiments
+  experiments: {
+    list: (practiceType: string, practiceId: string) =>
+      request<{ experiments: any[] }>(`/experiments?practiceType=${practiceType}&practiceId=${practiceId}`),
+    update: (id: string, data: { status?: string; completedNotes?: string; dismissedReason?: string }) =>
+      request<{ experiment: any }>(`/experiments/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+  },
+
   // Templates
   templates: {
     list: () => request<{ templates: any[] }>("/templates"),

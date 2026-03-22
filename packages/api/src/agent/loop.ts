@@ -263,6 +263,14 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
         };
       }
 
+      // Emit data_updated events for non-section data creation tools
+      if (
+        practiceConfig.dataUpdateTools.includes(tc.name) &&
+        parsedResult.success
+      ) {
+        yield { type: "data_updated", tool: tc.name };
+      }
+
       messages.push({
         role: "tool",
         content: result,

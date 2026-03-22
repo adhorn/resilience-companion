@@ -317,8 +317,6 @@ export function migrate(db: Db) {
   db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_services_team_name ON services(team_id, name)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_experiment_suggestions_service ON experiment_suggestions(service_id)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_experiment_suggestions_source ON experiment_suggestions(source_practice_type, source_practice_id)`);
-  db.run(sql`CREATE INDEX IF NOT EXISTS idx_orrs_service ON orrs(service_id)`);
-  db.run(sql`CREATE INDEX IF NOT EXISTS idx_incidents_service ON incidents(service_id)`);
 
   // Backward-compat ALTERs for existing databases that were created before
   // these columns were added to the CREATE TABLE statements above.
@@ -340,55 +338,36 @@ export function migrate(db: Db) {
     }
   }
 
+  // These indexes depend on service_id which may have just been added via ALTER TABLE above
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_orrs_service ON orrs(service_id)`);
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_incidents_service ON incidents(service_id)`);
+
   // Backfill: auto-create services from existing serviceName values and link them.
-  // Uses INSERT OR IGNORE so it's idempotent — safe to run on every startup.
+  // Idempotent — safe to run on every startup.
   try {
     const now = new Date().toISOString();
 
-    // Create services from ORRs (distinct team_id + service_name pairs)
-    const orrServices = db.all(sql.raw(
-      `SELECT DISTINCT team_id, service_name FROM orrs WHERE service_id IS NULL AND service_name IS NOT NULL`
-    )) as any[];
-    for (const row of orrServices) {
-      const existing = db.all(sql.raw(
-        `SELECT id FROM services WHERE team_id = '${row.team_id}' AND name = '${row.service_name}'`
+    const backfillTable = (table: string) => {
+      const rows = db.all(sql.raw(
+        `SELECT DISTINCT team_id, service_name FROM ${table} WHERE service_id IS NULL AND service_name IS NOT NULL`
       )) as any[];
-      let serviceId: string;
-      if (existing.length > 0) {
-        serviceId = existing[0].id;
-      } else {
-        // Generate a simple ID — nanoid not available here, use hex timestamp + random
-        serviceId = `svc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      for (const row of rows) {
+        const existing = db.all(sql`SELECT id FROM services WHERE team_id = ${row.team_id} AND name = ${row.service_name}`) as any[];
+        let serviceId: string;
+        if (existing.length > 0) {
+          serviceId = existing[0].id;
+        } else {
+          serviceId = `svc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+          db.run(sql`INSERT INTO services (id, name, team_id, created_at, updated_at) VALUES (${serviceId}, ${row.service_name}, ${row.team_id}, ${now}, ${now})`);
+        }
         db.run(sql.raw(
-          `INSERT INTO services (id, name, team_id, created_at, updated_at) VALUES ('${serviceId}', '${row.service_name}', '${row.team_id}', '${now}', '${now}')`
+          `UPDATE ${table} SET service_id = '${serviceId.replace(/'/g, "''")}' WHERE team_id = '${row.team_id.replace(/'/g, "''")}' AND service_name = '${row.service_name.replace(/'/g, "''")}' AND service_id IS NULL`
         ));
       }
-      db.run(sql.raw(
-        `UPDATE orrs SET service_id = '${serviceId}' WHERE team_id = '${row.team_id}' AND service_name = '${row.service_name}' AND service_id IS NULL`
-      ));
-    }
+    };
 
-    // Create services from incidents
-    const incidentServices = db.all(sql.raw(
-      `SELECT DISTINCT team_id, service_name FROM incidents WHERE service_id IS NULL AND service_name IS NOT NULL`
-    )) as any[];
-    for (const row of incidentServices) {
-      const existing = db.all(sql.raw(
-        `SELECT id FROM services WHERE team_id = '${row.team_id}' AND name = '${row.service_name}'`
-      )) as any[];
-      let serviceId: string;
-      if (existing.length > 0) {
-        serviceId = existing[0].id;
-      } else {
-        serviceId = `svc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-        db.run(sql.raw(
-          `INSERT INTO services (id, name, team_id, created_at, updated_at) VALUES ('${serviceId}', '${row.service_name}', '${row.team_id}', '${now}', '${now}')`
-        ));
-      }
-      db.run(sql.raw(
-        `UPDATE incidents SET service_id = '${serviceId}' WHERE team_id = '${row.team_id}' AND service_name = '${row.service_name}' AND service_id IS NULL`
-      ));
-    }
+    backfillTable("orrs");
+    backfillTable("incidents");
   } catch (_) {
     // Backfill is best-effort — don't block startup
   }

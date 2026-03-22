@@ -51,6 +51,13 @@ export const incidentPracticeConfig: PracticeConfig = {
     update_question_response: "promptResponses",
   },
 
+  dataUpdateTools: [
+    "record_action_item",
+    "record_timeline_event",
+    "record_contributing_factor",
+    "suggest_experiment",
+  ],
+
   loadSteeringTier(practiceId: string): SteeringTier {
     const db = getDb();
     const row = db.select({ steeringTier: schema.incidents.steeringTier })

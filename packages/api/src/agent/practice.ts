@@ -46,6 +46,9 @@ export interface PracticeConfig {
   /** Map tool name → field name for section_updated SSE events. */
   sectionUpdateFieldMap: Record<string, string>;
 
+  /** Tool names that create non-section data (actions, experiments, etc.) and trigger data_updated SSE events. */
+  dataUpdateTools: string[];
+
   /** Load the steering tier for a specific practice instance. */
   loadSteeringTier(practiceId: string): SteeringTier;
 }

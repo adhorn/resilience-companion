@@ -53,6 +53,12 @@ export const orrPracticeConfig: PracticeConfig = {
     update_question_response: "promptResponses",
   },
 
+  dataUpdateTools: [
+    "record_action_item",
+    "record_dependency",
+    "suggest_experiment",
+  ],
+
   loadSteeringTier(practiceId: string): SteeringTier {
     const db = getDb();
     const row = db.select({ steeringTier: schema.orrs.steeringTier })

@@ -503,6 +503,21 @@ export function executeIncidentTool(
     // --- Incident-specific tools ---
 
     case "record_timeline_event": {
+      // Dedup: skip if event with same timestamp + description already exists
+      const existingEvent = db.select().from(schema.timelineEvents)
+        .where(
+          and(
+            eq(schema.timelineEvents.incidentId, incidentId),
+            eq(schema.timelineEvents.timestamp, args.timestamp as string),
+            eq(schema.timelineEvents.description, args.description as string),
+          ),
+        )
+        .get();
+
+      if (existingEvent) {
+        return JSON.stringify({ success: true, id: existingEvent.id, position: existingEvent.position, deduplicated: true });
+      }
+
       const eventId = crypto.randomUUID();
       // Get next position
       const existingEvents = db.select().from(schema.timelineEvents)
@@ -516,6 +531,20 @@ export function executeIncidentTool(
     }
 
     case "record_contributing_factor": {
+      // Dedup: skip if factor with same description already exists
+      const existingFactor = db.select().from(schema.contributingFactors)
+        .where(
+          and(
+            eq(schema.contributingFactors.incidentId, incidentId),
+            eq(schema.contributingFactors.description, args.description as string),
+          ),
+        )
+        .get();
+
+      if (existingFactor) {
+        return JSON.stringify({ success: true, id: existingFactor.id, deduplicated: true });
+      }
+
       const factorId = crypto.randomUUID();
 
       db.run(sql`INSERT INTO contributing_factors (id, incident_id, category, description, context, is_systemic, created_at)
@@ -533,6 +562,23 @@ export function executeIncidentTool(
     }
 
     case "record_action_item": {
+      // Dedup: skip if an action item with the same title already exists for this practice
+      const existingAction = db
+        .select()
+        .from(schema.actionItems)
+        .where(
+          and(
+            eq(schema.actionItems.practiceType, "incident"),
+            eq(schema.actionItems.practiceId, incidentId),
+            eq(schema.actionItems.title, args.title as string),
+          ),
+        )
+        .get();
+
+      if (existingAction) {
+        return JSON.stringify({ success: true, id: existingAction.id, deduplicated: true });
+      }
+
       const actionId = crypto.randomUUID();
 
       db.run(sql`INSERT INTO action_items (id, practice_type, practice_id, title, owner, due_date, priority, type, contributing_factor_id, success_criteria, backlog_link, status, created_at)
@@ -587,6 +633,30 @@ export function executeIncidentTool(
 
       if (!serviceId) {
         return JSON.stringify({ error: "No service associated with this incident. Cannot create experiment suggestion." });
+      }
+
+      // Dedup: skip if an experiment with the same title already exists for this practice
+      const existingExp = db
+        .select()
+        .from(schema.experimentSuggestions)
+        .where(
+          and(
+            eq(schema.experimentSuggestions.sourcePracticeType, "incident"),
+            eq(schema.experimentSuggestions.sourcePracticeId, incidentId),
+            eq(schema.experimentSuggestions.title, args.title as string),
+          ),
+        )
+        .get();
+
+      if (existingExp) {
+        return JSON.stringify({
+          success: true,
+          experimentId: existingExp.id,
+          type: existingExp.type,
+          priority: existingExp.priority,
+          title: existingExp.title,
+          deduplicated: true,
+        });
       }
 
       const expId = nanoid();
