@@ -80,6 +80,7 @@ export function migrate(db: Db) {
     user_id TEXT NOT NULL REFERENCES users(id),
     agent_profile TEXT NOT NULL DEFAULT 'REVIEW_FACILITATOR',
     summary TEXT,
+    discoveries TEXT NOT NULL DEFAULT '[]',
     sections_discussed TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'ACTIVE',
     token_usage INTEGER NOT NULL DEFAULT 0,
@@ -329,6 +330,7 @@ export function migrate(db: Db) {
     ["session_messages", "metadata", "TEXT"],
     ["orrs", "service_id", "TEXT REFERENCES services(id)"],
     ["incidents", "service_id", "TEXT REFERENCES services(id)"],
+    ["sessions", "discoveries", "TEXT NOT NULL DEFAULT '[]'"],
   ];
   for (const [table, col, type] of migrations) {
     try {
@@ -424,7 +426,8 @@ export function migrate(db: Db) {
           id TEXT PRIMARY KEY, orr_id TEXT NOT NULL,
           user_id TEXT NOT NULL REFERENCES users(id),
           agent_profile TEXT NOT NULL DEFAULT 'REVIEW_FACILITATOR',
-          summary TEXT, sections_discussed TEXT NOT NULL DEFAULT '[]',
+          summary TEXT, discoveries TEXT NOT NULL DEFAULT '[]',
+          sections_discussed TEXT NOT NULL DEFAULT '[]',
           status TEXT NOT NULL DEFAULT 'ACTIVE', token_usage INTEGER NOT NULL DEFAULT 0,
           started_at TEXT NOT NULL, ended_at TEXT
         )`));

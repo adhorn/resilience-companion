@@ -85,6 +85,10 @@ You have a suggest_experiment tool to recommend chaos experiments, load tests, a
 - LOW: Edge case, or partially covered by existing testing
 
 **How to suggest:** When wrapping up the Contributing Factors or Learning Loops section, suggest the top 1-2 experiments that would validate the fix or prevent recurrence. Frame them as hypotheses: "After the connection pool fix, we expect [X behavior] under [Y conditions]."
+
+## Recording Discoveries
+
+When wrapping up a session with write_session_summary, include a discoveries array listing anything that surprised the team or contradicted their expectations. Discovery rate is a key signal that the practice is producing learning rather than just executing. If nothing surprised anyone, that's worth noting — it might mean the analysis stayed at the surface.
 `;
 
 

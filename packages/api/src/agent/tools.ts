@@ -176,13 +176,18 @@ export const AGENT_TOOLS: LLMToolDef[] = [
     function: {
       name: "write_session_summary",
       description:
-        "Write a summary of what was covered and discovered in this session. Call this when wrapping up a session.",
+        "Write a summary of what was covered and discovered in this session. Call this when wrapping up a session. Include discoveries — things that surprised the team, contradicted expectations, or revealed gaps between how they thought the system works and how it actually works.",
       parameters: {
         type: "object",
         properties: {
           summary: {
             type: "string",
             description: "Narrative summary of the session: what was discussed, key observations, depth achieved, flags raised",
+          },
+          discoveries: {
+            type: "array",
+            items: { type: "string" },
+            description: "List of things that surprised the team or contradicted their expectations during this session. Each should be a concise statement of what was discovered.",
           },
         },
         required: ["summary"],
@@ -265,6 +270,55 @@ export const AGENT_TOOLS: LLMToolDef[] = [
           },
         },
         required: ["type", "title", "hypothesis", "rationale", "priority", "priority_reasoning"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "suggest_cross_practice_action",
+      description:
+        "Suggest how an ORR finding could inform another resilience practice (chaos engineering, load testing, incident analysis, GameDay). Use when the review reveals gaps, assumptions, or risks that another practice is better positioned to investigate. This builds the cross-practice learning system described in the book.",
+      parameters: {
+        type: "object",
+        properties: {
+          target_practice: {
+            type: "string",
+            enum: ["chaos_engineering", "load_testing", "orr", "incident_analysis", "gameday"],
+            description: "Which practice this suggestion is for",
+          },
+          suggestion: { type: "string", description: "What to do" },
+          rationale: { type: "string", description: "Why this ORR finding suggests it" },
+        },
+        required: ["target_practice", "suggestion", "rationale"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "record_action_item",
+      description:
+        "Record a structured action item discovered during the ORR review. Use for things that need doing — process changes, technical fixes, organizational improvements, or learning activities. More structured than FOLLOW_UP flags: includes owner, priority, due date.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short description of what needs to be done" },
+          owner: { type: "string", description: "Person or team responsible" },
+          due_date: { type: "string", description: "Target date (YYYY-MM-DD)" },
+          priority: {
+            type: "string",
+            enum: ["high", "medium", "low"],
+            description: "Priority level",
+          },
+          type: {
+            type: "string",
+            enum: ["technical", "process", "organizational", "learning"],
+            description: "Category of the action",
+          },
+          success_criteria: { type: "string", description: "How to know this is done" },
+        },
+        required: ["title", "priority", "type"],
       },
     },
   },
@@ -773,12 +827,79 @@ export function executeTool(
     }
 
     case "write_session_summary": {
+      const updates: Record<string, unknown> = { summary: args.summary as string };
+      if (args.discoveries && Array.isArray(args.discoveries) && (args.discoveries as string[]).length > 0) {
+        updates.discoveries = args.discoveries;
+      }
       db.update(schema.sessions)
-        .set({ summary: args.summary as string })
+        .set(updates)
         .where(eq(schema.sessions.id, sessionId))
         .run();
 
-      return JSON.stringify({ success: true });
+      return JSON.stringify({ success: true, discoveryCount: (args.discoveries as string[] || []).length });
+    }
+
+    case "suggest_cross_practice_action": {
+      const suggId = nanoid();
+      db.insert(schema.crossPracticeSuggestions).values({
+        id: suggId,
+        sourcePracticeType: "orr",
+        sourcePracticeId: orrId,
+        targetPracticeType: args.target_practice as "chaos_engineering" | "load_testing" | "orr" | "incident_analysis" | "gameday",
+        suggestion: args.suggestion as string,
+        rationale: args.rationale as string,
+        createdAt: now,
+      }).run();
+
+      return JSON.stringify({
+        success: true,
+        suggestionId: suggId,
+        targetPractice: args.target_practice,
+      });
+    }
+
+    case "record_action_item": {
+      // Dedup by title
+      const existingAction = db
+        .select()
+        .from(schema.actionItems)
+        .where(
+          and(
+            eq(schema.actionItems.practiceType, "orr"),
+            eq(schema.actionItems.practiceId, orrId),
+            eq(schema.actionItems.title, args.title as string),
+          ),
+        )
+        .get();
+
+      if (existingAction) {
+        return JSON.stringify({
+          success: true,
+          actionItemId: existingAction.id,
+          deduplicated: true,
+        });
+      }
+
+      const actionId = nanoid();
+      db.insert(schema.actionItems).values({
+        id: actionId,
+        practiceType: "orr",
+        practiceId: orrId,
+        title: args.title as string,
+        owner: (args.owner as string) || null,
+        dueDate: (args.due_date as string) || null,
+        priority: (args.priority as "high" | "medium" | "low") || "medium",
+        type: args.type as "technical" | "process" | "organizational" | "learning",
+        successCriteria: (args.success_criteria as string) || null,
+        status: "open",
+        createdAt: now,
+      }).run();
+
+      return JSON.stringify({
+        success: true,
+        actionItemId: actionId,
+        title: args.title,
+      });
     }
 
     // --- Code exploration tools ---

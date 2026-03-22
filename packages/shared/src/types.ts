@@ -218,23 +218,31 @@ export type SSEEvent =
 // --- Dashboard types ---
 
 export interface DashboardStats {
+  // ORR practice
   totalOrrs: number;
-  byStatus: Record<ORRStatus, number>;
-  stale: number;
-  aging: number;
-  recentActivity: DashboardORRSummary[];
-  totalTokens: number; // cumulative tokens across all sessions
-  dailyTokens: number; // tokens used today
-  dailyTokenLimit: number; // daily cap
+  orrsByStatus: Record<ORRStatus, number>;
+  recentOrrs: DashboardPracticeSummary[];
+
+  // Incident practice
+  totalIncidents: number;
+  incidentsByStatus: Record<IncidentStatus, number>;
+  recentIncidents: DashboardPracticeSummary[];
+
+  // Learning signals
+  openActionItems: number;
+  experimentSuggestions: number;
+  crossPracticeLinks: number;
+  recentDiscoveries: number; // sessions with discoveries in last 30 days
 }
 
-export interface DashboardORRSummary {
+/** Shared summary shape for both ORRs and incidents on the dashboard. */
+export interface DashboardPracticeSummary {
   id: string;
-  serviceName: string;
-  status: ORRStatus;
+  title: string;            // display name: serviceName for ORRs, title for incidents
+  serviceName: string;      // the service this practice relates to
+  status: string;
   updatedAt: string;
-  staleness: "fresh" | "aging" | "stale";
-  coveragePercent: number; // sections with depth > UNKNOWN
+  coveragePercent: number;  // sections with depth > UNKNOWN
 }
 
 // --- Flags aggregation types ---

@@ -6,6 +6,7 @@ import { DependenciesPanel } from "../components/DependenciesPanel";
 import { ExperimentsPanel } from "../components/ExperimentsPanel";
 import { RisksPanel } from "../components/RisksPanel";
 import { ConversationPanel } from "../components/ConversationPanel";
+import { DEPTH_COLORS, DEPTH_LABELS, FLAG_COLORS, SEVERITY_COLORS_BOLD } from "../lib/style-constants";
 
 type WorkspaceTab = "review" | "risks" | "experiments" | "dependencies";
 
@@ -58,32 +59,6 @@ const SLASH_COMMANDS: SlashCommand[] = [
   },
 ];
 
-const DEPTH_COLORS: Record<string, string> = {
-  UNKNOWN: "bg-gray-200",
-  SURFACE: "bg-yellow-400",
-  MODERATE: "bg-orange-400",
-  DEEP: "bg-green-500",
-};
-
-const DEPTH_LABELS: Record<string, string> = {
-  UNKNOWN: "Not reviewed",
-  SURFACE: "Surface",
-  MODERATE: "Moderate",
-  DEEP: "Deep",
-};
-
-const FLAG_COLORS: Record<string, string> = {
-  RISK: "bg-red-100 text-red-700",
-  GAP: "bg-amber-100 text-amber-700",
-  STRENGTH: "bg-green-100 text-green-700",
-  FOLLOW_UP: "bg-blue-100 text-blue-700",
-};
-
-const SEVERITY_COLORS: Record<string, string> = {
-  HIGH: "bg-red-600 text-white",
-  MEDIUM: "bg-orange-500 text-white",
-  LOW: "bg-yellow-400 text-gray-900",
-};
 
 /**
  * Render markdown-ish text to React elements.
@@ -903,7 +878,7 @@ export function ORRView() {
                               {f.type}
                             </span>
                             {isRisk && f.severity && (
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${SEVERITY_COLORS[f.severity] || "bg-gray-200"}`}>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${SEVERITY_COLORS_BOLD[f.severity] || "bg-gray-200"}`}>
                                 {f.severity}
                               </span>
                             )}

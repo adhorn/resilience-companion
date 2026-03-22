@@ -1,7 +1,6 @@
 import { Hono } from "hono";
-import { eq, gte, and, sql, inArray } from "drizzle-orm";
-import { STALENESS_MONTHS, AGING_MONTHS, MAX_DAILY_TOKENS } from "@orr/shared";
-import type { DashboardStats, DashboardORRSummary, ORRStatus } from "@orr/shared";
+import { eq, sql, inArray } from "drizzle-orm";
+import type { DashboardStats, DashboardPracticeSummary, ORRStatus, IncidentStatus } from "@orr/shared";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -9,25 +8,22 @@ export const dashboardRoutes = new Hono();
 
 dashboardRoutes.use("*", requireAuth);
 
-function getStaleness(updatedAt: string): "fresh" | "aging" | "stale" {
-  const updated = new Date(updatedAt);
-  const now = new Date();
-  const monthsAgo =
-    (now.getFullYear() - updated.getFullYear()) * 12 +
-    (now.getMonth() - updated.getMonth());
-
-  if (monthsAgo >= STALENESS_MONTHS) return "stale";
-  if (monthsAgo >= AGING_MONTHS) return "aging";
-  return "fresh";
+/** Compute coverage: % of sections with depth != UNKNOWN */
+function computeCoverage(sections: { depth: string | null }[]): number {
+  if (sections.length === 0) return 0;
+  const covered = sections.filter((s) => s.depth !== "UNKNOWN").length;
+  return Math.round((covered / sections.length) * 100);
 }
 
 /**
  * GET /api/v1/dashboard
- * Team dashboard: ORR stats, staleness, coverage.
+ * Unified dashboard: ORR + Incident stats + learning signals.
  */
 dashboardRoutes.get("/", (c) => {
   const user = c.get("user");
   const db = getDb();
+
+  // --- ORR practice ---
 
   const orrs = db
     .select()
@@ -35,86 +31,162 @@ dashboardRoutes.get("/", (c) => {
     .where(eq(schema.orrs.teamId, user.teamId))
     .all();
 
-  const byStatus: Record<ORRStatus, number> = {
+  const orrsByStatus: Record<ORRStatus, number> = {
     DRAFT: 0,
     IN_PROGRESS: 0,
     COMPLETE: 0,
     ARCHIVED: 0,
   };
 
-  let stale = 0;
-  let aging = 0;
-
-  // Batch-load all sections for all team ORRs in one query (avoids N+1)
   const orrIds = orrs.map((o) => o.id);
-  const allSections = orrIds.length > 0
+
+  // Batch-load ORR sections for coverage
+  const allOrrSections = orrIds.length > 0
     ? db.select().from(schema.sections).where(inArray(schema.sections.orrId, orrIds)).all()
     : [];
-  const sectionsByOrr = new Map<string, typeof allSections>();
-  for (const sec of allSections) {
+  const sectionsByOrr = new Map<string, typeof allOrrSections>();
+  for (const sec of allOrrSections) {
     const list = sectionsByOrr.get(sec.orrId) || [];
     list.push(sec);
     sectionsByOrr.set(sec.orrId, list);
   }
 
-  const summaries: DashboardORRSummary[] = orrs.map((orr) => {
-    byStatus[orr.status as ORRStatus]++;
-
-    const staleness = getStaleness(orr.updatedAt);
-    if (staleness === "stale") stale++;
-    if (staleness === "aging") aging++;
-
-    const sections = sectionsByOrr.get(orr.id) || [];
-    const covered = sections.filter((s) => s.depth !== "UNKNOWN").length;
-    const coveragePercent =
-      sections.length > 0 ? Math.round((covered / sections.length) * 100) : 0;
-
+  const recentOrrs: DashboardPracticeSummary[] = orrs.map((orr) => {
+    orrsByStatus[orr.status as ORRStatus]++;
     return {
       id: orr.id,
+      title: orr.serviceName,
       serviceName: orr.serviceName,
-      status: orr.status as ORRStatus,
+      status: orr.status,
       updatedAt: orr.updatedAt,
-      staleness,
-      coveragePercent,
+      coveragePercent: computeCoverage(sectionsByOrr.get(orr.id) || []),
     };
   });
 
-  // Sort by most recently updated
-  summaries.sort(
+  recentOrrs.sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   );
 
-  // Total token usage across all sessions for this team's ORRs
-  const allSessions = orrIds.length > 0
-    ? db.select().from(schema.sessions).all().filter((s) => orrIds.includes(s.orrId))
-    : [];
-  const totalTokens = allSessions.reduce((sum, s) => sum + s.tokenUsage, 0);
+  // --- Incident practice ---
 
-  // Today's token usage for daily cap visibility
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const dailyUsageResult = db
-    .select({ total: sql<number>`coalesce(sum(${schema.sessions.tokenUsage}), 0)` })
-    .from(schema.sessions)
-    .innerJoin(schema.orrs, eq(schema.sessions.orrId, schema.orrs.id))
-    .where(
-      and(
-        eq(schema.orrs.teamId, user.teamId),
-        gte(schema.sessions.startedAt, todayStart.toISOString()),
-      ),
-    )
-    .get();
-  const dailyTokens = dailyUsageResult?.total ?? 0;
+  const incidents = db
+    .select()
+    .from(schema.incidents)
+    .where(eq(schema.incidents.teamId, user.teamId))
+    .all();
+
+  const incidentsByStatus: Record<IncidentStatus, number> = {
+    DRAFT: 0,
+    IN_PROGRESS: 0,
+    IN_REVIEW: 0,
+    PUBLISHED: 0,
+    ARCHIVED: 0,
+  };
+
+  const incidentIds = incidents.map((i) => i.id);
+
+  // Batch-load incident sections for coverage
+  const allIncSections = incidentIds.length > 0
+    ? db.select().from(schema.incidentSections).where(inArray(schema.incidentSections.incidentId, incidentIds)).all()
+    : [];
+  const sectionsByIncident = new Map<string, typeof allIncSections>();
+  for (const sec of allIncSections) {
+    const list = sectionsByIncident.get(sec.incidentId) || [];
+    list.push(sec);
+    sectionsByIncident.set(sec.incidentId, list);
+  }
+
+  const recentIncidents: DashboardPracticeSummary[] = incidents.map((inc) => {
+    incidentsByStatus[inc.status as IncidentStatus]++;
+    return {
+      id: inc.id,
+      title: inc.title,
+      serviceName: inc.serviceName ?? "Unknown service",
+      status: inc.status,
+      updatedAt: inc.updatedAt,
+      coveragePercent: computeCoverage(sectionsByIncident.get(inc.id) || []),
+      severity: inc.severity,
+    };
+  });
+
+  recentIncidents.sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+
+  // --- Learning signals ---
+
+  const allPracticeIds = [...orrIds, ...incidentIds];
+
+  // Open action items across both practices
+  const openActionResult = allPracticeIds.length > 0
+    ? db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.actionItems)
+        .where(
+          sql`${schema.actionItems.practiceId} IN (${sql.join(allPracticeIds.map(id => sql`${id}`), sql`, `)}) AND ${schema.actionItems.status} != 'done'`,
+        )
+        .get()
+    : null;
+  const openActionItems = openActionResult?.count ?? 0;
+
+  // Experiment suggestions (suggested status, scoped to team's services)
+  const teamServices = db
+    .select({ id: schema.services.id })
+    .from(schema.services)
+    .where(eq(schema.services.teamId, user.teamId))
+    .all();
+  const serviceIds = teamServices.map((s) => s.id);
+
+  const expResult = serviceIds.length > 0
+    ? db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.experimentSuggestions)
+        .where(
+          sql`${schema.experimentSuggestions.serviceId} IN (${sql.join(serviceIds.map(id => sql`${id}`), sql`, `)}) AND ${schema.experimentSuggestions.status} = 'suggested'`,
+        )
+        .get()
+    : null;
+  const experimentSuggestions = expResult?.count ?? 0;
+
+  // Cross-practice suggestions scoped to team
+  const crossResult = allPracticeIds.length > 0
+    ? db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.crossPracticeSuggestions)
+        .where(
+          sql`${schema.crossPracticeSuggestions.sourcePracticeId} IN (${sql.join(allPracticeIds.map(id => sql`${id}`), sql`, `)})`,
+        )
+        .get()
+    : null;
+  const crossPracticeLinks = crossResult?.count ?? 0;
+
+  // Sessions with discoveries in last 30 days
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const discoveryResult = allPracticeIds.length > 0
+    ? db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.sessions)
+        .where(
+          sql`${schema.sessions.orrId} IN (${sql.join(allPracticeIds.map(id => sql`${id}`), sql`, `)}) AND ${schema.sessions.discoveries} != '[]' AND ${schema.sessions.startedAt} >= ${thirtyDaysAgo.toISOString()}`,
+        )
+        .get()
+    : null;
+  const recentDiscoveries = discoveryResult?.count ?? 0;
+
+  // --- Assemble response ---
 
   const stats: DashboardStats = {
     totalOrrs: orrs.length,
-    byStatus,
-    stale,
-    aging,
-    recentActivity: summaries,
-    totalTokens,
-    dailyTokens,
-    dailyTokenLimit: MAX_DAILY_TOKENS,
+    orrsByStatus,
+    recentOrrs: recentOrrs.slice(0, 10),
+    totalIncidents: incidents.length,
+    incidentsByStatus,
+    recentIncidents: recentIncidents.slice(0, 10),
+    openActionItems,
+    experimentSuggestions,
+    crossPracticeLinks,
+    recentDiscoveries,
   };
 
   return c.json({ dashboard: stats });

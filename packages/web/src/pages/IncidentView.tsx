@@ -4,6 +4,7 @@ import { api, sendIncidentMessage } from "../api/client";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { ConversationPanel } from "../components/ConversationPanel";
 import { ExperimentsPanel } from "../components/ExperimentsPanel";
+import { DEPTH_COLORS, DEPTH_LABELS, SEVERITY_COLORS_BOLD, FACTOR_CATEGORY_COLORS, EVENT_TYPE_COLORS } from "../lib/style-constants";
 
 type WorkspaceTab = "analysis" | "timeline" | "factors" | "actions" | "experiments";
 
@@ -56,43 +57,6 @@ const SLASH_COMMANDS: SlashCommand[] = [
   },
 ];
 
-const DEPTH_COLORS: Record<string, string> = {
-  UNKNOWN: "bg-gray-200",
-  SURFACE: "bg-yellow-400",
-  MODERATE: "bg-orange-400",
-  DEEP: "bg-green-500",
-};
-
-const DEPTH_LABELS: Record<string, string> = {
-  UNKNOWN: "Not reviewed",
-  SURFACE: "Surface",
-  MODERATE: "Moderate",
-  DEEP: "Deep",
-};
-
-const SEVERITY_COLORS: Record<string, string> = {
-  HIGH: "bg-red-600 text-white",
-  MEDIUM: "bg-orange-500 text-white",
-  LOW: "bg-yellow-400 text-gray-900",
-};
-
-const FACTOR_CATEGORY_COLORS: Record<string, string> = {
-  technical: "bg-blue-100 text-blue-700",
-  process: "bg-purple-100 text-purple-700",
-  organizational: "bg-indigo-100 text-indigo-700",
-  human_factors: "bg-orange-100 text-orange-700",
-  communication: "bg-teal-100 text-teal-700",
-  knowledge: "bg-amber-100 text-amber-700",
-};
-
-const EVENT_TYPE_COLORS: Record<string, string> = {
-  detection: "bg-yellow-100 text-yellow-800",
-  escalation: "bg-orange-100 text-orange-800",
-  action: "bg-blue-100 text-blue-800",
-  communication: "bg-teal-100 text-teal-800",
-  resolution: "bg-green-100 text-green-800",
-  other: "bg-gray-100 text-gray-800",
-};
 
 /**
  * Render markdown-ish text to React elements.
@@ -542,7 +506,7 @@ export function IncidentView() {
           <div className="flex items-center gap-2 mt-1">
             <span className="text-[10px] text-gray-500">{incident.status.replace(/_/g, " ")}</span>
             {incident.severity && (
-              <span className={`px-1 py-0 rounded text-[10px] font-medium ${SEVERITY_COLORS[incident.severity] || ""}`}>
+              <span className={`px-1 py-0 rounded text-[10px] font-medium ${SEVERITY_COLORS_BOLD[incident.severity] || ""}`}>
                 {incident.severity}
               </span>
             )}
@@ -780,7 +744,7 @@ export function IncidentView() {
                               "bg-blue-100 text-blue-700"
                             }`}>{flag.type}</span>
                             {flag.severity && (
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${SEVERITY_COLORS[flag.severity] || ""}`}>
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${SEVERITY_COLORS_BOLD[flag.severity] || ""}`}>
                                 {flag.severity}
                               </span>
                             )}
