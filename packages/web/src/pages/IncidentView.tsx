@@ -3,8 +3,9 @@ import { useParams, Link } from "react-router-dom";
 import { api, sendIncidentMessage } from "../api/client";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { ConversationPanel } from "../components/ConversationPanel";
+import { ExperimentsPanel } from "../components/ExperimentsPanel";
 
-type WorkspaceTab = "analysis" | "timeline" | "factors" | "actions";
+type WorkspaceTab = "analysis" | "timeline" | "factors" | "actions" | "experiments";
 
 interface Message {
   role: "user" | "assistant";
@@ -21,17 +22,17 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "timeline",
     description: "Build out the incident timeline",
-    prompt: "Based on what we've discussed so far, help me build the incident timeline. What events do we know about? Record each timeline event with timestamps, descriptions, and who was involved. Ask me about any gaps.",
+    prompt: "Based on what we've discussed so far, help me build the incident timeline. IMMEDIATELY call record_timeline_event for each event — do not just describe them in text. Include timestamps, descriptions, and who was involved. Then ask me about any gaps.",
   },
   {
     name: "factors",
     description: "Identify contributing factors",
-    prompt: "Let's identify the contributing factors for this incident. Based on our discussion, what technical, process, organizational, human, and communication factors contributed? For each one, consider whether it's systemic. Use record_contributing_factor for each.",
+    prompt: "Let's identify the contributing factors for this incident. Based on our discussion, IMMEDIATELY call record_contributing_factor for each factor — do not just describe them in text. Consider technical, process, organizational, human, and communication categories. For each, assess whether it's systemic.",
   },
   {
     name: "actions",
     description: "Generate action items from our analysis",
-    prompt: "Based on the contributing factors and our discussion, what action items should we create? Focus on systemic improvements, not individual blame. Each action should link to a contributing factor and have clear success criteria.",
+    prompt: "Based on the contributing factors and our discussion, IMMEDIATELY call record_action_item for each action item — do not just describe them in text. Focus on systemic improvements, not individual blame. Each action must link to a contributing_factor_id and have clear success criteria, a priority, and a type (technical, process, organizational, or learning).",
   },
   {
     name: "summarize",
@@ -47,6 +48,11 @@ const SLASH_COMMANDS: SlashCommand[] = [
     name: "patterns",
     description: "Look for systemic patterns",
     prompt: "Search for teaching moments and case studies that match the patterns we've seen in this incident. Use query_teaching_moments and query_case_studies to find matches. What systemic patterns connect this incident to broader organizational dynamics?",
+  },
+  {
+    name: "experiments",
+    description: "Suggest experiments to validate fixes or prevent recurrence",
+    prompt: "Review the contributing factors and fixes we've discussed. For your top 2-3 recommendations, IMMEDIATELY call the suggest_experiment tool for each one — do not just describe them in text. Each experiment needs a type (chaos_experiment, load_test, or gameday), a clear hypothesis, rationale, and priority. Weight recurrence likelihood heavily.",
   },
 ];
 
@@ -379,6 +385,9 @@ export function IncidentView() {
           if (event.sectionId) setActiveSection(event.sectionId);
           debouncedReload();
         }
+        if (event.type === "data_updated") {
+          debouncedReload();
+        }
         if (event.type === "message_end" && event.tokenUsage) {
           setSessionTokens((prev) => prev + event.tokenUsage);
         }
@@ -615,7 +624,7 @@ export function IncidentView() {
         {/* Tab bar */}
         <div className="flex items-center border-b border-gray-200 bg-white px-1">
           <div className="flex">
-            {(["analysis", "timeline", "factors", "actions"] as const).map((tab) => (
+            {(["analysis", "timeline", "factors", "actions", "experiments"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -895,6 +904,10 @@ export function IncidentView() {
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === "experiments" && (
+            <ExperimentsPanel practiceType="incident" practiceId={id!} />
           )}
         </div>
       </div>

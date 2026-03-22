@@ -4,9 +4,11 @@ import { api, sendMessage } from "../api/client";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { TracesPanel } from "../components/TracesPanel";
 import { DependenciesPanel } from "../components/DependenciesPanel";
+import { ExperimentsPanel } from "../components/ExperimentsPanel";
+import { RisksPanel } from "../components/RisksPanel";
 import { ConversationPanel } from "../components/ConversationPanel";
 
-type WorkspaceTab = "review" | "traces" | "dependencies";
+type WorkspaceTab = "review" | "risks" | "experiments" | "dependencies" | "traces";
 
 interface Message {
   role: "user" | "assistant";
@@ -49,6 +51,11 @@ const SLASH_COMMANDS: SlashCommand[] = [
     name: "risks",
     description: "List all identified risks and gaps",
     prompt: "List every risk and gap that's been flagged across all sections. Group them by severity. For each one, remind me what the concern is and whether it has a deadline or resolution. What's the most critical thing we haven't addressed?",
+  },
+  {
+    name: "experiments",
+    description: "Suggest chaos experiments, load tests, or gamedays",
+    prompt: "Review all sections we've discussed so far. For the highest-ROI experiments, IMMEDIATELY call suggest_experiment for each one — do not just describe them in text. Each needs a type (chaos_experiment, load_test, or gameday), a clear hypothesis, rationale, and priority. Prioritize by blast radius and confidence gaps. Aim for 2-3 experiments.",
   },
 ];
 
@@ -431,6 +438,11 @@ export function ORRView() {
           debouncedReload();
         }
 
+        // When AI creates non-section data (actions, experiments, etc.), reload
+        if (event.type === "data_updated") {
+          debouncedReload();
+        }
+
         if (event.type === "message_end" && event.tokenUsage) {
           setSessionTokens((prev) => prev + event.tokenUsage);
         }
@@ -735,7 +747,7 @@ export function ORRView() {
         {/* Tab bar */}
         <div className="flex items-center border-b border-gray-200 bg-white px-1">
           <div className="flex">
-            {(["review", "dependencies", "traces"] as const).map((tab) => (
+            {(["review", "risks", "experiments", "dependencies", "traces"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -771,6 +783,10 @@ export function ORRView() {
           <TracesPanel orrId={id!} />
         ) : activeTab === "dependencies" ? (
           <DependenciesPanel orrId={id!} serviceName={orr.serviceName} sections={sections} />
+        ) : activeTab === "experiments" ? (
+          <ExperimentsPanel practiceType="orr" practiceId={id!} />
+        ) : activeTab === "risks" ? (
+          <RisksPanel orrId={id!} sections={sections} onNavigateToSection={(sectionId) => { setActiveSection(sectionId); setActiveTab("review"); }} onReload={reloadSections} />
         ) : currentSection ? (
           <>
             {/* Section header */}

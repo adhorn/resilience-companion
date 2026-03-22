@@ -251,6 +251,48 @@ describe("suggest_experiment", () => {
     expect(experiments[0].serviceId).toBe("existing-svc");
   });
 
+  it("deduplicates experiments with the same title", () => {
+    const args = {
+      type: "chaos_experiment",
+      title: "Test database failover",
+      hypothesis: "When primary DB fails, service switches to read replica",
+      rationale: "Untested failover path",
+      priority: "high",
+      priority_reasoning: "All writes affected",
+    };
+
+    const first = JSON.parse(executeTool("suggest_experiment", args, orrId, sessionId));
+    expect(first.success).toBe(true);
+    expect(first.deduplicated).toBeUndefined();
+
+    const second = JSON.parse(executeTool("suggest_experiment", args, orrId, sessionId));
+    expect(second.success).toBe(true);
+    expect(second.deduplicated).toBe(true);
+    expect(second.experimentId).toBe(first.experimentId);
+
+    // Only one experiment in DB
+    const db = getDb();
+    const experiments = db.select().from(schema.experimentSuggestions).all();
+    expect(experiments).toHaveLength(1);
+  });
+
+  it("allows different titles for same practice", () => {
+    const base = {
+      type: "chaos_experiment" as const,
+      hypothesis: "h",
+      rationale: "r",
+      priority: "high",
+      priority_reasoning: "p",
+    };
+
+    executeTool("suggest_experiment", { ...base, title: "Experiment A" }, orrId, sessionId);
+    executeTool("suggest_experiment", { ...base, title: "Experiment B" }, orrId, sessionId);
+
+    const db = getDb();
+    const experiments = db.select().from(schema.experimentSuggestions).all();
+    expect(experiments).toHaveLength(2);
+  });
+
   it("returns error when ORR has no service name", () => {
     const db = getDb();
     // Create an ORR with no service name (edge case)
