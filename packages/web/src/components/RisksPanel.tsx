@@ -1,23 +1,5 @@
 import { api } from "../api/client";
-
-const FLAG_COLORS: Record<string, string> = {
-  RISK: "bg-red-100 text-red-700",
-  GAP: "bg-amber-100 text-amber-700",
-  STRENGTH: "bg-green-100 text-green-700",
-  FOLLOW_UP: "bg-blue-100 text-blue-700",
-};
-
-const SEVERITY_COLORS: Record<string, string> = {
-  HIGH: "bg-red-600 text-white",
-  MEDIUM: "bg-orange-500 text-white",
-  LOW: "bg-yellow-400 text-gray-900",
-};
-
-const STATUS_BADGE: Record<string, string> = {
-  OPEN: "",
-  ACCEPTED: "bg-purple-100 text-purple-700",
-  RESOLVED: "bg-green-100 text-green-700",
-};
+import { FLAG_COLORS, SEVERITY_COLORS_BOLD, FLAG_STATUS_COLORS } from "../lib/style-constants";
 
 interface Flag {
   type: string;
@@ -213,12 +195,12 @@ function FlagCard({
     }`}>
       <div className="flex items-center gap-2 flex-wrap">
         {flag.type === "RISK" && flag.severity && (
-          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${SEVERITY_COLORS[flag.severity] || ""}`}>
+          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${SEVERITY_COLORS_BOLD[flag.severity] || ""}`}>
             {flag.severity}
           </span>
         )}
         {flag.status && flag.status !== "OPEN" && (
-          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_BADGE[flag.status] || ""}`}>
+          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${FLAG_STATUS_COLORS[flag.status] || ""}`}>
             {flag.status}
           </span>
         )}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
+import { EXPERIMENT_TYPE_COLORS, EXPERIMENT_STATUS_COLORS, PRIORITY_COLORS } from "../lib/style-constants";
 
 interface Experiment {
   id: string;
@@ -28,26 +29,6 @@ const TYPE_LABELS: Record<string, string> = {
   gameday: "Gameday",
 };
 
-const TYPE_COLORS: Record<string, string> = {
-  chaos_experiment: "bg-purple-100 text-purple-700",
-  load_test: "bg-blue-100 text-blue-700",
-  gameday: "bg-teal-100 text-teal-700",
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  critical: "bg-red-600 text-white",
-  high: "bg-orange-500 text-white",
-  medium: "bg-yellow-400 text-gray-900",
-  low: "bg-gray-300 text-gray-700",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  suggested: "bg-gray-100 text-gray-600",
-  accepted: "bg-blue-100 text-blue-700",
-  scheduled: "bg-indigo-100 text-indigo-700",
-  completed: "bg-green-100 text-green-700",
-  dismissed: "bg-gray-100 text-gray-400 line-through",
-};
 
 interface Props {
   practiceType: "orr" | "incident";
@@ -183,13 +164,13 @@ function ExperimentCard({
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${TYPE_COLORS[exp.type] || "bg-gray-100"}`}>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${EXPERIMENT_TYPE_COLORS[exp.type] || "bg-gray-100"}`}>
               {TYPE_LABELS[exp.type] || exp.type}
             </span>
             <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${PRIORITY_COLORS[exp.priority] || ""}`}>
               {exp.priority}
             </span>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_COLORS[exp.status] || ""}`}>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${EXPERIMENT_STATUS_COLORS[exp.status] || ""}`}>
               {exp.status}
             </span>
           </div>

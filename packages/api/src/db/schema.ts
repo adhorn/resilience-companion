@@ -111,6 +111,7 @@ export const sessions = sqliteTable("sessions", {
     .notNull()
     .default("REVIEW_FACILITATOR"),
   summary: text("summary"),
+  discoveries: text("discoveries", { mode: "json" }).notNull().default("[]"), // string[] — things that surprised the team
   sectionsDiscussed: text("sections_discussed", { mode: "json" }).notNull().default("[]"), // string[]
   status: text("status", { enum: ["ACTIVE", "COMPLETED"] })
     .notNull()

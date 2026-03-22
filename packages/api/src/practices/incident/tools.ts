@@ -142,11 +142,16 @@ const SHARED_SECTION_TOOLS: LLMToolDef[] = [
     type: "function",
     function: {
       name: "write_session_summary",
-      description: "Write a summary of what was covered in this session. Call when wrapping up.",
+      description: "Write a summary of what was covered in this session. Call when wrapping up. Include discoveries — things that surprised the team, contradicted expectations, or revealed gaps between how they thought the system works and how it actually works.",
       parameters: {
         type: "object",
         properties: {
           summary: { type: "string", description: "Narrative summary of the session" },
+          discoveries: {
+            type: "array",
+            items: { type: "string" },
+            description: "List of things that surprised the team or contradicted their expectations during this session.",
+          },
         },
         required: ["summary"],
       },
@@ -493,8 +498,12 @@ export function executeIncidentTool(
     }
 
     case "write_session_summary": {
+      const updates: Record<string, unknown> = { summary: args.summary as string };
+      if (args.discoveries && Array.isArray(args.discoveries) && (args.discoveries as string[]).length > 0) {
+        updates.discoveries = args.discoveries;
+      }
       db.update(schema.sessions)
-        .set({ summary: args.summary as string })
+        .set(updates)
         .where(eq(schema.sessions.id, sessionId))
         .run();
       return JSON.stringify({ success: true });
