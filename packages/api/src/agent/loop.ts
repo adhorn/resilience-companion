@@ -4,7 +4,7 @@ import type { LLMMessage } from "../llm/index.js";
 import type { SSEEvent } from "@orr/shared";
 import type { PracticeConfig } from "./practice.js";
 import { nanoid } from "nanoid";
-import { TraceCollector } from "./trace.js";
+import { TraceLogger } from "./trace.js";
 import { log } from "../logger.js";
 import { runBeforeHooks, runAfterHooks } from "./steering.js";
 import type { ToolLedgerEntry } from "./steering.js";
@@ -36,9 +36,9 @@ function categorizeError(msg: string): string {
   return `AI error: ${msg}`;
 }
 
-/** Finalize trace — updates the trace row with final totals. Spans already persisted eagerly. */
-function finalizeTrace(collector: TraceCollector): void {
-  collector.finalize();
+/** Finalize trace — emits summary log with totals for the agent turn. */
+function finalizeTrace(trace: TraceLogger): void {
+  trace.finalize();
 }
 
 export interface AgentInput {
@@ -80,7 +80,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
 
   const messageId = nanoid();
   const model = process.env.LLM_MODEL || "sonnet";
-  const trace = new TraceCollector(practiceId, sessionId, messageId, model);
+  const trace = new TraceLogger(practiceConfig.practiceType, practiceId, sessionId, messageId, model);
 
   yield { type: "message_start", messageId };
 
