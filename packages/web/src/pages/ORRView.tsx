@@ -2,13 +2,12 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api, sendMessage } from "../api/client";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
-import { TracesPanel } from "../components/TracesPanel";
 import { DependenciesPanel } from "../components/DependenciesPanel";
 import { ExperimentsPanel } from "../components/ExperimentsPanel";
 import { RisksPanel } from "../components/RisksPanel";
 import { ConversationPanel } from "../components/ConversationPanel";
 
-type WorkspaceTab = "review" | "risks" | "experiments" | "dependencies" | "traces";
+type WorkspaceTab = "review" | "risks" | "experiments" | "dependencies";
 
 interface Message {
   role: "user" | "assistant";
@@ -747,7 +746,7 @@ export function ORRView() {
         {/* Tab bar */}
         <div className="flex items-center border-b border-gray-200 bg-white px-1">
           <div className="flex">
-            {(["review", "risks", "experiments", "dependencies", "traces"] as const).map((tab) => (
+            {(["review", "risks", "experiments", "dependencies"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -779,9 +778,7 @@ export function ORRView() {
           </div>
         </div>
 
-        {activeTab === "traces" ? (
-          <TracesPanel orrId={id!} />
-        ) : activeTab === "dependencies" ? (
+        {activeTab === "dependencies" ? (
           <DependenciesPanel orrId={id!} serviceName={orr.serviceName} sections={sections} />
         ) : activeTab === "experiments" ? (
           <ExperimentsPanel practiceType="orr" practiceId={id!} />
