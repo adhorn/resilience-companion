@@ -9,5 +9,5 @@ const port = Number(process.env.PORT) || 3000;
 await initDb();
 
 serve({ fetch: app.fetch, port }, (info) => {
-  log("info", "ORR Companion API running", { port: info.port });
+  log("info", "Resilience Companion API running", { port: info.port });
 });
