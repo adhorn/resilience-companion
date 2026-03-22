@@ -1,25 +1,16 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api, sendMessage } from "../api/client";
-import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { api } from "../api/client";
 import { DependenciesPanel } from "../components/DependenciesPanel";
 import { ExperimentsPanel } from "../components/ExperimentsPanel";
 import { RisksPanel } from "../components/RisksPanel";
 import { ConversationPanel } from "../components/ConversationPanel";
 import { DEPTH_COLORS, DEPTH_LABELS, FLAG_COLORS, SEVERITY_COLORS_BOLD } from "../lib/style-constants";
+import { renderMarkdown } from "../lib/markdown";
+import { parseResponses, getResponseText, getResponseSource, getResponseCodeRef, answeredCount, codeSourcedCount, totalQuestions } from "../lib/responses";
+import { useReviewSession, SlashCommand } from "../hooks/useReviewSession";
 
 type WorkspaceTab = "review" | "risks" | "experiments" | "dependencies";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
-
-interface SlashCommand {
-  name: string;
-  description: string;
-  prompt: string;
-}
 
 const SLASH_COMMANDS: SlashCommand[] = [
   {
@@ -59,143 +50,50 @@ const SLASH_COMMANDS: SlashCommand[] = [
   },
 ];
 
-
-/**
- * Render markdown-ish text to React elements.
- * Handles: **bold**, *italic*, `code`, bullet lists, numbered lists, paragraphs.
- */
-function renderMarkdown(text: string): React.ReactNode {
-  const lines = text.split("\n");
-  const elements: React.ReactNode[] = [];
-  let listItems: string[] = [];
-  let listType: "ul" | "ol" | null = null;
-  let key = 0;
-
-  function flushList() {
-    if (listItems.length === 0) return;
-    const items = listItems.map((item, i) => (
-      <li key={i}>{renderInline(item)}</li>
-    ));
-    if (listType === "ol") {
-      elements.push(<ol key={key++} className="list-decimal list-inside space-y-1 my-1">{items}</ol>);
-    } else {
-      elements.push(<ul key={key++} className="list-disc list-inside space-y-1 my-1">{items}</ul>);
-    }
-    listItems = [];
-    listType = null;
-  }
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    // Bullet list
-    if (/^[-•]\s/.test(trimmed)) {
-      if (listType !== "ul") flushList();
-      listType = "ul";
-      listItems.push(trimmed.replace(/^[-•]\s+/, ""));
-      continue;
-    }
-
-    // Numbered list
-    if (/^\d+[.)]\s/.test(trimmed)) {
-      if (listType !== "ol") flushList();
-      listType = "ol";
-      listItems.push(trimmed.replace(/^\d+[.)]\s+/, ""));
-      continue;
-    }
-
-    flushList();
-
-    if (trimmed === "") {
-      elements.push(<div key={key++} className="h-3" />);
-    } else {
-      elements.push(<p key={key++} className="mb-2 last:mb-0">{renderInline(trimmed)}</p>);
-    }
-  }
-  flushList();
-
-  return <>{elements}</>;
-}
-
-function renderInline(text: string): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-  let remaining = text;
-  let key = 0;
-
-  while (remaining.length > 0) {
-    // Bold
-    const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*(.*)/s);
-    if (boldMatch) {
-      if (boldMatch[1]) parts.push(<span key={key++}>{boldMatch[1]}</span>);
-      parts.push(<strong key={key++} className="font-semibold">{boldMatch[2]}</strong>);
-      remaining = boldMatch[3];
-      continue;
-    }
-
-    // Italic
-    const italicMatch = remaining.match(/^(.*?)\*(.+?)\*(.*)/s);
-    if (italicMatch) {
-      if (italicMatch[1]) parts.push(<span key={key++}>{italicMatch[1]}</span>);
-      parts.push(<em key={key++}>{italicMatch[2]}</em>);
-      remaining = italicMatch[3];
-      continue;
-    }
-
-    // Code
-    const codeMatch = remaining.match(/^(.*?)`(.+?)`(.*)/s);
-    if (codeMatch) {
-      if (codeMatch[1]) parts.push(<span key={key++}>{codeMatch[1]}</span>);
-      parts.push(<code key={key++} className="px-1 py-0.5 bg-gray-200 rounded text-xs font-mono">{codeMatch[2]}</code>);
-      remaining = codeMatch[3];
-      continue;
-    }
-
-    // No more patterns
-    parts.push(<span key={key++}>{remaining}</span>);
-    break;
-  }
-
-  return <>{parts}</>;
-}
-
 export function ORRView() {
   const { id } = useParams<{ id: string }>();
   const [orr, setOrr] = useState<any>(null);
   const [sections, setSections] = useState<any[]>([]);
   const [activeSection, setActiveSection] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sessionTokens, setSessionTokens] = useState(0);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [streaming, setStreaming] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [notification, setNotification] = useState<string | null>(null);
-  const [streamStatus, setStreamStatus] = useState<string | null>(null); // retry/status messages during streaming
-  const [lastError, setLastError] = useState<string | null>(null);
-  const lastUserMessageRef = useRef<string | null>(null);
-  const speech = useSpeechRecognition((text) => {
-    setInput((prev) => (prev ? prev + " " + text : text));
-  });
-  // Slash commands
-  const [showSlashMenu, setShowSlashMenu] = useState(false);
-  const [slashFilter, setSlashFilter] = useState("");
-  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("review");
+
   // Repo connection
   const [showRepoForm, setShowRepoForm] = useState(false);
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("review");
   const [repoUrl, setRepoUrl] = useState("");
   const [repoToken, setRepoToken] = useState("");
   const [repoSaving, setRepoSaving] = useState(false);
   const [repoError, setRepoError] = useState("");
-  // Per-question responses: local editing state
-  const [editingResponses, setEditingResponses] = useState<Record<number, string>>({});
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  // Debounce reloadSections to avoid race conditions from rapid section_updated events
-  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reloadSeqRef = useRef(0);
+
+  const reloadData = useCallback(async () => {
+    if (!id) return;
+    const res = await api.orrs.get(id);
+    setOrr(res.orr);
+    setSections(res.sections.sort((a: any, b: any) => a.position - b.position));
+  }, [id]);
+
+  const saveResponses = useCallback(
+    async (sectionId: string, responses: Record<number, string>) => {
+      if (!id) return;
+      await api.sections.update(id, sectionId, { promptResponses: responses });
+      setSections((prev) =>
+        prev.map((s) => (s.id === sectionId ? { ...s, promptResponses: responses } : s)),
+      );
+    },
+    [id],
+  );
+
+  const session = useReviewSession({
+    practiceId: id,
+    buildMessageUrl: (practiceId, sessionId) =>
+      `/api/v1/orrs/${practiceId}/sessions/${sessionId}/messages`,
+    reloadData,
+    activeSection,
+    setActiveSection,
+    slashCommands: SLASH_COMMANDS,
+    sections,
+    saveResponses,
+  });
 
   // Load ORR + restore active session
   useEffect(() => {
@@ -207,23 +105,18 @@ export function ORRView() {
         setOrr(orrRes.orr);
         const sorted = orrRes.sections.sort((a: any, b: any) => a.position - b.position);
         setSections(sorted);
-        if (sorted.length > 0) {
-          setActiveSection(sorted[0].id);
-        }
+        if (sorted.length > 0) setActiveSection(sorted[0].id);
 
-        // Check for existing active session and restore it
         const sessRes = await api.sessions.list(id!);
         const activeSession = sessRes.sessions.find((s: any) => s.status === "ACTIVE");
         if (activeSession) {
-          setSessionId(activeSession.id);
-          setSessionTokens(activeSession.tokenUsage || 0);
+          session.setSessionId(activeSession.id);
+          session.setSessionTokens(activeSession.tokenUsage || 0);
         }
 
-        // Load ALL messages across all sessions for this ORR
-        // (preserves full conversation history across session renewals)
         const msgRes = await api.sessions.getAllMessages(id!);
         if (msgRes.messages.length > 0) {
-          setMessages(
+          session.setMessages(
             msgRes.messages.map((m: any) => ({
               role: m.role as "user" | "assistant",
               content: m.content,
@@ -236,302 +129,22 @@ export function ORRView() {
     }
 
     loadORR();
-  }, [id]);
-
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // Helper to reload sections from server, with sequence number to prevent stale overwrites
-  const reloadSections = useCallback(async () => {
-    if (!id) return;
-    const seq = ++reloadSeqRef.current;
-    const res = await api.orrs.get(id);
-    // Only apply if this is still the latest request (prevents stale race conditions)
-    if (seq === reloadSeqRef.current) {
-      setOrr(res.orr);
-      setSections(res.sections.sort((a: any, b: any) => a.position - b.position));
-    }
-  }, [id]);
-
-  // Debounced reload — collapses rapid section_updated events into a single fetch
-  const debouncedReload = useCallback(() => {
-    if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
-    reloadTimerRef.current = setTimeout(() => {
-      reloadSections().then(() => setEditingResponses({}));
-    }, 300);
-  }, [reloadSections]);
-
-  // Reset editing state when switching sections
-  useEffect(() => {
-    setEditingResponses({});
-  }, [activeSection]);
-
-  // Parse a single prompt response value — may be a plain string (legacy) or { answer, source, codeRef }
-  const getResponseText = (val: any): string => {
-    if (!val) return "";
-    if (typeof val === "string") return val;
-    if (typeof val === "object" && val.answer) return val.answer;
-    return "";
-  };
-
-  const getResponseSource = (val: any): "team" | "code" | null => {
-    if (!val || typeof val === "string") return null;
-    return val.source || null;
-  };
-
-  const getResponseCodeRef = (val: any): string | null => {
-    if (!val || typeof val === "string") return null;
-    return val.codeRef || null;
-  };
-
-  // Parse promptResponses from a section (handles string or object)
-  const parseResponses = (section: any): Record<number, any> => {
-    if (!section?.promptResponses) return {};
-    const raw = typeof section.promptResponses === "string"
-      ? JSON.parse(section.promptResponses)
-      : section.promptResponses;
-    return raw || {};
-  };
-
-  // Auto-save per-question responses with debounce
-  const saveResponses = useCallback(
-    async (sectionId: string, responses: Record<number, string>) => {
-      if (!id) return;
-      setSaving(true);
-      try {
-        await api.sections.update(id, sectionId, { promptResponses: responses });
-        // Update local sections state
-        setSections((prev) =>
-          prev.map((s) => (s.id === sectionId ? { ...s, promptResponses: responses } : s)),
-        );
-      } finally {
-        setSaving(false);
-      }
-    },
-    [id],
-  );
-
-  // Track pending edits in a ref so blur can flush them synchronously
-  const pendingEditsRef = useRef<Record<number, string>>({});
-
-  const handleResponseChange = useCallback(
-    (questionIndex: number, value: string) => {
-      setEditingResponses((prev) => {
-        const updated = { ...prev, [questionIndex]: value };
-        pendingEditsRef.current = updated;
-        // Schedule save
-        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = setTimeout(() => {
-          if (activeSection) {
-            // Merge with existing saved responses
-            const currentSection = sections.find((s) => s.id === activeSection);
-            const savedResponses = parseResponses(currentSection);
-            const merged = { ...savedResponses, ...updated };
-            saveResponses(activeSection, merged);
-            pendingEditsRef.current = {};
-          }
-        }, 1000);
-        return updated;
-      });
-    },
-    [activeSection, sections, saveResponses],
-  );
-
-  const flushPendingEdits = useCallback(() => {
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    const pending = pendingEditsRef.current;
-    if (Object.keys(pending).length > 0 && activeSection) {
-      const currentSection = sections.find((s) => s.id === activeSection);
-      const savedResponses = parseResponses(currentSection);
-      const merged = { ...savedResponses, ...pending };
-      saveResponses(activeSection, merged);
-      pendingEditsRef.current = {};
-    }
-  }, [activeSection, sections, saveResponses]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startSession = useCallback(async () => {
     if (!id) return;
     const res = await api.sessions.create(id);
-    setSessionId(res.session.id);
-    setSessionTokens(0);
-    setMessages([]);
-  }, [id]);
+    session.setSessionId(res.session.id);
+    session.setSessionTokens(0);
+    session.setMessages([]);
+  }, [id, session]);
 
   const endSession = useCallback(async () => {
-    if (!id || !sessionId) return;
-    await api.sessions.end(id, sessionId);
-    setSessionId(null);
-    await reloadSections();
-  }, [id, sessionId, reloadSections]);
-
-  const doSend = useCallback(async (userMessage: string) => {
-    if (!id || !sessionId || streaming) return;
-
-    lastUserMessageRef.current = userMessage;
-    setLastError(null);
-    setStreaming(true);
-    setStreamStatus(null);
-
-    let assistantContent = "";
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-    try {
-      await sendMessage(id, sessionId, userMessage, activeSection, (event) => {
-        if (event.type === "content_delta") {
-          setStreamStatus(null); // clear status once content flows
-          assistantContent += event.content;
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[updated.length - 1] = {
-              role: "assistant",
-              content: assistantContent,
-            };
-            return updated;
-          });
-        }
-
-        if (event.type === "status") {
-          setStreamStatus(event.message);
-        }
-
-        if (event.type === "error") {
-          setLastError(event.message);
-          setStreamStatus(null);
-        }
-
-        // When AI calls any tool with a section_id, switch to that section
-        if (event.type === "tool_call" && event.args?.section_id) {
-          setActiveSection(event.args.section_id);
-        }
-
-        // When AI writes to a section, switch view and schedule debounced reload
-        if (event.type === "section_updated") {
-          if (event.sectionId) setActiveSection(event.sectionId);
-          debouncedReload();
-        }
-
-        // When AI creates non-section data (actions, experiments, etc.), reload
-        if (event.type === "data_updated") {
-          debouncedReload();
-        }
-
-        if (event.type === "message_end" && event.tokenUsage) {
-          setSessionTokens((prev) => prev + event.tokenUsage);
-        }
-
-        if (event.type === "session_renewed") {
-          setSessionId(event.newSessionId);
-          setSessionTokens(0);
-          setNotification("Session renewed (token limit reached). Your review continues seamlessly.");
-          setTimeout(() => setNotification(null), 8000);
-        }
-      });
-    } catch (err) {
-      // Don't overwrite a more specific error from the SSE stream
-      setLastError((prev) => prev || "Connection lost. Your conversation is saved — reload the page to continue.");
-    }
-
-    setStreamStatus(null);
-
-    // If the stream completed but produced no content, replace the empty
-    // placeholder with an inline error so the user sees what happened
-    if (!assistantContent.trim()) {
-      setLastError((prev) => prev || "No response received. The AI may be overloaded.");
-      setMessages((prev) => {
-        if (prev.length > 0 && prev[prev.length - 1].role === "assistant" && !prev[prev.length - 1].content.trim()) {
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            role: "assistant",
-            content: "*Failed to generate a response. Use the Retry button above to try again.*",
-          };
-          return updated;
-        }
-        return prev;
-      });
-    }
-
-    // Always reload sections after stream ends — safety net in case
-    // section_updated events were lost (disconnect, server restart, etc.)
-    await reloadSections();
-    setEditingResponses({});
-    setStreaming(false);
-  }, [id, sessionId, activeSection, streaming, reloadSections, debouncedReload]);
-
-  const filteredSlashCommands = SLASH_COMMANDS.filter((cmd) =>
-    cmd.name.startsWith(slashFilter.toLowerCase()),
-  );
-
-  const handleSlashSelect = useCallback((cmd: SlashCommand) => {
-    setInput("");
-    setShowSlashMenu(false);
-    setSlashFilter("");
-    setSlashSelectedIndex(0);
-    // Show the command name as the user message, send the expanded prompt
-    setMessages((prev) => [...prev, { role: "user", content: `/${cmd.name}` }]);
-    doSend(cmd.prompt);
-  }, [doSend]);
-
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setInput(val);
-    if (val === "/") {
-      setShowSlashMenu(true);
-      setSlashFilter("");
-      setSlashSelectedIndex(0);
-    } else if (val.startsWith("/") && !val.includes(" ")) {
-      setShowSlashMenu(true);
-      setSlashFilter(val.slice(1));
-      setSlashSelectedIndex(0);
-    } else {
-      setShowSlashMenu(false);
-    }
-  }, []);
-
-  const handleSend = useCallback(async () => {
-    if (!input.trim() || !id || !sessionId || streaming) return;
-    setShowSlashMenu(false);
-    const userMessage = input.trim();
-    setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
-    await doSend(userMessage);
-  }, [input, id, sessionId, streaming, doSend]);
-
-  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showSlashMenu && filteredSlashCommands.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSlashSelectedIndex((prev) => Math.min(prev + 1, filteredSlashCommands.length - 1));
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSlashSelectedIndex((prev) => Math.max(prev - 1, 0));
-        return;
-      }
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        handleSlashSelect(filteredSlashCommands[slashSelectedIndex]);
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setShowSlashMenu(false);
-        return;
-      }
-    }
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [showSlashMenu, filteredSlashCommands, slashSelectedIndex, handleSlashSelect, handleSend]);
-
-  const handleRetry = useCallback(async () => {
-    if (!lastUserMessageRef.current || streaming) return;
-    setLastError(null);
-    await doSend(lastUserMessageRef.current);
-  }, [streaming, doSend]);
+    if (!id || !session.sessionId) return;
+    await api.sessions.end(id, session.sessionId);
+    session.setSessionId(null);
+    await reloadData();
+  }, [id, session, reloadData]);
 
   const handleRepoSubmit = useCallback(async () => {
     if (!id || !repoUrl.trim()) return;
@@ -568,28 +181,10 @@ export function ORRView() {
     : [];
   const savedResponses = parseResponses(currentSection);
 
-  // Count answered questions per section (for the sidebar)
-  const answeredCount = (section: any): number => {
-    const responses = parseResponses(section);
-    return Object.values(responses).filter((v) => getResponseText(v).trim().length > 0).length;
-  };
-  // Count code-sourced answers in a section
-  const codeSourcedCount = (section: any): number => {
-    const responses = parseResponses(section);
-    return Object.values(responses).filter((v) => getResponseSource(v) === "code").length;
-  };
-  const totalQuestions = (section: any): number => {
-    const prompts = typeof section.prompts === "string"
-      ? JSON.parse(section.prompts)
-      : section.prompts;
-    return (prompts || []).length;
-  };
-
   return (
     <div className="flex h-screen">
       {/* Column 1: Section sidebar */}
       <div className="w-56 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 overflow-hidden">
-        {/* Header */}
         <div className="p-3 border-b border-gray-200">
           <Link to="/orrs" className="text-[10px] text-gray-400 hover:text-blue-600">&larr; All ORRs</Link>
           <h2 className="font-bold text-sm text-gray-900 truncate mt-1">{orr.serviceName}</h2>
@@ -685,7 +280,7 @@ export function ORRView() {
           {sections.map((s) => {
             const answered = answeredCount(s);
             const total = totalQuestions(s);
-            const codeSourced = codeSourcedCount(s);
+            const codeSourcing = codeSourcedCount(s);
             return (
               <button
                 key={s.id}
@@ -704,9 +299,9 @@ export function ORRView() {
                 </div>
                 <div className="ml-3.5 mt-0.5 text-[10px] text-gray-400">
                   {answered}/{total} answered
-                  {codeSourced > 0 && (
-                    <span className="ml-1 text-purple-500" title={`${codeSourced} answer${codeSourced > 1 ? "s" : ""} sourced from code`}>
-                      ({codeSourced} from code)
+                  {codeSourcing > 0 && (
+                    <span className="ml-1 text-purple-500" title={`${codeSourcing} answer${codeSourcing > 1 ? "s" : ""} sourced from code`}>
+                      ({codeSourcing} from code)
                     </span>
                   )}
                 </div>
@@ -758,7 +353,7 @@ export function ORRView() {
         ) : activeTab === "experiments" ? (
           <ExperimentsPanel practiceType="orr" practiceId={id!} />
         ) : activeTab === "risks" ? (
-          <RisksPanel orrId={id!} sections={sections} onNavigateToSection={(sectionId) => { setActiveSection(sectionId); setActiveTab("review"); }} onReload={reloadSections} />
+          <RisksPanel orrId={id!} sections={sections} onNavigateToSection={(sectionId) => { setActiveSection(sectionId); setActiveTab("review"); }} onReload={reloadData} />
         ) : currentSection ? (
           <>
             {/* Section header */}
@@ -769,7 +364,7 @@ export function ORRView() {
                   <span className={`inline-block w-2 h-2 rounded-full ${DEPTH_COLORS[currentSection.depth]}`} />
                   <span>{DEPTH_LABELS[currentSection.depth]}</span>
                 </div>
-                {saving && <span className="text-[10px] text-gray-400 ml-auto">Saving...</span>}
+                {session.saving && <span className="text-[10px] text-gray-400 ml-auto">Saving...</span>}
               </div>
               {currentSection.depthRationale && (
                 <p className="text-xs text-gray-400 mt-1 italic">{currentSection.depthRationale}</p>
@@ -779,13 +374,13 @@ export function ORRView() {
             {/* Questions list */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {currentPrompts.map((prompt: string, i: number) => {
-                const isEditing = editingResponses[i] !== undefined;
+                const isEditing = session.editingResponses[i] !== undefined;
                 const rawValue = savedResponses[i];
                 const savedValue = getResponseText(rawValue);
                 const source = getResponseSource(rawValue);
                 const codeRef = getResponseCodeRef(rawValue);
-                const responseValue = isEditing ? editingResponses[i] : savedValue;
-                const isAnswered = (savedValue || editingResponses[i] || "").trim().length > 0;
+                const responseValue = isEditing ? session.editingResponses[i] : savedValue;
+                const isAnswered = (savedValue || session.editingResponses[i] || "").trim().length > 0;
 
                 return (
                   <div key={i} className="group">
@@ -800,10 +395,10 @@ export function ORRView() {
                         <textarea
                           autoFocus
                           value={responseValue}
-                          onChange={(e) => handleResponseChange(i, e.target.value)}
+                          onChange={(e) => session.handleResponseChange(i, e.target.value)}
                           onBlur={() => {
-                            flushPendingEdits();
-                            setEditingResponses((prev) => {
+                            session.flushPendingEdits();
+                            session.setEditingResponses((prev) => {
                               const next = { ...prev };
                               delete next[i];
                               return next;
@@ -815,7 +410,7 @@ export function ORRView() {
                         />
                       ) : savedValue ? (
                         <div
-                          onClick={() => setEditingResponses((prev) => ({ ...prev, [i]: savedValue }))}
+                          onClick={() => session.setEditingResponses((prev) => ({ ...prev, [i]: savedValue }))}
                           className="w-full bg-gray-50 rounded border border-gray-200 p-2.5 text-sm text-gray-700 cursor-text hover:border-gray-300 hover:bg-gray-100 transition-colors"
                         >
                           {renderMarkdown(savedValue)}
@@ -831,7 +426,7 @@ export function ORRView() {
                         </div>
                       ) : (
                         <div
-                          onClick={() => setEditingResponses((prev) => ({ ...prev, [i]: "" }))}
+                          onClick={() => session.setEditingResponses((prev) => ({ ...prev, [i]: "" }))}
                           className="w-full bg-gray-50 rounded border border-gray-200 border-dashed p-2.5 text-sm text-gray-400 cursor-text hover:border-gray-300 transition-colors"
                         >
                           Click to answer, or let the AI capture your response during the review...
@@ -842,7 +437,7 @@ export function ORRView() {
                 );
               })}
 
-              {/* AI Observations (content field) */}
+              {/* AI Observations */}
               {currentSection.content && (
                 <div className="pt-3 border-t border-gray-200">
                   <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2">AI Observations</div>
@@ -902,7 +497,7 @@ export function ORRView() {
                                       const reason = prompt(f.type === "RISK" ? "Why is this risk acceptable?" : "Why accept this?");
                                       if (reason) {
                                         await api.flags.updateStatus(id!, activeSection!, i, { status: "ACCEPTED", resolution: reason });
-                                        reloadSections();
+                                        reloadData();
                                       }
                                     }}
                                     className="text-[9px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 hover:bg-purple-100"
@@ -914,7 +509,7 @@ export function ORRView() {
                                       const reason = prompt("What was done to resolve this?");
                                       if (reason) {
                                         await api.flags.updateStatus(id!, activeSection!, i, { status: "RESOLVED", resolution: reason });
-                                        reloadSections();
+                                        reloadData();
                                       }
                                     }}
                                     className="text-[9px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 hover:bg-green-100"
@@ -926,7 +521,7 @@ export function ORRView() {
                                 <button
                                   onClick={async () => {
                                     await api.flags.updateStatus(id!, activeSection!, i, { status: "OPEN" });
-                                    reloadSections();
+                                    reloadData();
                                   }}
                                   className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 hover:bg-gray-200"
                                 >
@@ -957,31 +552,31 @@ export function ORRView() {
       </div>
 
       <ConversationPanel
-        sessionId={sessionId}
-        sessionTokens={sessionTokens}
-        streaming={streaming}
-        messages={messages}
-        messagesEndRef={messagesEndRef}
-        notification={notification}
-        setNotification={setNotification}
-        streamStatus={streamStatus}
-        lastError={lastError}
-        setLastError={setLastError}
-        handleRetry={handleRetry}
+        sessionId={session.sessionId}
+        sessionTokens={session.sessionTokens}
+        streaming={session.streaming}
+        messages={session.messages}
+        messagesEndRef={session.messagesEndRef}
+        notification={session.notification}
+        setNotification={session.setNotification}
+        streamStatus={session.streamStatus}
+        lastError={session.lastError}
+        setLastError={session.setLastError}
+        handleRetry={session.handleRetry}
         startSession={startSession}
         endSession={endSession}
-        input={input}
-        handleInputChange={handleInputChange}
-        handleInputKeyDown={handleInputKeyDown}
-        handleSend={handleSend}
-        inputRef={inputRef}
-        showSlashMenu={showSlashMenu}
-        setShowSlashMenu={setShowSlashMenu}
-        filteredSlashCommands={filteredSlashCommands}
-        slashSelectedIndex={slashSelectedIndex}
-        setSlashSelectedIndex={setSlashSelectedIndex}
-        handleSlashSelect={handleSlashSelect}
-        speech={speech}
+        input={session.input}
+        handleInputChange={session.handleInputChange}
+        handleInputKeyDown={session.handleInputKeyDown}
+        handleSend={session.handleSend}
+        inputRef={session.inputRef}
+        showSlashMenu={session.showSlashMenu}
+        setShowSlashMenu={session.setShowSlashMenu}
+        filteredSlashCommands={session.filteredSlashCommands}
+        slashSelectedIndex={session.slashSelectedIndex}
+        setSlashSelectedIndex={session.setSlashSelectedIndex}
+        handleSlashSelect={session.handleSlashSelect}
+        speech={session.speech}
         discussingTitle={activeSection && currentSection ? currentSection.title : null}
         emptyStateText="Start an AI session to get help reviewing this ORR."
         emptyStateSubtext="The AI will help you think through questions, share relevant lessons, and assess depth."

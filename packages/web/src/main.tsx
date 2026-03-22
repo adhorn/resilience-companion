@@ -11,6 +11,7 @@ import { Flags } from "./pages/Flags";
 import { IncidentList } from "./pages/IncidentList";
 import { NewIncident } from "./pages/NewIncident";
 import { IncidentView } from "./pages/IncidentView";
+import { Insights } from "./pages/Insights";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -23,6 +24,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/orrs/new" element={<NewORR />} />
           <Route path="/incidents" element={<IncidentList />} />
           <Route path="/incidents/new" element={<NewIncident />} />
+          <Route path="/insights" element={<Insights />} />
           <Route path="/flags" element={<Flags />} />
           <Route path="/learn" element={<Learn />} />
         </Route>
