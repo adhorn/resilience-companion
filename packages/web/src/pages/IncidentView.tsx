@@ -1,23 +1,14 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api, sendIncidentMessage } from "../api/client";
-import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { api } from "../api/client";
 import { ConversationPanel } from "../components/ConversationPanel";
 import { ExperimentsPanel } from "../components/ExperimentsPanel";
 import { DEPTH_COLORS, DEPTH_LABELS, SEVERITY_COLORS_BOLD, FACTOR_CATEGORY_COLORS, EVENT_TYPE_COLORS } from "../lib/style-constants";
+import { renderMarkdown } from "../lib/markdown";
+import { parseResponses, getResponseText, answeredCount, totalQuestions } from "../lib/responses";
+import { useReviewSession, SlashCommand } from "../hooks/useReviewSession";
 
 type WorkspaceTab = "analysis" | "timeline" | "factors" | "actions" | "experiments";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
-
-interface SlashCommand {
-  name: string;
-  description: string;
-  prompt: string;
-}
 
 const SLASH_COMMANDS: SlashCommand[] = [
   {
@@ -57,89 +48,6 @@ const SLASH_COMMANDS: SlashCommand[] = [
   },
 ];
 
-
-/**
- * Render markdown-ish text to React elements.
- */
-function renderMarkdown(text: string): React.ReactNode {
-  const lines = text.split("\n");
-  const elements: React.ReactNode[] = [];
-  let listItems: string[] = [];
-  let listType: "ul" | "ol" | null = null;
-  let key = 0;
-
-  function flushList() {
-    if (listItems.length === 0) return;
-    const items = listItems.map((item, i) => (
-      <li key={i}>{renderInline(item)}</li>
-    ));
-    if (listType === "ol") {
-      elements.push(<ol key={key++} className="list-decimal list-inside space-y-1 my-1">{items}</ol>);
-    } else {
-      elements.push(<ul key={key++} className="list-disc list-inside space-y-1 my-1">{items}</ul>);
-    }
-    listItems = [];
-    listType = null;
-  }
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^[-•]\s/.test(trimmed)) {
-      if (listType !== "ul") flushList();
-      listType = "ul";
-      listItems.push(trimmed.replace(/^[-•]\s+/, ""));
-      continue;
-    }
-    if (/^\d+[.)]\s/.test(trimmed)) {
-      if (listType !== "ol") flushList();
-      listType = "ol";
-      listItems.push(trimmed.replace(/^\d+[.)]\s+/, ""));
-      continue;
-    }
-    flushList();
-    if (trimmed === "") {
-      elements.push(<div key={key++} className="h-3" />);
-    } else {
-      elements.push(<p key={key++} className="mb-2 last:mb-0">{renderInline(trimmed)}</p>);
-    }
-  }
-  flushList();
-  return <>{elements}</>;
-}
-
-function renderInline(text: string): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-  let remaining = text;
-  let key = 0;
-
-  while (remaining.length > 0) {
-    const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*(.*)/s);
-    if (boldMatch) {
-      if (boldMatch[1]) parts.push(<span key={key++}>{boldMatch[1]}</span>);
-      parts.push(<strong key={key++} className="font-semibold">{boldMatch[2]}</strong>);
-      remaining = boldMatch[3];
-      continue;
-    }
-    const italicMatch = remaining.match(/^(.*?)\*(.+?)\*(.*)/s);
-    if (italicMatch) {
-      if (italicMatch[1]) parts.push(<span key={key++}>{italicMatch[1]}</span>);
-      parts.push(<em key={key++}>{italicMatch[2]}</em>);
-      remaining = italicMatch[3];
-      continue;
-    }
-    const codeMatch = remaining.match(/^(.*?)`(.+?)`(.*)/s);
-    if (codeMatch) {
-      if (codeMatch[1]) parts.push(<span key={key++}>{codeMatch[1]}</span>);
-      parts.push(<code key={key++} className="px-1 py-0.5 bg-gray-200 rounded text-xs font-mono">{codeMatch[2]}</code>);
-      remaining = codeMatch[3];
-      continue;
-    }
-    parts.push(<span key={key++}>{remaining}</span>);
-    break;
-  }
-  return <>{parts}</>;
-}
-
 export function IncidentView() {
   const { id } = useParams<{ id: string }>();
   const [incident, setIncident] = useState<any>(null);
@@ -148,30 +56,42 @@ export function IncidentView() {
   const [contributingFactors, setContributingFactors] = useState<any[]>([]);
   const [actionItems, setActionItems] = useState<any[]>([]);
   const [activeSection, setActiveSection] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sessionTokens, setSessionTokens] = useState(0);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [streaming, setStreaming] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [notification, setNotification] = useState<string | null>(null);
-  const [streamStatus, setStreamStatus] = useState<string | null>(null);
-  const [lastError, setLastError] = useState<string | null>(null);
-  const lastUserMessageRef = useRef<string | null>(null);
-  const speech = useSpeechRecognition((text) => {
-    setInput((prev) => (prev ? prev + " " + text : text));
-  });
-  const [showSlashMenu, setShowSlashMenu] = useState(false);
-  const [slashFilter, setSlashFilter] = useState("");
-  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("analysis");
-  const [saving, setSaving] = useState(false);
-  const [editingResponses, setEditingResponses] = useState<Record<number, string>>({});
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reloadSeqRef = useRef(0);
+
+  const reloadData = useCallback(async () => {
+    if (!id) return;
+    const res = await api.incidents.get(id);
+    setIncident(res.incident);
+    setSections(res.sections.sort((a: any, b: any) => a.position - b.position));
+    setTimelineEvents(res.timelineEvents || []);
+    setContributingFactors(res.contributingFactors || []);
+    setActionItems(res.actionItems || []);
+  }, [id]);
+
+  const saveResponses = useCallback(
+    async (sectionId: string, responses: Record<number, string>) => {
+      if (!id) return;
+      await api.incidentSections.update(id, sectionId, { promptResponses: responses });
+      setSections((prev) =>
+        prev.map((s) => (s.id === sectionId ? { ...s, promptResponses: responses } : s)),
+      );
+    },
+    [id],
+  );
+
+  const session = useReviewSession({
+    practiceId: id,
+    buildMessageUrl: (practiceId, sessionId) =>
+      `/api/v1/incidents/${practiceId}/sessions/${sessionId}/messages`,
+    reloadData,
+    activeSection,
+    setActiveSection,
+    slashCommands: SLASH_COMMANDS,
+    sections,
+    saveResponses,
+    renewalMessage: "Session renewed (token limit reached). Your analysis continues seamlessly.",
+  });
 
   // Load incident + restore active session
   useEffect(() => {
@@ -192,13 +112,13 @@ export function IncidentView() {
         const sessRes = await api.incidentSessions.list(id!);
         const activeSession = sessRes.sessions.find((s: any) => s.status === "ACTIVE");
         if (activeSession) {
-          setSessionId(activeSession.id);
-          setSessionTokens(activeSession.tokenUsage || 0);
+          session.setSessionId(activeSession.id);
+          session.setSessionTokens(activeSession.tokenUsage || 0);
         } else {
           try {
             const newSess = await api.incidentSessions.create(id!);
-            setSessionId(newSess.session.id);
-            setSessionTokens(0);
+            session.setSessionId(newSess.session.id);
+            session.setSessionTokens(0);
           } catch (err) {
             console.error("Failed to auto-create session:", err);
           }
@@ -207,7 +127,7 @@ export function IncidentView() {
         // Load all messages
         const msgRes = await api.incidentSessions.getAllMessages(id!);
         if (msgRes.messages.length > 0) {
-          setMessages(
+          session.setMessages(
             msgRes.messages.map((m: any) => ({
               role: m.role as "user" | "assistant",
               content: m.content,
@@ -220,245 +140,22 @@ export function IncidentView() {
     }
 
     loadIncident();
-  }, [id]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const reloadIncident = useCallback(async () => {
-    if (!id) return;
-    const seq = ++reloadSeqRef.current;
-    const res = await api.incidents.get(id);
-    if (seq === reloadSeqRef.current) {
-      setIncident(res.incident);
-      setSections(res.sections.sort((a: any, b: any) => a.position - b.position));
-      setTimelineEvents(res.timelineEvents || []);
-      setContributingFactors(res.contributingFactors || []);
-      setActionItems(res.actionItems || []);
-    }
-  }, [id]);
-
-  const debouncedReload = useCallback(() => {
-    if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
-    reloadTimerRef.current = setTimeout(() => {
-      reloadIncident();
-    }, 300);
-  }, [reloadIncident]);
-
-  // Auto-save per-question responses with debounce
-  const saveResponses = useCallback(
-    async (sectionId: string, responses: Record<number, string>) => {
-      if (!id) return;
-      setSaving(true);
-      try {
-        await api.incidentSections.update(id, sectionId, { promptResponses: responses });
-        setSections((prev) =>
-          prev.map((s) => (s.id === sectionId ? { ...s, promptResponses: responses } : s)),
-        );
-      } finally {
-        setSaving(false);
-      }
-    },
-    [id],
-  );
-
-  // Track pending edits in a ref so blur can flush them synchronously
-  const pendingEditsRef = useRef<Record<number, string>>({});
-
-  const handleResponseChange = useCallback(
-    (questionIndex: number, value: string) => {
-      setEditingResponses((prev) => {
-        const updated = { ...prev, [questionIndex]: value };
-        pendingEditsRef.current = updated;
-        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = setTimeout(() => {
-          if (activeSection) {
-            const currentSection = sections.find((s) => s.id === activeSection);
-            const savedResponses = parseResponses(currentSection);
-            const merged = { ...savedResponses, ...updated };
-            saveResponses(activeSection, merged);
-            pendingEditsRef.current = {};
-          }
-        }, 1000);
-        return updated;
-      });
-    },
-    [activeSection, sections, saveResponses],
-  );
-
-  const flushPendingEdits = useCallback(() => {
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    const pending = pendingEditsRef.current;
-    if (Object.keys(pending).length > 0 && activeSection) {
-      const currentSection = sections.find((s) => s.id === activeSection);
-      const savedResponses = parseResponses(currentSection);
-      const merged = { ...savedResponses, ...pending };
-      saveResponses(activeSection, merged);
-      pendingEditsRef.current = {};
-    }
-  }, [activeSection, sections, saveResponses]);
-
-  // Flush pending edits and reset editing state when switching sections
-  useEffect(() => {
-    flushPendingEdits();
-    setEditingResponses({});
-  }, [activeSection, flushPendingEdits]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startSession = useCallback(async () => {
     if (!id) return;
     const res = await api.incidentSessions.create(id);
-    setSessionId(res.session.id);
-    setSessionTokens(0);
-    setMessages([]);
-  }, [id]);
+    session.setSessionId(res.session.id);
+    session.setSessionTokens(0);
+    session.setMessages([]);
+  }, [id, session]);
 
   const endSession = useCallback(async () => {
-    if (!id || !sessionId) return;
-    await api.incidentSessions.end(id, sessionId);
-    setSessionId(null);
-    await reloadIncident();
-  }, [id, sessionId, reloadIncident]);
-
-  const doSend = useCallback(async (userMessage: string) => {
-    if (!id || !sessionId || streaming) return;
-
-    lastUserMessageRef.current = userMessage;
-    setLastError(null);
-    setStreaming(true);
-    setStreamStatus(null);
-
-    let assistantContent = "";
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-
-    try {
-      await sendIncidentMessage(id, sessionId, userMessage, activeSection, (event) => {
-        if (event.type === "content_delta") {
-          setStreamStatus(null);
-          assistantContent += event.content;
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[updated.length - 1] = { role: "assistant", content: assistantContent };
-            return updated;
-          });
-        }
-        if (event.type === "status") setStreamStatus(event.message);
-        if (event.type === "error") { setLastError(event.message); setStreamStatus(null); }
-        if (event.type === "tool_call" && event.args?.section_id) setActiveSection(event.args.section_id);
-        if (event.type === "section_updated") {
-          if (event.sectionId) setActiveSection(event.sectionId);
-          debouncedReload();
-        }
-        if (event.type === "data_updated") {
-          debouncedReload();
-        }
-        if (event.type === "message_end" && event.tokenUsage) {
-          setSessionTokens((prev) => prev + event.tokenUsage);
-        }
-        if (event.type === "session_renewed") {
-          setSessionId(event.newSessionId);
-          setSessionTokens(0);
-          setNotification("Session renewed (token limit reached). Your analysis continues seamlessly.");
-          setTimeout(() => setNotification(null), 8000);
-        }
-      });
-    } catch (err) {
-      setLastError((prev) => prev || "Connection lost. Your conversation is saved — reload the page to continue.");
-    }
-
-    setStreamStatus(null);
-
-    if (!assistantContent.trim()) {
-      setLastError((prev) => prev || "No response received. The AI may be overloaded.");
-      setMessages((prev) => {
-        if (prev.length > 0 && prev[prev.length - 1].role === "assistant" && !prev[prev.length - 1].content.trim()) {
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            role: "assistant",
-            content: "*Failed to generate a response. Use the Retry button above to try again.*",
-          };
-          return updated;
-        }
-        return prev;
-      });
-    }
-
-    await reloadIncident();
-    setStreaming(false);
-  }, [id, sessionId, activeSection, streaming, reloadIncident, debouncedReload]);
-
-  const filteredSlashCommands = SLASH_COMMANDS.filter((cmd) =>
-    cmd.name.startsWith(slashFilter.toLowerCase()),
-  );
-
-  const handleSlashSelect = useCallback((cmd: SlashCommand) => {
-    setInput("");
-    setShowSlashMenu(false);
-    setSlashFilter("");
-    setSlashSelectedIndex(0);
-    setMessages((prev) => [...prev, { role: "user", content: `/${cmd.name}` }]);
-    doSend(cmd.prompt);
-  }, [doSend]);
-
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setInput(val);
-    if (val === "/") {
-      setShowSlashMenu(true);
-      setSlashFilter("");
-      setSlashSelectedIndex(0);
-    } else if (val.startsWith("/") && !val.includes(" ")) {
-      setShowSlashMenu(true);
-      setSlashFilter(val.slice(1));
-      setSlashSelectedIndex(0);
-    } else {
-      setShowSlashMenu(false);
-    }
-  }, []);
-
-  const handleSend = useCallback(async () => {
-    if (!input.trim() || !id || !sessionId || streaming) return;
-    setShowSlashMenu(false);
-    const userMessage = input.trim();
-    setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
-    await doSend(userMessage);
-  }, [input, id, sessionId, streaming, doSend]);
-
-  const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showSlashMenu && filteredSlashCommands.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSlashSelectedIndex((prev) => Math.min(prev + 1, filteredSlashCommands.length - 1));
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSlashSelectedIndex((prev) => Math.max(prev - 1, 0));
-        return;
-      }
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        handleSlashSelect(filteredSlashCommands[slashSelectedIndex]);
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setShowSlashMenu(false);
-        return;
-      }
-    }
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }, [showSlashMenu, filteredSlashCommands, slashSelectedIndex, handleSlashSelect, handleSend]);
-
-  const handleRetry = useCallback(async () => {
-    if (!lastUserMessageRef.current || streaming) return;
-    setLastError(null);
-    await doSend(lastUserMessageRef.current);
-  }, [streaming, doSend]);
+    if (!id || !session.sessionId) return;
+    await api.incidentSessions.end(id, session.sessionId);
+    session.setSessionId(null);
+    await reloadData();
+  }, [id, session, reloadData]);
 
   if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
   if (!incident) return <div className="p-6 text-red-500">Incident not found</div>;
@@ -469,32 +166,7 @@ export function IncidentView() {
       ? JSON.parse(currentSection.prompts)
       : currentSection.prompts
     : [];
-
-  const parseResponses = (section: any): Record<number, any> => {
-    if (!section?.promptResponses) return {};
-    const raw = typeof section.promptResponses === "string"
-      ? JSON.parse(section.promptResponses)
-      : section.promptResponses;
-    return raw || {};
-  };
-
-  const getResponseText = (val: any): string => {
-    if (!val) return "";
-    if (typeof val === "string") return val;
-    if (typeof val === "object" && val.answer) return val.answer;
-    return "";
-  };
-
-  const answeredCount = (section: any): number => {
-    const responses = parseResponses(section);
-    return Object.values(responses).filter((v) => getResponseText(v).trim().length > 0).length;
-  };
-
-  const totalQuestions = (section: any): number => {
-    const prompts = typeof section.prompts === "string"
-      ? JSON.parse(section.prompts) : section.prompts;
-    return (prompts || []).length;
-  };
+  const savedResponses = parseResponses(currentSection);
 
   return (
     <div className="flex h-screen">
@@ -654,15 +326,14 @@ export function IncidentView() {
               {/* Questions */}
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs text-gray-400">Click any answer to edit</span>
-                {saving && <span className="text-[10px] text-gray-400 ml-auto">Saving...</span>}
+                {session.saving && <span className="text-[10px] text-gray-400 ml-auto">Saving...</span>}
               </div>
               <div className="space-y-4">
                 {currentPrompts.map((prompt: string, i: number) => {
-                  const responses = parseResponses(currentSection);
-                  const isEditing = editingResponses[i] !== undefined;
-                  const savedValue = getResponseText(responses[i]);
-                  const responseValue = isEditing ? editingResponses[i] : savedValue;
-                  const isAnswered = (savedValue || editingResponses[i] || "").trim().length > 0;
+                  const isEditing = session.editingResponses[i] !== undefined;
+                  const savedValue = getResponseText(savedResponses[i]);
+                  const responseValue = isEditing ? session.editingResponses[i] : savedValue;
+                  const isAnswered = (savedValue || session.editingResponses[i] || "").trim().length > 0;
                   return (
                     <div key={i} className="group">
                       <div className="flex items-start gap-2 mb-1.5">
@@ -676,10 +347,10 @@ export function IncidentView() {
                           <textarea
                             autoFocus
                             value={responseValue}
-                            onChange={(e) => handleResponseChange(i, e.target.value)}
+                            onChange={(e) => session.handleResponseChange(i, e.target.value)}
                             onBlur={() => {
-                              flushPendingEdits();
-                              setEditingResponses((prev) => {
+                              session.flushPendingEdits();
+                              session.setEditingResponses((prev) => {
                                 const next = { ...prev };
                                 delete next[i];
                                 return next;
@@ -691,14 +362,14 @@ export function IncidentView() {
                           />
                         ) : savedValue ? (
                           <div
-                            onClick={() => setEditingResponses((prev) => ({ ...prev, [i]: savedValue }))}
+                            onClick={() => session.setEditingResponses((prev) => ({ ...prev, [i]: savedValue }))}
                             className="w-full bg-gray-50 rounded border border-gray-200 p-2.5 text-sm text-gray-700 cursor-text hover:border-gray-300 hover:bg-gray-100 transition-colors"
                           >
                             {renderMarkdown(savedValue)}
                           </div>
                         ) : (
                           <div
-                            onClick={() => setEditingResponses((prev) => ({ ...prev, [i]: "" }))}
+                            onClick={() => session.setEditingResponses((prev) => ({ ...prev, [i]: "" }))}
                             className="w-full bg-gray-50 rounded border border-dashed border-gray-300 p-2.5 text-sm text-gray-400 cursor-text hover:border-gray-400 hover:bg-gray-100 transition-colors"
                           >
                             Click to answer...
@@ -877,31 +548,31 @@ export function IncidentView() {
       </div>
 
       <ConversationPanel
-        sessionId={sessionId}
-        sessionTokens={sessionTokens}
-        streaming={streaming}
-        messages={messages}
-        messagesEndRef={messagesEndRef}
-        notification={notification}
-        setNotification={setNotification}
-        streamStatus={streamStatus}
-        lastError={lastError}
-        setLastError={setLastError}
-        handleRetry={handleRetry}
+        sessionId={session.sessionId}
+        sessionTokens={session.sessionTokens}
+        streaming={session.streaming}
+        messages={session.messages}
+        messagesEndRef={session.messagesEndRef}
+        notification={session.notification}
+        setNotification={session.setNotification}
+        streamStatus={session.streamStatus}
+        lastError={session.lastError}
+        setLastError={session.setLastError}
+        handleRetry={session.handleRetry}
         startSession={startSession}
         endSession={endSession}
-        input={input}
-        handleInputChange={handleInputChange}
-        handleInputKeyDown={handleInputKeyDown}
-        handleSend={handleSend}
-        inputRef={inputRef}
-        showSlashMenu={showSlashMenu}
-        setShowSlashMenu={setShowSlashMenu}
-        filteredSlashCommands={filteredSlashCommands}
-        slashSelectedIndex={slashSelectedIndex}
-        setSlashSelectedIndex={setSlashSelectedIndex}
-        handleSlashSelect={handleSlashSelect}
-        speech={speech}
+        input={session.input}
+        handleInputChange={session.handleInputChange}
+        handleInputKeyDown={session.handleInputKeyDown}
+        handleSend={session.handleSend}
+        inputRef={session.inputRef}
+        showSlashMenu={session.showSlashMenu}
+        setShowSlashMenu={session.setShowSlashMenu}
+        filteredSlashCommands={session.filteredSlashCommands}
+        slashSelectedIndex={session.slashSelectedIndex}
+        setSlashSelectedIndex={session.setSlashSelectedIndex}
+        handleSlashSelect={session.handleSlashSelect}
+        speech={session.speech}
         discussingTitle={activeSection && currentSection ? currentSection.title : null}
         emptyStateText="Start an AI session to get help analyzing this incident."
         emptyStateSubtext="The AI will help you explore contributing factors, build timelines, and extract systemic learning."

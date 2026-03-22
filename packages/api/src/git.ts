@@ -10,15 +10,15 @@
  */
 
 import { existsSync, mkdirSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 // --- Repo storage ---
 
-// Repos live alongside the DB file.
-// DB_PATH=./data/orr-companion.db → REPOS_DIR=./data/repos
-const REPOS_DIR = resolve(dirname(process.env.DB_PATH || "./data/orr-companion.db"), "repos");
+// Cloned repos live in a dedicated top-level folder, separate from the DB.
+// Override with REPOS_DIR env var; default is ./repos relative to CWD (monorepo root).
+const REPOS_DIR = resolve(process.env.REPOS_DIR || "./repos");
 
 /** Validate a git URL. Only HTTPS allowed, no embedded credentials. */
 export function validateGitUrl(url: string): { valid: boolean; error?: string } {

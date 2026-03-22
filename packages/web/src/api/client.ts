@@ -188,15 +188,24 @@ export const api = {
     get: (id: string) =>
       request<{ caseStudy: any }>(`/case-studies/${id}`),
   },
+
+  // Insights (learning signals)
+  insights: {
+    get: () =>
+      request<{
+        discoveries: any[];
+        crossPracticeLinks: any[];
+        actionItems: any[];
+      }>("/insights"),
+  },
 };
 
 /**
  * Send a message to an AI session and read SSE stream.
  * Aborts if no data received within 60 seconds.
  */
-export async function sendMessage(
-  orrId: string,
-  sessionId: string,
+export async function sendSSEMessage(
+  url: string,
   content: string,
   sectionId: string | null,
   onEvent: (event: any) => void,
@@ -204,15 +213,12 @@ export async function sendMessage(
   const controller = new AbortController();
   let timeoutId = setTimeout(() => controller.abort(), 60_000);
 
-  const res = await fetch(
-    `${API_BASE}/orrs/${orrId}/sessions/${sessionId}/messages`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content, sectionId }),
-      signal: controller.signal,
-    },
-  );
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content, sectionId }),
+    signal: controller.signal,
+  });
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
@@ -230,7 +236,6 @@ export async function sendMessage(
       const { done, value } = await reader.read();
       if (done) break;
 
-      // Reset timeout on each chunk received
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => controller.abort(), 60_000);
 
@@ -245,8 +250,6 @@ export async function sendMessage(
             if (data.type === "content_delta") hasContent = true;
             onEvent(data);
 
-            // If we got a fatal error with no content, abort the stream
-            // immediately instead of waiting for it to close
             if (data.type === "error" && !hasContent) {
               controller.abort();
               return;
@@ -262,70 +265,16 @@ export async function sendMessage(
   }
 }
 
-/**
- * Send a message to an incident AI session and read SSE stream.
- */
-export async function sendIncidentMessage(
-  incidentId: string,
-  sessionId: string,
-  content: string,
-  sectionId: string | null,
-  onEvent: (event: any) => void,
+/** Convenience: send to ORR session */
+export function sendMessage(
+  orrId: string, sessionId: string, content: string, sectionId: string | null, onEvent: (event: any) => void,
 ): Promise<void> {
-  const controller = new AbortController();
-  let timeoutId = setTimeout(() => controller.abort(), 60_000);
+  return sendSSEMessage(`${API_BASE}/orrs/${orrId}/sessions/${sessionId}/messages`, content, sectionId, onEvent);
+}
 
-  const res = await fetch(
-    `${API_BASE}/incidents/${incidentId}/sessions/${sessionId}/messages`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content, sectionId }),
-      signal: controller.signal,
-    },
-  );
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.message || "Failed to send message");
-  }
-  if (!res.body) throw new Error("No response body");
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let hasContent = false;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => controller.abort(), 60_000);
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (line.startsWith("data:")) {
-          try {
-            const data = JSON.parse(line.slice(5).trim());
-            if (data.type === "content_delta") hasContent = true;
-            onEvent(data);
-
-            if (data.type === "error" && !hasContent) {
-              controller.abort();
-              return;
-            }
-          } catch {
-            // Skip malformed events
-          }
-        }
-      }
-    }
-  } finally {
-    clearTimeout(timeoutId);
-  }
+/** Convenience: send to incident session */
+export function sendIncidentMessage(
+  incidentId: string, sessionId: string, content: string, sectionId: string | null, onEvent: (event: any) => void,
+): Promise<void> {
+  return sendSSEMessage(`${API_BASE}/incidents/${incidentId}/sessions/${sessionId}/messages`, content, sectionId, onEvent);
 }

@@ -273,6 +273,20 @@ You have tools to search and read the service's source code (search_code, read_f
 
 6. **Tag the source**: When you record findings from code exploration using update_question_response, ALWAYS set source to "code" and include the file reference in code_ref. This is not a judgment — it's data for understanding the team's blind spots. A high ratio of code-sourced answers in a section means the team has less operational familiarity there.
 
+**Show the code, don't just describe it.** When you find relevant code, include the key snippet inline — formatted as a code block with the file path and line range. Teams learn more from seeing the actual implementation than from your summary of it. Keep snippets focused (10-30 lines of the relevant logic, not entire files). For example, instead of saying "the retry logic uses 3 retries with exponential backoff", show:
+
+\`\`\`typescript
+// src/retry.ts:24-31
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 2000;
+for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  const delay = BASE_DELAY_MS * Math.pow(2, attempt);
+  // ...
+}
+\`\`\`
+
+Then add your observations about what the code reveals — patterns, risks, or surprises. The code is evidence; show it, then discuss it.
+
 The key insight: a team that can't recall how their retry logic works has a different readiness posture than a team that can trace it from memory. Both get the answer eventually, but the source tells us something important about operational preparedness.`);
   }
 
