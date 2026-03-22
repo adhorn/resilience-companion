@@ -1,199 +1,23 @@
+/**
+ * Tool definitions and executor for the Review Facilitator agent.
+ * Shared section tools come from practices/shared/tools.ts.
+ * ORR-specific tools: record_dependency, search_code, read_file, list_directory.
+ */
 import { eq, and, sql } from "drizzle-orm";
-import { nanoid } from "nanoid";
 import { getDb, schema } from "../db/index.js";
 import type { LLMToolDef } from "../llm/index.js";
 import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import {
+  createSharedToolDefs,
+  CROSS_PRACTICE_TOOL_DEFS,
+  executeSharedTool,
+} from "../practices/shared/tools.js";
 
-/**
- * Tool definitions for the Review Facilitator agent.
- * 7 tools that let the agent read/write the ORR document.
- */
-export const AGENT_TOOLS: LLMToolDef[] = [
-  {
-    type: "function",
-    function: {
-      name: "read_section",
-      description: "Read the full content and prompts of a specific ORR section",
-      parameters: {
-        type: "object",
-        properties: {
-          section_id: { type: "string", description: "The section ID to read" },
-        },
-        required: ["section_id"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "update_section_content",
-      description:
-        "Update the section's narrative content with cross-cutting observations. IMPORTANT: For answers to specific questions, use update_question_response instead — this tool is for general observations that span multiple questions or don't map to a single question.",
-      parameters: {
-        type: "object",
-        properties: {
-          section_id: { type: "string", description: "The section ID to update" },
-          content: { type: "string", description: "The new content to set (or append to existing)" },
-          append: { type: "boolean", description: "If true, append to existing content. Default true." },
-        },
-        required: ["section_id", "content"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "update_depth_assessment",
-      description:
-        "Update the depth assessment for a section based on learning indicators. SURFACE: team recites what exists but can't explain why or predict beyond documented failures (fluency illusion). MODERATE: team retrieves specifics for known scenarios, traces paths, explains some design reasoning, but hasn't predicted novel failures or made cross-section connections. DEEP: team generates predictions docs don't cover, explains why designs work, connects patterns across sections, identifies own blind spots. In the rationale, cite specific indicators you observed (e.g. 'traced failover path accurately but couldn't explain timeout value').",
-      parameters: {
-        type: "object",
-        properties: {
-          section_id: { type: "string", description: "The section ID" },
-          depth: {
-            type: "string",
-            enum: ["SURFACE", "MODERATE", "DEEP"],
-            description: "The assessed depth level",
-          },
-          rationale: {
-            type: "string",
-            description: "Brief explanation of why this depth was assessed",
-          },
-        },
-        required: ["section_id", "depth", "rationale"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "set_flags",
-      description:
-        "Set flags on a section to highlight risks, gaps, strengths, or items needing follow-up. For RISK flags, always include severity and deadline to ensure accountability.",
-      parameters: {
-        type: "object",
-        properties: {
-          section_id: { type: "string", description: "The section ID" },
-          flags: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                type: {
-                  type: "string",
-                  enum: ["RISK", "GAP", "STRENGTH", "FOLLOW_UP"],
-                },
-                note: { type: "string", description: "Brief description of the flag" },
-                severity: {
-                  type: "string",
-                  enum: ["HIGH", "MEDIUM", "LOW"],
-                  description: "Severity level. Required for RISK flags only.",
-                },
-                deadline: {
-                  type: "string",
-                  description: "Deadline to address this risk as ISO date (YYYY-MM-DD). Required for RISK flags only.",
-                },
-              },
-              required: ["type", "note"],
-            },
-            description: "Flags to set (replaces existing flags). RISK flags must include severity and deadline.",
-          },
-        },
-        required: ["section_id", "flags"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "query_teaching_moments",
-      description:
-        "Search the teaching moment library for relevant industry lessons. Use when the conversation touches on a topic where there might be relevant patterns or failure modes to share.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Search query" },
-          section_tag: {
-            type: "string",
-            description: "Optional: filter by section title",
-          },
-        },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "query_case_studies",
-      description:
-        "Search the case study library for relevant real-world incidents to reference in conversation.",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Search query" },
-        },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "update_question_response",
-      description:
-        "PRIMARY tool for recording answers. You MUST call this for every question the team answers — this is what makes answers visible in the UI. Maps each answer to its specific question. Use update_section_content only for cross-cutting observations that don't map to a single question. When recording findings from read_file or search_code, set source to 'code' and include the file reference in code_ref.",
-      parameters: {
-        type: "object",
-        properties: {
-          section_id: { type: "string", description: "The section ID" },
-          question_index: {
-            type: "number",
-            description: "0-based index of the question in the section's prompts array",
-          },
-          response: {
-            type: "string",
-            description: "The answer text to write for this question",
-          },
-          source: {
-            type: "string",
-            enum: ["team", "code"],
-            description: "Where this answer came from. 'team' (default) = team provided from memory. 'code' = found by reading source code.",
-          },
-          code_ref: {
-            type: "string",
-            description: "File reference when source is 'code', e.g. 'src/retry.ts:45-92'. Omit for team-sourced answers.",
-          },
-        },
-        required: ["section_id", "question_index", "response"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "write_session_summary",
-      description:
-        "Write a summary of what was covered and discovered in this session. Call this when wrapping up a session. Include discoveries — things that surprised the team, contradicted expectations, or revealed gaps between how they thought the system works and how it actually works.",
-      parameters: {
-        type: "object",
-        properties: {
-          summary: {
-            type: "string",
-            description: "Narrative summary of the session: what was discussed, key observations, depth achieved, flags raised",
-          },
-          discoveries: {
-            type: "array",
-            items: { type: "string" },
-            description: "List of things that surprised the team or contradicted their expectations during this session. Each should be a concise statement of what was discovered.",
-          },
-        },
-        required: ["summary"],
-      },
-    },
-  },
+// --- ORR-specific tool definitions ---
+
+const ORR_SPECIFIC_TOOLS: LLMToolDef[] = [
   {
     type: "function",
     function: {
@@ -228,100 +52,6 @@ export const AGENT_TOOLS: LLMToolDef[] = [
       },
     },
   },
-  {
-    type: "function",
-    function: {
-      name: "suggest_experiment",
-      description:
-        "Suggest a chaos experiment, load test, or gameday based on validation gaps discovered during the review. Use when the team claims resilience but hasn't validated it, when blast radius is high and failure modes are untested, or when the team uses hedging language about system behavior. Prioritize by ROI: largest blast radius + lowest confidence = highest priority.",
-      parameters: {
-        type: "object",
-        properties: {
-          type: {
-            type: "string",
-            enum: ["chaos_experiment", "load_test", "gameday"],
-            description: "chaos_experiment: test failure modes. load_test: validate scaling claims. gameday: exercise team response.",
-          },
-          title: { type: "string", description: "Short description of the experiment" },
-          hypothesis: {
-            type: "string",
-            description: "What you expect to happen, e.g. 'When Stripe is unavailable, checkout degrades to cached prices without losing orders'",
-          },
-          rationale: {
-            type: "string",
-            description: "Why this matters — reference specific findings from the review",
-          },
-          priority: {
-            type: "string",
-            enum: ["critical", "high", "medium", "low"],
-            description: "critical: unvalidated + large blast radius + customer-facing. high: untested failure mode with significant blast radius. medium: known gap with moderate impact. low: minor gap or partially covered.",
-          },
-          priority_reasoning: {
-            type: "string",
-            description: "Why this priority level — cite blast radius, confidence level, customer impact",
-          },
-          blast_radius_notes: {
-            type: "string",
-            description: "What's at stake if the hypothesis is wrong",
-          },
-          section_id: {
-            type: "string",
-            description: "The section that triggered this suggestion",
-          },
-        },
-        required: ["type", "title", "hypothesis", "rationale", "priority", "priority_reasoning"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "suggest_cross_practice_action",
-      description:
-        "Suggest how an ORR finding could inform another resilience practice (chaos engineering, load testing, incident analysis, GameDay). Use when the review reveals gaps, assumptions, or risks that another practice is better positioned to investigate. This builds the cross-practice learning system described in the book.",
-      parameters: {
-        type: "object",
-        properties: {
-          target_practice: {
-            type: "string",
-            enum: ["chaos_engineering", "load_testing", "orr", "incident_analysis", "gameday"],
-            description: "Which practice this suggestion is for",
-          },
-          suggestion: { type: "string", description: "What to do" },
-          rationale: { type: "string", description: "Why this ORR finding suggests it" },
-        },
-        required: ["target_practice", "suggestion", "rationale"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "record_action_item",
-      description:
-        "Record a structured action item discovered during the ORR review. Use for things that need doing — process changes, technical fixes, organizational improvements, or learning activities. More structured than FOLLOW_UP flags: includes owner, priority, due date.",
-      parameters: {
-        type: "object",
-        properties: {
-          title: { type: "string", description: "Short description of what needs to be done" },
-          owner: { type: "string", description: "Person or team responsible" },
-          due_date: { type: "string", description: "Target date (YYYY-MM-DD)" },
-          priority: {
-            type: "string",
-            enum: ["high", "medium", "low"],
-            description: "Priority level",
-          },
-          type: {
-            type: "string",
-            enum: ["technical", "process", "organizational", "learning"],
-            description: "Category of the action",
-          },
-          success_criteria: { type: "string", description: "How to know this is done" },
-        },
-        required: ["title", "priority", "type"],
-      },
-    },
-  },
   // --- Code exploration tools (only work if ORR has repositoryPath configured) ---
   {
     type: "function",
@@ -333,10 +63,7 @@ export const AGENT_TOOLS: LLMToolDef[] = [
         type: "object",
         properties: {
           query: { type: "string", description: "Text or pattern to search for" },
-          file_pattern: {
-            type: "string",
-            description: "Optional glob to filter files, e.g. '*.ts' or 'src/**/*.py'",
-          },
+          file_pattern: { type: "string", description: "Optional glob to filter files, e.g. '*.ts' or 'src/**/*.py'" },
         },
         required: ["query"],
       },
@@ -363,8 +90,7 @@ export const AGENT_TOOLS: LLMToolDef[] = [
     type: "function",
     function: {
       name: "list_directory",
-      description:
-        "List files and directories at a path in the service's source code. Use to orient before reading specific files.",
+      description: "List files and directories at a path in the service's source code. Use to orient before reading specific files.",
       parameters: {
         type: "object",
         properties: {
@@ -376,17 +102,18 @@ export const AGENT_TOOLS: LLMToolDef[] = [
   },
 ];
 
+export const AGENT_TOOLS: LLMToolDef[] = [
+  ...createSharedToolDefs("ORR"),
+  ...CROSS_PRACTICE_TOOL_DEFS,
+  ...ORR_SPECIFIC_TOOLS,
+];
+
 /**
  * Resolve and validate a file path within the ORR's repository.
- * Returns the absolute path if valid, or null if the repo isn't configured or path escapes the sandbox.
  */
 function resolveRepoPath(orrId: string, relativePath: string): { absPath: string; repoRoot: string } | { error: string } {
   const db = getDb();
-  const orr = db
-    .select()
-    .from(schema.orrs)
-    .where(eq(schema.orrs.id, orrId))
-    .get();
+  const orr = db.select().from(schema.orrs).where(eq(schema.orrs.id, orrId)).get();
 
   if (!orr?.repositoryLocalPath) {
     return { error: "No repository path configured for this ORR. Ask the team to set one." };
@@ -397,28 +124,16 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
     return { error: `Repository path does not exist or is not a directory: ${logicalRoot}` };
   }
 
-  // Resolve symlinks to prevent escape via symlinked paths
   let realRoot: string;
-  try {
-    realRoot = realpathSync(logicalRoot);
-  } catch {
-    return { error: "Could not resolve repository path." };
-  }
+  try { realRoot = realpathSync(logicalRoot); } catch { return { error: "Could not resolve repository path." }; }
 
   const logicalPath = resolve(logicalRoot, relativePath);
-
-  // First check logical path (catches ../../../etc/passwd)
   if (!logicalPath.startsWith(logicalRoot + "/") && logicalPath !== logicalRoot) {
     return { error: "Path escapes the repository root. Access denied." };
   }
 
-  // Then resolve symlinks on the target and check real path
   let realPath: string;
-  try {
-    realPath = realpathSync(logicalPath);
-  } catch {
-    // Target doesn't exist — that's fine for list_directory pre-checks,
-    // callers will handle existence checks themselves
+  try { realPath = realpathSync(logicalPath); } catch {
     return { absPath: logicalPath, repoRoot: logicalRoot };
   }
 
@@ -431,6 +146,7 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
 
 /**
  * Execute a tool call and return the result as a string.
+ * Delegates shared tools to executeSharedTool, handles ORR-specific tools here.
  */
 export function executeTool(
   name: string,
@@ -438,366 +154,27 @@ export function executeTool(
   orrId: string,
   sessionId: string,
 ): string {
+  // Try shared tools first
+  const sharedResult = executeSharedTool(name, args, "orr", orrId, sessionId);
+  if (sharedResult !== null) return sharedResult;
+
+  // ORR-specific tools
   const db = getDb();
   const now = new Date().toISOString();
 
   switch (name) {
-    case "read_section": {
-      const section = db
-        .select()
-        .from(schema.sections)
-        .where(
-          and(
-            eq(schema.sections.id, args.section_id as string),
-            eq(schema.sections.orrId, orrId),
-          ),
-        )
-        .get();
-
-      if (!section) return JSON.stringify({ error: "Section not found" });
-
-      return JSON.stringify({
-        title: section.title,
-        prompts: section.prompts,
-        content: section.content,
-        promptResponses: section.promptResponses,
-        depth: section.depth,
-        depthRationale: section.depthRationale,
-        flags: section.flags,
-      });
-    }
-
-    case "update_section_content": {
-      const section = db
-        .select()
-        .from(schema.sections)
-        .where(
-          and(
-            eq(schema.sections.id, args.section_id as string),
-            eq(schema.sections.orrId, orrId),
-          ),
-        )
-        .get();
-
-      if (!section) return JSON.stringify({ error: "Section not found" });
-
-      const append = args.append !== false; // default true
-      const newContent = append && section.content
-        ? section.content + "\n\n" + (args.content as string)
-        : (args.content as string);
-
-      db.update(schema.sections)
-        .set({
-          content: newContent,
-          conversationSnippet: (args.content as string).slice(0, 200),
-          updatedAt: now,
-        })
-        .where(eq(schema.sections.id, args.section_id as string))
-        .run();
-
-      // Bump ORR updatedAt
-      db.update(schema.orrs)
-        .set({ updatedAt: now })
-        .where(eq(schema.orrs.id, orrId))
-        .run();
-
-      return JSON.stringify({ success: true, contentLength: newContent.length });
-    }
-
-    case "update_depth_assessment": {
-      db.update(schema.sections)
-        .set({
-          depth: args.depth as "UNKNOWN" | "SURFACE" | "MODERATE" | "DEEP",
-          depthRationale: args.rationale as string,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(schema.sections.id, args.section_id as string),
-            eq(schema.sections.orrId, orrId),
-          ),
-        )
-        .run();
-
-      return JSON.stringify({ success: true, depth: args.depth });
-    }
-
-    case "set_flags": {
-      // Preserve existing flags that have been accepted/resolved
-      const existingSection = db
-        .select()
-        .from(schema.sections)
-        .where(
-          and(
-            eq(schema.sections.id, args.section_id as string),
-            eq(schema.sections.orrId, orrId),
-          ),
-        )
-        .get();
-
-      const existingFlags: any[] = existingSection
-        ? typeof existingSection.flags === "string"
-          ? JSON.parse(existingSection.flags)
-          : (existingSection.flags as any[]) || []
-        : [];
-
-      // Keep flags that have been accepted or resolved (don't let agent overwrite resolutions)
-      const preservedFlags = existingFlags.filter(
-        (f) => f.status === "ACCEPTED" || f.status === "RESOLVED",
-      );
-
-      // New flags from the agent get OPEN status
-      const newFlags = (args.flags as Array<{ type: string; note: string }>).map((f) => ({
-        ...f,
-        status: "OPEN",
-        createdAt: now,
-      }));
-
-      const flags = [...preservedFlags, ...newFlags];
-
-      db.update(schema.sections)
-        .set({
-          flags: flags as any,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(schema.sections.id, args.section_id as string),
-            eq(schema.sections.orrId, orrId),
-          ),
-        )
-        .run();
-
-      return JSON.stringify({ success: true, flagCount: flags.length });
-    }
-
-    case "query_teaching_moments": {
-      const all = db.select().from(schema.teachingMoments).all();
-      const query = (args.query as string).toLowerCase();
-      const sectionTag = args.section_tag as string | undefined;
-
-      let results = all.filter(
-        (tm) =>
-          tm.title.toLowerCase().includes(query) ||
-          tm.content.toLowerCase().includes(query) ||
-          (tm.systemPattern?.toLowerCase().includes(query) ?? false) ||
-          (tm.failureMode?.toLowerCase().includes(query) ?? false),
-      );
-
-      if (sectionTag) {
-        results = results.filter((tm) => {
-          const tags = typeof tm.sectionTags === "string"
-            ? JSON.parse(tm.sectionTags)
-            : tm.sectionTags;
-          return (tags as string[]).some((t) =>
-            t.toLowerCase().includes(sectionTag.toLowerCase()),
-          );
-        });
-      }
-
-      return JSON.stringify(
-        results.slice(0, 5).map((tm) => ({
-          title: tm.title,
-          content: tm.content,
-          systemPattern: tm.systemPattern,
-          failureMode: tm.failureMode,
-        })),
-      );
-    }
-
-    case "query_case_studies": {
-      const all = db.select().from(schema.caseStudies).all();
-      const query = (args.query as string).toLowerCase();
-
-      const results = all.filter(
-        (cs) =>
-          cs.title.toLowerCase().includes(query) ||
-          cs.summary.toLowerCase().includes(query) ||
-          cs.company.toLowerCase().includes(query) ||
-          cs.failureCategory.toLowerCase().includes(query),
-      );
-
-      return JSON.stringify(
-        results.slice(0, 5).map((cs) => ({
-          title: cs.title,
-          company: cs.company,
-          year: cs.year,
-          summary: cs.summary,
-          lessons: cs.lessons,
-        })),
-      );
-    }
-
-    case "update_question_response": {
-      const section = db
-        .select()
-        .from(schema.sections)
-        .where(
-          and(
-            eq(schema.sections.id, args.section_id as string),
-            eq(schema.sections.orrId, orrId),
-          ),
-        )
-        .get();
-
-      if (!section) return JSON.stringify({ error: "Section not found" });
-
-      const existing = typeof section.promptResponses === "string"
-        ? JSON.parse(section.promptResponses as string)
-        : (section.promptResponses || {});
-
-      // Store as structured PromptResponse if source is provided, otherwise stay backward-compatible
-      const source = args.source as string | undefined;
-      if (source) {
-        const entry: Record<string, string> = {
-          answer: args.response as string,
-          source,
-        };
-        if (args.code_ref) entry.codeRef = args.code_ref as string;
-        existing[args.question_index as number] = entry;
-      } else {
-        existing[args.question_index as number] = args.response as string;
-      }
-
-      db.update(schema.sections)
-        .set({
-          promptResponses: existing,
-          updatedAt: now,
-        })
-        .where(eq(schema.sections.id, args.section_id as string))
-        .run();
-
-      // Bump ORR updatedAt
-      db.update(schema.orrs)
-        .set({ updatedAt: now })
-        .where(eq(schema.orrs.id, orrId))
-        .run();
-
-      return JSON.stringify({
-        success: true,
-        questionIndex: args.question_index,
-        responseLength: (args.response as string).length,
-      });
-    }
-
-    case "suggest_experiment": {
-      // Resolve the service for this ORR
-      const orr = db
-        .select()
-        .from(schema.orrs)
-        .where(eq(schema.orrs.id, orrId))
-        .get();
-
-      if (!orr) return JSON.stringify({ error: "ORR not found" });
-
-      let serviceId = orr.serviceId;
-
-      // Auto-create service if not linked yet
-      if (!serviceId && orr.serviceName) {
-        const existing = db
-          .select()
-          .from(schema.services)
-          .where(
-            and(
-              eq(schema.services.teamId, orr.teamId),
-              eq(schema.services.name, orr.serviceName),
-            ),
-          )
-          .get();
-
-        if (existing) {
-          serviceId = existing.id;
-        } else {
-          serviceId = nanoid();
-          db.insert(schema.services).values({
-            id: serviceId,
-            name: orr.serviceName,
-            teamId: orr.teamId,
-            createdAt: now,
-            updatedAt: now,
-          }).run();
-        }
-
-        // Link the ORR to the service
-        db.update(schema.orrs)
-          .set({ serviceId })
-          .where(eq(schema.orrs.id, orrId))
-          .run();
-      }
-
-      if (!serviceId) {
-        return JSON.stringify({ error: "No service associated with this ORR. Cannot create experiment suggestion." });
-      }
-
-      // Dedup: skip if an experiment with the same title already exists for this practice
-      const existingExp = db
-        .select()
-        .from(schema.experimentSuggestions)
-        .where(
-          and(
-            eq(schema.experimentSuggestions.sourcePracticeType, "orr"),
-            eq(schema.experimentSuggestions.sourcePracticeId, orrId),
-            eq(schema.experimentSuggestions.title, args.title as string),
-          ),
-        )
-        .get();
-
-      if (existingExp) {
-        return JSON.stringify({
-          success: true,
-          experimentId: existingExp.id,
-          type: existingExp.type,
-          priority: existingExp.priority,
-          title: existingExp.title,
-          deduplicated: true,
-        });
-      }
-
-      const expId = nanoid();
-      db.insert(schema.experimentSuggestions).values({
-        id: expId,
-        serviceId,
-        sourcePracticeType: "orr",
-        sourcePracticeId: orrId,
-        sourceSectionId: (args.section_id as string) || null,
-        type: args.type as "chaos_experiment" | "load_test" | "gameday",
-        title: args.title as string,
-        hypothesis: args.hypothesis as string,
-        rationale: args.rationale as string,
-        priority: args.priority as "critical" | "high" | "medium" | "low",
-        priorityReasoning: args.priority_reasoning as string,
-        blastRadiusNotes: (args.blast_radius_notes as string) || null,
-        createdAt: now,
-        updatedAt: now,
-      }).run();
-
-      return JSON.stringify({
-        success: true,
-        experimentId: expId,
-        type: args.type,
-        priority: args.priority,
-        title: args.title,
-      });
-    }
-
     case "record_dependency": {
       const depName = args.name as string;
       const depType = args.type as string;
 
-      // Check if this dependency already exists for this ORR (case-insensitive upsert by name)
-      const existing = db
-        .select()
-        .from(schema.dependencies)
-        .where(
-          and(
-            eq(schema.dependencies.orrId, orrId),
-            sql`LOWER(${schema.dependencies.name}) = LOWER(${depName})`,
-          ),
-        )
+      const existing = db.select().from(schema.dependencies)
+        .where(and(
+          eq(schema.dependencies.orrId, orrId),
+          sql`LOWER(${schema.dependencies.name}) = LOWER(${depName})`,
+        ))
         .get();
 
       if (existing) {
-        // Update existing dependency with new info
         const updates: Record<string, unknown> = {};
         if (args.direction) updates.direction = args.direction;
         if (args.criticality) updates.criticality = args.criticality;
@@ -816,7 +193,6 @@ export function executeTool(
         return JSON.stringify({ success: true, action: "updated", name: depName });
       }
 
-      // Insert new dependency
       const depId = crypto.randomUUID();
       db.run(
         sql`INSERT INTO dependencies (id, orr_id, section_id, name, type, direction, criticality, has_fallback, fallback_description, notes, created_at)
@@ -826,84 +202,6 @@ export function executeTool(
       return JSON.stringify({ success: true, action: "created", name: depName });
     }
 
-    case "write_session_summary": {
-      const updates: Record<string, unknown> = { summary: args.summary as string };
-      if (args.discoveries && Array.isArray(args.discoveries) && (args.discoveries as string[]).length > 0) {
-        updates.discoveries = args.discoveries;
-      }
-      db.update(schema.sessions)
-        .set(updates)
-        .where(eq(schema.sessions.id, sessionId))
-        .run();
-
-      return JSON.stringify({ success: true, discoveryCount: (args.discoveries as string[] || []).length });
-    }
-
-    case "suggest_cross_practice_action": {
-      const suggId = nanoid();
-      db.insert(schema.crossPracticeSuggestions).values({
-        id: suggId,
-        sourcePracticeType: "orr",
-        sourcePracticeId: orrId,
-        targetPracticeType: args.target_practice as "chaos_engineering" | "load_testing" | "orr" | "incident_analysis" | "gameday",
-        suggestion: args.suggestion as string,
-        rationale: args.rationale as string,
-        createdAt: now,
-      }).run();
-
-      return JSON.stringify({
-        success: true,
-        suggestionId: suggId,
-        targetPractice: args.target_practice,
-      });
-    }
-
-    case "record_action_item": {
-      // Dedup by title
-      const existingAction = db
-        .select()
-        .from(schema.actionItems)
-        .where(
-          and(
-            eq(schema.actionItems.practiceType, "orr"),
-            eq(schema.actionItems.practiceId, orrId),
-            eq(schema.actionItems.title, args.title as string),
-          ),
-        )
-        .get();
-
-      if (existingAction) {
-        return JSON.stringify({
-          success: true,
-          actionItemId: existingAction.id,
-          deduplicated: true,
-        });
-      }
-
-      const actionId = nanoid();
-      db.insert(schema.actionItems).values({
-        id: actionId,
-        practiceType: "orr",
-        practiceId: orrId,
-        title: args.title as string,
-        owner: (args.owner as string) || null,
-        dueDate: (args.due_date as string) || null,
-        priority: (args.priority as "high" | "medium" | "low") || "medium",
-        type: args.type as "technical" | "process" | "organizational" | "learning",
-        successCriteria: (args.success_criteria as string) || null,
-        status: "open",
-        createdAt: now,
-      }).run();
-
-      return JSON.stringify({
-        success: true,
-        actionItemId: actionId,
-        title: args.title,
-      });
-    }
-
-    // --- Code exploration tools ---
-
     case "search_code": {
       const result = resolveRepoPath(orrId, ".");
       if ("error" in result) return JSON.stringify({ error: result.error });
@@ -911,14 +209,11 @@ export function executeTool(
       const query = args.query as string;
       const filePattern = args.file_pattern as string | undefined;
 
-      // Build grep args as array — no shell interpretation, prevents command injection
       const grepArgs = ["-rn", "--color=never"];
       if (filePattern) {
-        // Only allow safe glob-like patterns (alphanumeric, *, ?, ., /, -, _)
         if (/^[a-zA-Z0-9.*?\/\-_{}]+$/.test(filePattern)) {
           grepArgs.push(`--include=${filePattern}`);
         }
-        // Invalid patterns silently ignored — search proceeds without filter
       }
       grepArgs.push("--", query, ".");
 
@@ -930,7 +225,6 @@ export function executeTool(
           maxBuffer: 512 * 1024,
         });
 
-        // Parse grep output into structured results, limit to 20 matches
         const lines = output.trim().split("\n").slice(0, 20);
         const matches = lines.map((line: string) => {
           const firstColon = line.indexOf(":");
@@ -944,7 +238,6 @@ export function executeTool(
 
         return JSON.stringify({ matches, truncated: output.trim().split("\n").length > 20 });
       } catch (err: any) {
-        // grep exits with code 1 when no matches found
         if (err.status === 1) return JSON.stringify({ matches: [], truncated: false });
         return JSON.stringify({ error: `Search failed: ${err.message?.slice(0, 200)}` });
       }
@@ -994,16 +287,9 @@ export function executeTool(
         const items = entries
           .filter((e) => !e.name.startsWith(".") && e.name !== "node_modules")
           .slice(0, 100)
-          .map((e) => ({
-            name: e.name,
-            type: e.isDirectory() ? "directory" : "file",
-          }));
+          .map((e) => ({ name: e.name, type: e.isDirectory() ? "directory" : "file" }));
 
-        return JSON.stringify({
-          path: dirPath,
-          entries: items,
-          truncated: entries.length > 100,
-        });
+        return JSON.stringify({ path: dirPath, entries: items, truncated: entries.length > 100 });
       } catch (err: any) {
         return JSON.stringify({ error: `Could not list directory: ${err.message?.slice(0, 200)}` });
       }
