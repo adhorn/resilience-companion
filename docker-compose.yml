@@ -1,0 +1,45 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_certs:/etc/caddy/certs
+    depends_on:
+      cert-gen:
+        condition: service_completed_successfully
+      app:
+        condition: service_started
+    restart: unless-stopped
+
+  cert-gen:
+    image: alpine:3
+    volumes:
+      - caddy_certs:/certs
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        if [ ! -f /certs/cert.pem ]; then
+          apk add --no-cache openssl
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout /certs/key.pem -out /certs/cert.pem \
+            -days 365 -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+        fi
+
+  app:
+    build: .
+    expose:
+      - "3000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_certs:
