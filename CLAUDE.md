@@ -87,7 +87,7 @@ Pluggable adapter pattern in `src/llm/`. `getLLM()` singleton auto-detects provi
 ## Environment Variables
 
 ```
-DB_PATH=./data/orr-companion.db   # Relative to monorepo root
+DB_PATH=./data/resilience-companion.db   # Relative to monorepo root
 JWT_SECRET=change-me-in-production
 LLM_API_KEY=                       # Anthropic (sk-ant-*) or OpenAI-compatible
 LLM_MODEL=                         # Default: claude-sonnet for Anthropic, gpt-4o for OpenAI

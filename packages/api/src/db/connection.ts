@@ -8,7 +8,7 @@ import * as schema from "./schema.js";
 // Resolve DB_PATH: if relative, resolve from the monorepo root (3 levels up from this file)
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = resolve(__dirname, "../../../..");
-const rawPath = process.env.DB_PATH || "./data/orr-companion.db";
+const rawPath = process.env.DB_PATH || "./data/resilience-companion.db";
 const DB_PATH = rawPath.startsWith("/") ? rawPath : resolve(monorepoRoot, rawPath);
 
 function createConnection(dbPath: string = DB_PATH) {
