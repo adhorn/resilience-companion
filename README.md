@@ -20,14 +20,14 @@ Reviews are conversations, not checklists. This tool treats each practice as a l
 
 ```bash
 git clone <repo-url>
-cd orr-companion
+cd resilience-companion
 cp .env.example .env     # edit LLM_API_KEY with your Anthropic or OpenAI key
 docker compose up
 ```
 
 Open http://localhost:3000. That's it.
 
-The database is auto-created on first boot and persisted in `./data/`. To reset, stop the container and delete `./data/orr-companion.db`.
+The database is auto-created on first boot and persisted in `./data/`. To reset, stop the container and delete `./data/resilience-companion.db`.
 
 ## Quick Start (Local Development)
 
@@ -35,7 +35,7 @@ The database is auto-created on first boot and persisted in `./data/`. To reset,
 
 ```bash
 git clone <repo-url>
-cd orr-companion
+cd resilience-companion
 npm install
 cp .env.example .env     # edit LLM_API_KEY
 npm run dev              # API on :3000, web dev server on :5173
@@ -135,7 +135,7 @@ See [`.env.example`](.env.example) for all options. The key ones:
 | `LLM_MODEL` | No | Model name. Defaults to `claude-sonnet-4-20250514` (Anthropic) or `gpt-4o` (OpenAI). |
 | `LLM_BASE_URL` | No | Custom endpoint for OpenAI-compatible providers (Azure, Ollama, etc.) |
 | `JWT_SECRET` | Yes | Secret for JWT tokens. Change from default in production. |
-| `DB_PATH` | No | SQLite database path. Defaults to `./data/orr-companion.db`. |
+| `DB_PATH` | No | SQLite database path. Defaults to `./data/resilience-companion.db`. |
 | `PORT` | No | Server port. Defaults to `3000`. |
 
 ## Architecture
@@ -143,7 +143,7 @@ See [`.env.example`](.env.example) for all options. The key ones:
 TypeScript monorepo with three npm workspaces:
 
 ```
-orr-companion/
+resilience-companion/
 ├── packages/
 │   ├── shared/              # @orr/shared — types, constants, templates (built first)
 │   ├── api/                 # @orr/api — Hono server, SQLite, agent system, LLM adapters

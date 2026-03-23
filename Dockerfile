@@ -43,7 +43,7 @@ COPY --from=build /app/packages/api/node_modules/ packages/api/node_modules/
 RUN mkdir -p /app/data
 
 ENV NODE_ENV=production
-ENV DB_PATH=./data/orr-companion.db
+ENV DB_PATH=./data/resilience-companion.db
 ENV PORT=3000
 
 EXPOSE 3000

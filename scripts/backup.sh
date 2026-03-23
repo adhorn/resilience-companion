@@ -8,18 +8,18 @@
 #   ./scripts/backup.sh /mnt/nas/backups   # backs up to a custom directory
 #
 # Automate with cron (daily at 2am):
-#   0 2 * * * /path/to/orr-companion/scripts/backup.sh >> /var/log/orr-backup.log 2>&1
+#   0 2 * * * /path/to/resilience-companion/scripts/backup.sh >> /var/log/orr-backup.log 2>&1
 
 set -euo pipefail
 
 BACKUP_DIR="${1:-./backups}"
-DB_PATH="${DB_PATH:-./data/orr-companion.db}"
+DB_PATH="${DB_PATH:-./data/resilience-companion.db}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-BACKUP_FILE="${BACKUP_DIR}/orr-companion-${TIMESTAMP}.db"
+BACKUP_FILE="${BACKUP_DIR}/resilience-companion-${TIMESTAMP}.db"
 
 # For Docker Compose: if running inside the container, the DB is at /app/data/
-if [ -f "/app/data/orr-companion.db" ] && [ ! -f "$DB_PATH" ]; then
-  DB_PATH="/app/data/orr-companion.db"
+if [ -f "/app/data/resilience-companion.db" ] && [ ! -f "$DB_PATH" ]; then
+  DB_PATH="/app/data/resilience-companion.db"
 fi
 
 if [ ! -f "$DB_PATH" ]; then
@@ -41,5 +41,5 @@ SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
 echo "$(date -Iseconds) Backup complete: ${BACKUP_FILE} (${SIZE})"
 
 # Prune backups older than 30 days
-find "$BACKUP_DIR" -name "orr-companion-*.db" -mtime +30 -delete 2>/dev/null && \
+find "$BACKUP_DIR" -name "resilience-companion-*.db" -mtime +30 -delete 2>/dev/null && \
   echo "Pruned backups older than 30 days" || true

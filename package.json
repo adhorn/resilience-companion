@@ -1,5 +1,5 @@
 {
-  "name": "orr-companion",
+  "name": "resilience-companion",
   "private": true,
   "workspaces": [
     "packages/shared",
