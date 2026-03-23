@@ -214,6 +214,13 @@ export const MAX_AGENT_ITERATIONS = 5;
 // (11 sections × ~15k tokens each) with headroom.
 export const MAX_SESSION_TOKENS = 200_000;
 
+// Pre-compaction flush thresholds (fraction of MAX_SESSION_TOKENS).
+// At WARNING the agent gets a gentle nudge to summarize soon.
+// At URGENT the nudge is stronger. At FLUSH, auto-renewal triggers
+// a dedicated summary turn before closing the session.
+export const SESSION_TOKEN_WARNING = 0.75;
+export const SESSION_TOKEN_URGENT = 0.90;
+
 // Daily token budget: hard cap across all sessions per team per day.
 // 2M tokens ≈ ~10 full ORR reviews on Sonnet (~$10-20/day).
 // Prevents runaway sessions from eating the monthly budget.
