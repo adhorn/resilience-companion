@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Resilience Companion is a web application for facilitating resilience practices (ORRs, incident analysis, and more), built as a companion tool to the book "Why We Still Suck at Resilience." An AI agent guides teams through structured reviews via Socratic conversation, persisting observations into a document-first data model.
 
-**Current state**: Phase 1 MVP — Review Facilitator agent (AI-assisted self-serve reviews), teaching moment library, portal, dashboard, markdown export. See `SPEC.md` for full roadmap.
+**Current state**: Phase 1 MVP — Review Facilitator agent (AI-assisted self-serve reviews), teaching moment library, portal, dashboard, markdown export. See `docs/SPEC.md` for full roadmap.
 
 **Key design principle**: Document-first. The ORR document is the durable artifact; conversations are ephemeral. The agent writes observations back to sections via tools.
 
