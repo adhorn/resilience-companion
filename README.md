@@ -105,6 +105,33 @@ The incident agent has additional tools beyond the shared set: `record_timeline_
 
 Sessions auto-renew at 200k tokens with conversation carryover and automatic summary preservation.
 
+### Slash Commands
+
+Type `/` in the chat to access quick actions. Each practice has its own set:
+
+**ORR commands:**
+
+| Command | What it does |
+|---------|-------------|
+| `/dependencies` | Map all dependencies mentioned across sections |
+| `/summarize` | Summarize review progress, depth, and key findings |
+| `/depth` | Get an honest depth assessment of the current section |
+| `/incidents` | Find real-world incidents relevant to your architecture |
+| `/status` | Overview of all sections: depth, coverage, flags |
+| `/risks` | List all risks and gaps, grouped by severity |
+
+**Incident analysis commands:**
+
+| Command | What it does |
+|---------|-------------|
+| `/timeline` | Build the incident timeline from discussion so far |
+| `/factors` | Identify and record contributing factors |
+| `/actions` | Generate action items linked to contributing factors |
+| `/summarize` | Summarize analysis progress and gaps |
+| `/depth` | Assess analysis depth of the current section |
+| `/patterns` | Search for systemic patterns and related incidents |
+| `/experiments` | Suggest chaos experiments or load tests to prevent recurrence |
+
 ## LLM Provider Support
 
 The tool auto-detects your provider from the API key:
