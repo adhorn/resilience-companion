@@ -18,8 +18,9 @@ import { MAX_SESSION_TOKENS, MAX_DAILY_TOKENS } from "@orr/shared";
 import { getDb, schema } from "../../db/index.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { runAgent } from "../../agent/loop.js";
+import { getLLM } from "../../llm/index.js";
+import type { LLMToolDef, LLMMessage } from "../../llm/index.js";
 import type { PracticeConfig } from "../../agent/practice.js";
-import type { LLMMessage } from "../../llm/index.js";
 import { log } from "../../logger.js";
 
 // --- Shared utilities ---
@@ -83,6 +84,102 @@ export function getDailyTokenUsage(db: ReturnType<typeof getDb>, teamId: string)
     .get();
 
   return (orrUsage?.total ?? 0) + (incidentUsage?.total ?? 0);
+}
+
+// --- Pre-renewal summary flush ---
+
+/** Tool definition for write_session_summary only (used during flush). */
+const FLUSH_TOOL: LLMToolDef = {
+  type: "function",
+  function: {
+    name: "write_session_summary",
+    description: "Write a summary of what was covered and discovered in this session.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: { type: "string", description: "Narrative summary of the session" },
+        discoveries: {
+          type: "array",
+          items: { type: "string" },
+          description: "Things that surprised the team or contradicted their expectations.",
+        },
+      },
+      required: ["summary"],
+    },
+  },
+};
+
+/**
+ * Run a single LLM call to generate a session summary before auto-renewal.
+ * This is the "pre-compaction flush" — it captures the agent's understanding
+ * of the session before context is lost. Returns true if summary was written.
+ */
+export async function flushSessionSummary(
+  practiceConfig: PracticeConfig,
+  practiceId: string,
+  sessionId: string,
+  recentMessages: Array<{ role: string; content: string }>,
+): Promise<boolean> {
+  const llm = getLLM();
+
+  // Build a compact conversation for the flush call
+  const last10 = recentMessages.slice(-10);
+  const conversationSample = last10
+    .map((m) => `${m.role}: ${m.content.slice(0, 300)}`)
+    .join("\n\n");
+
+  const flushMessages: LLMMessage[] = [
+    {
+      role: "system",
+      content: `You are a session summarizer. A review session is about to auto-renew because it reached its token budget. Your ONLY job is to call write_session_summary with a good summary and any discoveries before the session closes.
+
+Summarize: what sections were discussed, key observations and depth assessments, flags raised, and anything that surprised the team. Be concise but thorough — this summary will be the only record of this session's conversation.`,
+    },
+    {
+      role: "user",
+      content: `Here is the recent conversation from this session. Write a session summary now.\n\n${conversationSample}`,
+    },
+  ];
+
+  try {
+    const stream = llm.chat(flushMessages, [FLUSH_TOOL]);
+
+    let toolCallId = "";
+    let toolArgs = "";
+    let calledSummary = false;
+
+    for await (const chunk of stream) {
+      switch (chunk.type) {
+        case "tool_call_start":
+          if (chunk.toolName === "write_session_summary") {
+            toolCallId = chunk.toolCallId || "";
+            toolArgs = "";
+            calledSummary = true;
+          }
+          break;
+        case "tool_call_args":
+          if (calledSummary) toolArgs += chunk.toolArgs || "";
+          break;
+        case "tool_call_end":
+          if (calledSummary && chunk.toolArgs) toolArgs = chunk.toolArgs;
+          break;
+      }
+    }
+
+    if (calledSummary && toolArgs) {
+      const args = JSON.parse(toolArgs);
+      // Execute the tool via the practice's executor (writes to DB)
+      practiceConfig.executeTool("write_session_summary", args, practiceId, sessionId);
+      log("info", "Pre-renewal summary flush succeeded", { sessionId, summaryLength: args.summary?.length });
+      return true;
+    }
+
+    log("info", "Pre-renewal flush: LLM did not call write_session_summary", { sessionId });
+    return false;
+  } catch (err) {
+    log("error", "Pre-renewal summary flush failed", { sessionId, error: (err as Error).message });
+    return false;
+  }
 }
 
 // --- Route factory ---
@@ -320,10 +417,24 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
       const oldDiscussed = typeof session.sectionsDiscussed === "string"
         ? JSON.parse(session.sectionsDiscussed) as string[]
         : session.sectionsDiscussed as string[];
-      const autoSummary = `Auto-renewed session (${Math.round(session.tokenUsage / 1000)}k tokens). ${oldMessages.length} messages exchanged. Sections discussed: ${oldDiscussed.length > 0 ? oldDiscussed.join(", ") : "none recorded"}.`;
+
+      // Pre-renewal flush: try to get the LLM to write a proper summary
+      // before we close this session. Only if no summary exists yet
+      // (agent may have already written one via the budget warning nudge).
+      if (!session.summary) {
+        const msgForFlush = oldMessages.map((m) => ({ role: m.role, content: m.content }));
+        await flushSessionSummary(opts.practiceConfig, practiceId, sessionId, msgForFlush);
+      }
+
+      // Re-read session in case flush wrote a summary
+      const refreshed = db.select().from(schema.sessions)
+        .where(eq(schema.sessions.id, sessionId))
+        .get();
+      const finalSummary = refreshed?.summary
+        || `Auto-renewed session (${Math.round(session.tokenUsage / 1000)}k tokens). ${oldMessages.length} messages exchanged. Sections discussed: ${oldDiscussed.length > 0 ? oldDiscussed.join(", ") : "none recorded"}.`;
 
       db.update(schema.sessions)
-        .set({ status: "COMPLETED", endedAt: now, summary: autoSummary })
+        .set({ status: "COMPLETED", endedAt: now, summary: finalSummary })
         .where(eq(schema.sessions.id, sessionId))
         .run();
 
@@ -451,6 +562,13 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
 
           if (event.type === "content_delta") {
             fullResponse += event.content;
+          }
+
+          // On retry/fallback, reset accumulated state — the LLM starts fresh
+          if (event.type === "status" && (event.message?.includes("Retrying") || event.message?.includes("Response quality"))) {
+            fullResponse = "";
+            toolCalls.length = 0;
+            pendingToolCall = null;
           }
 
           if (event.type === "tool_call") {

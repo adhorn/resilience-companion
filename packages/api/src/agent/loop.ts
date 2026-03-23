@@ -1,4 +1,4 @@
-import { MAX_AGENT_ITERATIONS, MAX_SESSION_TOKENS } from "@orr/shared";
+import { MAX_AGENT_ITERATIONS, MAX_SESSION_TOKENS, SESSION_TOKEN_WARNING, SESSION_TOKEN_URGENT } from "@orr/shared";
 import { getLLM } from "../llm/index.js";
 import type { LLMMessage } from "../llm/index.js";
 import type { SSEEvent } from "@orr/shared";
@@ -71,9 +71,21 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
   const context = practiceConfig.buildContext(practiceId, activeSectionId);
   const systemPrompt = practiceConfig.buildSystemPrompt(context);
 
+  // Append token budget warning when session is running long.
+  // This nudges the agent to write a session summary before auto-renewal.
+  const tokenFraction = sessionTokenUsage / MAX_SESSION_TOKENS;
+  let budgetAwarePrompt = systemPrompt;
+  if (tokenFraction >= SESSION_TOKEN_URGENT) {
+    const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
+    budgetAwarePrompt += `\n\n## SESSION BUDGET — URGENT\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). The session will auto-renew soon, which resets conversation context. Call write_session_summary NOW to preserve your observations, depth assessments, and discoveries before they are lost. Include a discoveries array — things that surprised the team or contradicted their expectations.`;
+  } else if (tokenFraction >= SESSION_TOKEN_WARNING) {
+    const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
+    budgetAwarePrompt += `\n\n## Session Budget\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). Start wrapping up the current line of discussion. You should call write_session_summary soon to persist your observations and discoveries before the session auto-renews.`;
+  }
+
   // Build messages array
   const messages: LLMMessage[] = [
-    { role: "system", content: systemPrompt },
+    { role: "system", content: budgetAwarePrompt },
     ...conversationHistory,
     { role: "user", content: userMessage },
   ];
@@ -108,9 +120,12 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
       const stream = llm.chat(messages, practiceConfig.tools);
 
       for await (const chunk of stream) {
-        // RetryAdapter emits retry/fallback events between attempts
+        // RetryAdapter emits retry/fallback events between attempts.
+        // Reset accumulated state — the new attempt produces a fresh response.
         if (chunk.type === "retry") {
           trace.addRetry(chunk.attempt!, chunk.reason!, chunk.delayMs!);
+          fullContent = "";
+          pendingToolCalls.length = 0;
           yield {
             type: "status",
             message: `${chunk.reason}. Retrying (${chunk.attempt}/${chunk.maxRetries})...`,
@@ -119,6 +134,8 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
         }
         if (chunk.type === "fallback") {
           trace.addFallback(chunk.reason || "unknown", chunk.reason || "");
+          fullContent = "";
+          pendingToolCalls.length = 0;
           yield {
             type: "status",
             message: `${chunk.reason}. Response quality may differ slightly.`,

@@ -118,7 +118,18 @@ export function useReviewSession({
             return updated;
           });
         }
-        if (event.type === "status") setStreamStatus(event.message);
+        if (event.type === "status") {
+          setStreamStatus(event.message);
+          // On retry/fallback, reset accumulated content — LLM starts fresh
+          if (event.message?.includes("Retrying") || event.message?.includes("Response quality")) {
+            assistantContent = "";
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = { role: "assistant", content: "" };
+              return updated;
+            });
+          }
+        }
         if (event.type === "error") { setLastError(event.message); setStreamStatus(null); }
         if (event.type === "tool_call" && event.args?.section_id) setActiveSection(event.args.section_id);
         if (event.type === "section_updated") {
