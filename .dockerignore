@@ -1,0 +1,13 @@
+node_modules
+dist
+data
+repos
+logs
+reports
+*.db
+*.db-journal
+*.db-wal
+.env
+.stryker-tmp
+stryker-incremental.json
+Caddyfile
