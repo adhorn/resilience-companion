@@ -24,6 +24,17 @@ function isAnthropicKey(key: string): boolean {
 
 let _adapter: LLMAdapter | null = null;
 
+/**
+ * Returns the singleton LLM adapter, auto-configured from environment variables.
+ *
+ * Provider detection:
+ * - `sk-ant-*` key → AnthropicAdapter (native SDK, supports model shortnames)
+ * - Any other key  → OpenAICompatibleAdapter (works with OpenAI, Azure, Ollama)
+ * - No key         → NoOpAdapter (app works without AI as structured review tool)
+ *
+ * All real adapters are wrapped in RetryAdapter (exponential backoff + optional
+ * fallback model via LLM_FALLBACK_MODEL).
+ */
 export function getLLM(): LLMAdapter {
   if (!_adapter) {
     const apiKey = process.env.LLM_API_KEY;

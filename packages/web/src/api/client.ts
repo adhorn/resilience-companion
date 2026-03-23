@@ -1,3 +1,10 @@
+/**
+ * API client — typed wrappers around fetch for all REST endpoints.
+ *
+ * Uses relative URLs (/api/v1/...) so it works in both dev (proxied via Vite)
+ * and production (served by Hono from api/public/). SSE streaming for agent
+ * messages uses ReadableStream with a 60s inactivity timeout.
+ */
 const API_BASE = "/api/v1";
 
 async function request<T>(

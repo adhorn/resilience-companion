@@ -52,11 +52,14 @@ export interface AgentInput {
 }
 
 /**
- * Core agent loop. Runs the Review Facilitator:
- * 1. Build system prompt with ORR context
- * 2. Send to LLM with tools
- * 3. If LLM calls tools, execute them and loop (max 5 iterations)
- * 4. Yield SSE events throughout for streaming to client
+ * Core agent loop — practice-agnostic. Runs for both ORR and incident analysis.
+ *
+ * 1. Build system prompt via PracticeConfig (with token budget warnings at 75%/90%)
+ * 2. Send to LLM with practice-specific tools
+ * 3. If LLM calls tools, run steering hooks then execute — loop up to MAX_AGENT_ITERATIONS
+ * 4. Yield SSE events throughout for real-time streaming to client
+ * 5. On retry/fallback events from RetryAdapter, reset accumulated state to prevent garbled output
+ * 6. If max iterations hit, give LLM one final text-only turn to wrap up coherently
  */
 export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
   const { practiceConfig, practiceId, sessionId, activeSectionId, conversationHistory, userMessage, sessionTokenUsage } = input;
