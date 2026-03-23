@@ -2,21 +2,59 @@
 
 A self-hosted web tool for facilitating resilience practices — Operational Readiness Reviews, incident analysis, and more. Built as a companion to the book *[Why We Still Suck at Resilience](https://leanpub.com/whywestillsuckatresilience)* by Adrian Hornsby.
 
-ORRs are conversations, not checklists. This tool treats the review as a learning experience: an AI facilitator guides your team through structured questions, probes for depth, surfaces relevant industry incidents, and flags risks — while the team retains full ownership of the document.
+Reviews are conversations, not checklists. This tool treats each practice as a learning experience: an AI facilitator guides your team through structured questions, probes for depth, surfaces relevant industry incidents, and flags risks — while the team retains full ownership of the document.
 
 ## What It Does
 
 **AI-Facilitated Reviews** — An AI agent acts as a curious, Socratic facilitator. It asks questions from a structured template, follows up when answers are shallow, and connects your team's responses to real-world failure patterns. Think of it as a knowledgeable colleague who's read every post-mortem and knows exactly which follow-up question to ask.
 
-**Document-First Architecture** — The ORR document is the durable artifact. Conversations are ephemeral. The agent writes observations, depth assessments, and flags directly into the review document so the value persists after the session ends.
+**Two Practices, One Learning System** — ORRs assess operational readiness *before* incidents happen. Incident analysis extracts learning *after* they happen. Both practices share the same agent architecture, teaching moment library, and flag system — so insights from one practice naturally inform the other.
+
+**Document-First Architecture** — The review document is the durable artifact. Conversations are ephemeral. The agent writes observations, depth assessments, and flags directly into the document so the value persists after the session ends.
 
 **Teaching Moment Library** — A curated collection of industry incidents and failure patterns (seeded from public post-mortems). The agent surfaces relevant teaching moments during reviews — "This reminds me of the 2017 S3 outage..." — turning each review into a learning opportunity.
 
-**Organizational Risk Visibility** — A flags view aggregates risks, gaps, and follow-ups across all your team's ORRs. See which risks are overdue, which sections have gaps, and where your blind spots are.
+**Organizational Risk Visibility** — A flags view aggregates risks, gaps, and follow-ups across all your team's reviews. See which risks are overdue, which sections have gaps, and where your blind spots are.
 
-## The 11-Section ORR Template
+## Quick Start (Docker)
 
-The default template is extracted from the book's appendix — 107 prompts across 11 sections:
+```bash
+git clone <repo-url>
+cd orr-companion
+cp .env.example .env     # edit LLM_API_KEY with your Anthropic or OpenAI key
+docker compose up
+```
+
+Open http://localhost:3000. That's it.
+
+The database is auto-created on first boot and persisted in `./data/`. To reset, stop the container and delete `./data/orr-companion.db`.
+
+## Quick Start (Local Development)
+
+**Prerequisites:** Node.js 22+
+
+```bash
+git clone <repo-url>
+cd orr-companion
+npm install
+cp .env.example .env     # edit LLM_API_KEY
+npm run dev              # API on :3000, web dev server on :5173
+```
+
+Open http://localhost:5173 (hot-reloading frontend) or http://localhost:3000 (API-served static build).
+
+### Build for Production
+
+```bash
+npm run build            # shared → api → web (web assets copied to api/public/)
+npm start -w @orr/api    # serves everything on port 3000
+```
+
+## The Two Practices
+
+### Operational Readiness Reviews (ORRs)
+
+The default ORR template is extracted from the book's appendix — **107 prompts across 11 sections**:
 
 1. **Service Definition and Goals** — What does this service do, who depends on it, what are the SLAs?
 2. **Architecture** — Components, scaling behavior, blast radius, single points of failure
@@ -30,23 +68,124 @@ The default template is extracted from the book's appendix — 107 prompts acros
 10. **Disaster Recovery** — DR exercises, backup restoration, operational levers
 11. **Organizational Learning** — Blameless reviews, design decision capture, lessons-to-action tracking
 
-Teams can customize sections and prompts per ORR.
+### Incident Analysis
+
+A learning-focused post-incident analysis template — **~110 prompts across 14 sections**:
+
+1. **Incident Details** — When, where, duration, who was involved
+2. **Owner & Review Committee** — Analysis ownership and review participants
+3. **Classification** — Severity, type, affected services
+4. **Executive Summary** — What happened, in plain language
+5. **Supporting Data** — Metrics, graphs, logs, evidence
+6. **Customer Impact** — Who was affected and how
+7. **Incident Response Analysis** — How the team detected, coordinated, and resolved
+8. **Post-Incident Analysis** — Root causes, systemic factors, what was missed
+9. **Timeline** — Structured event recording with timestamps and actors
+10. **Contributing Factors Analysis** — Technical, process, organizational, human factors, communication, knowledge gaps
+11. **Surprises & Learning** — WAI vs WAD gaps, mental model updates, what worked well
+12. **Action Items** — Tracked with owner, priority, due date, and success criteria
+13. **Learning Loops & Knowledge Sharing** — Connections to chaos experiments, load testing, ORRs, GameDays
+14. **Quality Checklist** — Self-assessment of analysis completeness
+
+The incident agent has additional tools beyond the shared set: `record_timeline_event`, `record_contributing_factor`, `record_action_item`, `suggest_experiment`, and `suggest_cross_practice_action`.
 
 ## How a Review Session Works
 
-1. Create an ORR for your service (optionally connect a git repository)
+1. Create an ORR or incident for your service
 2. Start an AI session — the agent introduces itself and begins with the active section
 3. Your team answers questions conversationally. The agent:
-   - Records answers against specific prompts
+   - Records answers against specific template prompts
    - Probes shallow answers ("You mentioned failover — have you actually tested it?")
-   - Searches your source code when asked ("Can you find how retries are configured?")
+   - Searches your source code when asked (ORRs with connected git repos)
    - Surfaces relevant teaching moments from the library
-   - Assesses depth: **Surface** (reciting docs), **Moderate** (explaining reasoning), **Deep** (predicting novel failures)
+   - Assesses depth: **Surface** → **Moderate** → **Deep**
    - Flags risks, gaps, strengths, and follow-up items
 4. End the session. The agent writes a summary. The document is versioned.
 5. Export to Markdown for sharing.
 
-## Tech Stack
+Sessions auto-renew at 200k tokens with conversation carryover and automatic summary preservation.
+
+## LLM Provider Support
+
+The tool auto-detects your provider from the API key:
+
+- **Anthropic** (`sk-ant-*`) — Native SDK. Shortnames: `sonnet`, `opus`, `haiku`
+- **OpenAI-compatible** (any other key) — Works with OpenAI, Azure, Ollama, or any compatible endpoint via `LLM_BASE_URL`
+- **No key** — The tool works without AI as a structured review template. Dashboard, export, and flag tracking still function.
+
+All LLM calls go through a retry adapter with exponential backoff, transient error detection, and optional fallback model switching.
+
+## Code Exploration (ORRs)
+
+When you connect a git repository to an ORR (via URL + optional PAT for private repos), the AI agent gains three additional tools:
+
+- **search_code** — Grep the repo for patterns, function names, or keywords
+- **read_file** — Read source files with line ranges
+- **list_directory** — Browse the repo structure
+
+The agent only uses these when the team explicitly asks ("Can you check how we handle timeouts?").
+
+## Environment Variables
+
+See [`.env.example`](.env.example) for all options. The key ones:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `LLM_API_KEY` | No | Anthropic (`sk-ant-*`) or OpenAI-compatible key. Without it, the tool works as a structured review without AI. |
+| `LLM_MODEL` | No | Model name. Defaults to `claude-sonnet-4-20250514` (Anthropic) or `gpt-4o` (OpenAI). |
+| `LLM_BASE_URL` | No | Custom endpoint for OpenAI-compatible providers (Azure, Ollama, etc.) |
+| `JWT_SECRET` | Yes | Secret for JWT tokens. Change from default in production. |
+| `DB_PATH` | No | SQLite database path. Defaults to `./data/orr-companion.db`. |
+| `PORT` | No | Server port. Defaults to `3000`. |
+
+## Architecture
+
+TypeScript monorepo with three npm workspaces:
+
+```
+orr-companion/
+├── packages/
+│   ├── shared/              # @orr/shared — types, constants, templates (built first)
+│   ├── api/                 # @orr/api — Hono server, SQLite, agent system, LLM adapters
+│   │   └── src/
+│   │       ├── agent/       # Agent loop, system prompt, tools, context, trace, steering
+│   │       ├── db/          # Schema, migrations, seed data (Drizzle ORM + better-sqlite3)
+│   │       ├── llm/         # Provider adapters (Anthropic, OpenAI, NoOp) + retry
+│   │       ├── practices/   # Practice-specific config, tools, prompts, hooks
+│   │       │   ├── orr/     # ORR practice implementation
+│   │       │   ├── incident/# Incident analysis practice implementation
+│   │       │   └── shared/  # Shared session routes, tool definitions
+│   │       └── routes/      # REST endpoints
+│   └── web/                 # @orr/web — React 19 + Vite + TailwindCSS + React Query
+│       └── src/
+│           ├── pages/       # Dashboard, ORRView, IncidentView, Flags, Learn
+│           ├── api/         # Fetch-based API client with SSE streaming
+│           └── components/  # Layout, shared UI
+├── Dockerfile               # Multi-stage build for production
+├── docker-compose.yml       # One-command deployment
+└── .env.example             # Configuration template
+```
+
+### How the Agent System Works
+
+Both practices share one agent loop (`agent/loop.ts`) with practice-specific configuration plugged in:
+
+```
+User message → Practice Config → Agent Loop → LLM + Tools → SSE stream → Frontend
+                    │
+                    ├── buildContext()       # What the agent sees
+                    ├── buildSystemPrompt()  # Who the agent is
+                    ├── tools[]              # What the agent can do
+                    └── executeTool()        # How tool calls are handled
+```
+
+**Steering hooks** add deterministic guardrails on top of the LLM:
+- *Security hooks* (always active): block access to sensitive files, redact credentials from code search results
+- *Quality hooks* (tier-gated): enforce read-before-write patterns, validate assessment depth
+
+**Observability**: Every agent turn emits structured trace spans (W3C-compatible) with token usage, tool call timings, retry counts, and errors — ready for any log aggregator.
+
+### Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -57,73 +196,42 @@ Teams can customize sections and prompts per ORR.
 | AI | Anthropic Claude or any OpenAI-compatible provider |
 | Streaming | Server-Sent Events (SSE) |
 
-Monorepo with three npm workspaces: `@orr/shared` (types/constants), `@orr/api` (server + agent), `@orr/web` (React SPA).
+## API Endpoints
 
-## Getting Started
+### ORRs
 
-### Prerequisites
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | `/api/v1/orrs` | List / create ORRs |
+| GET/PATCH/DELETE | `/api/v1/orrs/:id` | Get / update / delete ORR |
+| GET/PATCH | `/api/v1/orrs/:orrId/sections` | List / update sections |
+| POST | `/api/v1/orrs/:orrId/sessions` | Start AI session |
+| POST | `/api/v1/orrs/:orrId/sessions/:id/messages` | Send message (SSE stream) |
+| POST | `/api/v1/orrs/:orrId/sessions/:id/end` | End session |
+| GET | `/api/v1/orrs/:orrId/export/markdown` | Export as Markdown |
 
-- Node.js 22+
-- An LLM API key (Anthropic or OpenAI-compatible) — optional, the tool works as a structured review without AI
+### Incidents
 
-### Setup
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | `/api/v1/incidents` | List / create incidents |
+| GET/PATCH/DELETE | `/api/v1/incidents/:id` | Get / update / delete incident |
+| GET/PATCH | `/api/v1/incidents/:incidentId/sections` | List / update sections |
+| POST | `/api/v1/incidents/:incidentId/sessions` | Start AI session |
+| POST | `/api/v1/incidents/:incidentId/sessions/:id/messages` | Send message (SSE stream) |
+| POST | `/api/v1/incidents/:incidentId/sessions/:id/end` | End session |
+| GET | `/api/v1/incidents/:incidentId/export/markdown` | Export as Markdown |
 
-```bash
-git clone <repo-url>
-cd orr-companion
-npm install
-```
+### Shared
 
-Create a `.env` file in the project root:
-
-```env
-DB_PATH=./data/orr-companion.db
-JWT_SECRET=change-me-in-production
-
-# Anthropic (recommended)
-LLM_API_KEY=sk-ant-...
-LLM_MODEL=sonnet            # or opus, haiku
-
-# Or OpenAI-compatible
-# LLM_API_KEY=sk-...
-# LLM_MODEL=gpt-4o
-# LLM_BASE_URL=https://api.openai.com/v1   # optional, for custom endpoints
-```
-
-### Run
-
-```bash
-npm run dev
-```
-
-This starts both the API (port 3000) and the web dev server (port 5173). Open http://localhost:5173.
-
-### Build for Production
-
-```bash
-npm run build
-npm start -w @orr/api
-```
-
-The web app builds into `packages/api/public/` and is served by the API server at port 3000.
-
-## LLM Provider Support
-
-The tool auto-detects your provider from the API key:
-
-- **Anthropic** (`sk-ant-*`) — Native SDK. Shortnames: `sonnet`, `opus`, `haiku`, `sonnet-4.6`, `opus-4.6`, `haiku-4.5`
-- **OpenAI-compatible** (any other key) — Works with OpenAI, Azure, Ollama, or any compatible endpoint via `LLM_BASE_URL`
-- **No key** — The tool works without AI as a structured review template. Dashboard, export, and flag tracking still function.
-
-## Code Exploration
-
-When you connect a git repository to an ORR (via URL + optional PAT for private repos), the AI agent gains three additional tools:
-
-- **search_code** — Grep the repo for patterns, function names, or keywords
-- **read_file** — Read source files with line ranges
-- **list_directory** — Browse the repo structure
-
-The agent only uses these when the team explicitly asks ("Can you check how we handle timeouts?"). It never proactively reads code without being asked.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Health check |
+| GET | `/api/v1/dashboard` | Aggregated stats |
+| GET | `/api/v1/flags` | Flags across all practices |
+| GET | `/api/v1/templates` | List templates |
+| GET | `/api/v1/teaching-moments` | Browse teaching moments |
+| GET | `/api/v1/case-studies` | Browse case studies |
 
 ## Key Concepts
 
@@ -138,66 +246,39 @@ The agent only uses these when the team explicitly asks ("Can you check how we h
 - **STRENGTH**: Things the team does well worth preserving
 - **FOLLOW_UP**: Items to revisit later
 
-**Session Management** — Sessions auto-renew at 200k tokens with conversation carryover. Each session end creates a versioned snapshot of the ORR document.
+**Steering Tiers** — Three levels of agent guardrails:
+- **Standard**: Security hooks only
+- **Thorough** (default): + read-before-write enforcement
+- **Rigorous**: + parameter validation on assessments
 
-## Project Structure
-
-```
-orr-companion/
-  packages/
-    shared/          # Types, constants, ORR template (built first)
-    api/             # Hono server, SQLite, agent system, LLM adapters
-      src/
-        agent/       # System prompt, tools, loop, context builder
-        db/          # Schema, migrations, seed data
-        llm/         # Provider adapters (Anthropic, OpenAI, NoOp)
-        routes/      # REST endpoints
-    web/             # React SPA
-      src/
-        pages/       # Dashboard, ORRView, Flags, Learn, NewORR
-        api/         # Fetch-based API client
-        components/  # Layout, shared UI
-```
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/health` | Health check |
-| GET/POST | `/api/v1/orrs` | List / create ORRs |
-| GET/PATCH/DELETE | `/api/v1/orrs/:id` | Get / update / delete ORR |
-| GET/PATCH | `/api/v1/orrs/:orrId/sections` | List / update sections |
-| POST | `/api/v1/orrs/:orrId/sessions` | Start AI session |
-| POST | `/api/v1/orrs/:orrId/sessions/:id/messages` | Send message (SSE stream) |
-| POST | `/api/v1/orrs/:orrId/sessions/:id/end` | End session |
-| GET | `/api/v1/orrs/:orrId/export/markdown` | Export ORR as Markdown |
-| GET | `/api/v1/dashboard` | Aggregated stats |
-| GET | `/api/v1/flags` | Flags across all ORRs |
-| GET | `/api/v1/templates` | List templates |
-| GET | `/api/v1/teaching-moments` | Browse teaching moments |
-| GET | `/api/v1/case-studies` | Browse case studies |
+**Session Budget** — Sessions auto-renew at 200k tokens. At 75% usage the agent gets a warning to start wrapping up; at 90% it's urged to write a summary. Before auto-renewal, a dedicated flush call ensures the session summary is preserved even if the agent didn't heed the warnings.
 
 ## Current Status
 
-This is a Phase 1 MVP. The AI-assisted self-serve review mode is functional. The tool is designed for local, single-team use.
+This is a Phase 1 MVP designed for local, single-team use.
 
 **What works today:**
-- Create and work through ORRs with AI facilitation
+- ORR reviews with AI facilitation (11 sections, 107 prompts)
+- Incident analysis with AI facilitation (14 sections, ~110 prompts)
+- Incident timeline, contributing factors, and action item tracking
+- Cross-practice experiment suggestions
 - Depth assessment and flag management
 - Teaching moment and case study library (seeded with public incidents)
+- Git repository integration for code exploration during ORR reviews
 - Dashboard with staleness tracking and organizational flag visibility
-- Git repository integration for code exploration during reviews
-- Markdown export
-- Session auto-renewal with conversation continuity
-- Tool call audit trail for debugging
+- Markdown export for both practices
+- Session auto-renewal with pre-compaction flush
+- Steering hooks for agent quality and security
+- LLM retry with exponential backoff and fallback model support
+- Structured trace logging (W3C-compatible spans)
+- Docker packaging for easy deployment
 
 **What's planned:**
 - Expert-led facilitation mode (Mode 1) and hybrid async prep (Mode 3)
 - Transcript import from recorded meetings
 - OIDC/SSO authentication
 - Drift detection across ORR versions
-- MCP server integration
-- Cross-practice connections (load testing, chaos engineering, incident analysis)
+- Unified learning dashboard across practices
 
 ## License
 
