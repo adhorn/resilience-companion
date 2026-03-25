@@ -2,7 +2,7 @@ services:
   app:
     build: .
     ports:
-      - "${PORT:-3000}:3000"
+      - "${DOCKER_PORT:-3080}:3000"
     volumes:
       - ./data:/app/data
     env_file:

@@ -69,15 +69,38 @@ export function buildBaseContext(
 
   // Build section summaries
   const sections: SectionSummary[] = allSectionRows.map((s) => {
-    const flags = typeof s.flags === "string" ? JSON.parse(s.flags) : s.flags;
+    const flags = typeof s.flags === "string" ? JSON.parse(s.flags) : (s.flags || []);
+    const prompts = (() => {
+      try { return typeof s.prompts === "string" ? JSON.parse(s.prompts as string) : (s.prompts || []); }
+      catch { return []; }
+    })() as string[];
+    const promptResponses = (() => {
+      try { return typeof s.promptResponses === "string" ? JSON.parse(s.promptResponses as string) : (s.promptResponses || {}); }
+      catch { return {}; }
+    })() as Record<string, any>;
+
+    const answered = Object.entries(promptResponses).filter(([, v]) => {
+      const text = typeof v === "string" ? v : (v as any)?.answer || "";
+      return text.trim().length > 0;
+    });
+    const codeSourced = answered.filter(([, v]) => typeof v === "object" && (v as any)?.source === "code").length;
+
     return {
       id: s.id,
       position: s.position,
       title: s.title,
       depth: s.depth,
-      flags: (flags as Array<{ type: string }>).map((f) => f.type),
+      depthRationale: s.depthRationale || null,
+      flags: (flags as Array<{ type: string; note: string; severity?: string }>).map((f) => ({
+        type: f.type,
+        note: f.note,
+        ...(f.severity ? { severity: f.severity } : {}),
+      })),
       hasContent: s.content.length > 0,
       snippet: s.conversationSnippet,
+      questionsAnswered: answered.length,
+      questionsTotal: prompts.length,
+      codeSourced,
     };
   });
 

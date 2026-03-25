@@ -25,7 +25,9 @@ cp .env.example .env     # edit LLM_API_KEY with your Anthropic or OpenAI key
 docker compose up
 ```
 
-Open http://localhost:3000. That's it.
+Open http://localhost:3080. That's it.
+
+Docker defaults to port **3080** (not 3000) so it never conflicts with `npm run dev`. To use a different port: `DOCKER_PORT=4000 docker compose up`.
 
 The database is auto-created on first boot and persisted in `./data/`. To reset, stop the container and delete `./data/resilience-companion.db`.
 
@@ -306,6 +308,49 @@ This is a Phase 1 MVP designed for local, single-team use.
 - OIDC/SSO authentication
 - Drift detection across ORR versions
 - Unified learning dashboard across practices
+
+## Troubleshooting
+
+### `bind: address already in use` when running Docker
+
+Docker defaults to port 3080 to avoid conflicts with `npm run dev` (port 3000). If 3080 is also taken:
+
+```bash
+DOCKER_PORT=4000 docker compose up
+```
+
+### `npm run dev` won't start (port 3000 in use)
+
+A Docker container may be running on port 3000 from an older config:
+
+```bash
+docker compose down
+npm run dev
+```
+
+### Port not released after stopping the dev server
+
+Sometimes `Ctrl+C` doesn't fully kill all child processes, leaving a ghost Node process holding the port. This can happen when signal propagation fails in the `concurrently` → `tsx watch` → `node` chain.
+
+**Diagnose** — check what's holding the port:
+
+```bash
+lsof -iTCP:3000 -sTCP:LISTEN
+```
+
+**Fix** — kill the process using the port:
+
+```bash
+kill $(lsof -iTCP:3000 -sTCP:LISTEN -t)
+```
+
+**Verify** — confirm the port is free (should return nothing):
+
+```bash
+lsof -iTCP:3000 -sTCP:LISTEN
+```
+
+If this happens frequently, the dev script already includes mitigations (direct `tsx` invocation instead of `npm run`, `--kill-others --kill-signal SIGTERM` in concurrently, and graceful shutdown handlers in the API server). If ghost processes persist, you can also try `kill -9` instead of `kill`.
 
 ## License
 

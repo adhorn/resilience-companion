@@ -373,7 +373,7 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
     const practiceId = c.req.param(opts.practiceIdParam)!;
     const sessionId = c.req.param("sessionId")!;
     const body = await c.req.json();
-    const { content, sectionId } = body;
+    const { content, sectionId, displayContent } = body;
 
     if (!content) {
       return c.json({ error: "validation", message: "content is required" }, 400);
@@ -484,13 +484,28 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
       .all()
       .at(-1);
 
-    const isDuplicate = lastMsg && lastMsg.role === "user" && lastMsg.content === content;
+    // Store the display-friendly version (e.g. "/learning") for chat history,
+    // but send the full prompt to the LLM
+    const storedContent = displayContent || content;
+
+    // When /learning runs, clear previous learning_command discoveries so they're replaced fresh
+    if (displayContent === "/learning") {
+      db.delete(schema.discoveries)
+        .where(and(
+          eq(schema.discoveries.practiceType, opts.practiceConfig.practiceType),
+          eq(schema.discoveries.practiceId, practiceId),
+          eq(schema.discoveries.source, "learning_command"),
+        ))
+        .run();
+    }
+
+    const isDuplicate = lastMsg && lastMsg.role === "user" && lastMsg.content === storedContent;
     if (!isDuplicate) {
       db.insert(schema.sessionMessages).values({
         id: nanoid(),
         sessionId: activeSessionId,
         role: "user",
-        content,
+        content: storedContent,
         createdAt: now,
       }).run();
     }

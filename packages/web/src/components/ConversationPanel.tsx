@@ -26,6 +26,7 @@ export interface ConversationPanelProps {
   notification: string | null;
   setNotification: (v: string | null) => void;
   streamStatus: string | null;
+  thinkingStatus: string | null;
   lastError: string | null;
   setLastError: (v: string | null) => void;
   handleRetry: () => void;
@@ -58,6 +59,7 @@ export function ConversationPanel({
   notification,
   setNotification,
   streamStatus,
+  thinkingStatus,
   lastError,
   setLastError,
   handleRetry,
@@ -171,7 +173,21 @@ export function ConversationPanel({
               {msg.role === "user" ? "You" : "AI Assistant"}
             </div>
             <div className="leading-relaxed">
-              {msg.role === "assistant" ? renderMarkdown(msg.content || "...") : msg.content}
+              {msg.role === "assistant"
+                ? (msg.content
+                    ? renderMarkdown(msg.content)
+                    : streaming && i === messages.length - 1 && thinkingStatus
+                      ? <span className="flex items-center gap-2 text-gray-400 text-xs italic">
+                          <span className="inline-flex gap-0.5">
+                            <span className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                            <span className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                            <span className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                          </span>
+                          {thinkingStatus}
+                        </span>
+                      : "..."
+                  )
+                : msg.content}
             </div>
           </div>
         ))}
