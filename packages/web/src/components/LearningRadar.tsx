@@ -12,14 +12,13 @@ interface RadarSection {
 
 interface Props {
   sections: RadarSection[];
-  onSectionClick?: (index: number) => void;
-  focusedIndex?: number;
 }
 
-const SIZE = 280;
+const SIZE = 400;
 const CENTER = SIZE / 2;
-const MAX_RADIUS = 110;
+const MAX_RADIUS = 140;
 const RINGS = 3; // SURFACE, MODERATE, DEEP
+const LABEL_OFFSET = 24;
 
 // Depth → color (for polygon fill)
 function depthColor(depth: number): string {
@@ -50,12 +49,11 @@ function truncateLabel(label: string, maxLen: number): string {
   return label.slice(0, maxLen - 1) + "\u2026";
 }
 
-export function LearningRadar({ sections, onSectionClick, focusedIndex = -1 }: Props) {
+export function LearningRadar({ sections }: Props) {
   const n = sections.length;
   if (n === 0) return null;
 
   const angleStep = (2 * Math.PI) / n;
-  const isInteractive = !!onSectionClick;
 
   // Build depth polygon points
   const depthPoints = sections.map((s, i) => {
@@ -72,7 +70,7 @@ export function LearningRadar({ sections, onSectionClick, focusedIndex = -1 }: P
   const avgDepth = sections.reduce((sum, s) => sum + s.depth, 0) / n;
 
   return (
-    <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="w-full max-w-[280px] mx-auto">
+    <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="w-full max-w-[400px] mx-auto">
       {/* Concentric ring guides */}
       {Array.from({ length: RINGS }, (_, i) => {
         const r = ((i + 1) / RINGS) * MAX_RADIUS;
@@ -91,6 +89,22 @@ export function LearningRadar({ sections, onSectionClick, focusedIndex = -1 }: P
         );
       })}
 
+      {/* Ring labels */}
+      {["Surface", "Moderate", "Deep"].map((label, i) => {
+        const r = ((i + 1) / RINGS) * MAX_RADIUS;
+        return (
+          <text
+            key={label}
+            x={CENTER + 4}
+            y={CENTER - r + 4}
+            fontSize="9"
+            fill="rgba(156, 163, 175, 0.7)"
+          >
+            {label}
+          </text>
+        );
+      })}
+
       {/* Axis lines */}
       {sections.map((_, i) => {
         const [x, y] = polarToXY(i * angleStep, MAX_RADIUS);
@@ -99,8 +113,8 @@ export function LearningRadar({ sections, onSectionClick, focusedIndex = -1 }: P
             key={i}
             x1={CENTER} y1={CENTER}
             x2={x} y2={y}
-            stroke={i === focusedIndex ? "rgba(59, 130, 246, 0.6)" : "rgba(209, 213, 219, 0.4)"}
-            strokeWidth={i === focusedIndex ? "1.5" : "0.5"}
+            stroke="rgba(209, 213, 219, 0.4)"
+            strokeWidth="0.5"
           />
         );
       })}
@@ -119,11 +133,11 @@ export function LearningRadar({ sections, onSectionClick, focusedIndex = -1 }: P
         const angle = i * angleStep;
         const r = Math.max((s.depth / RINGS) * MAX_RADIUS, 8);
         const [x, y] = polarToXY(angle, r);
-        const size = Math.min(3 + s.discoveries, 7);
+        const size = Math.min(4 + s.discoveries * 1.5, 10);
         return (
           <g key={`d-${i}`}>
             <circle cx={x} cy={y} r={size} fill="rgba(245, 158, 11, 0.7)" stroke="rgb(245, 158, 11)" strokeWidth="1" />
-            <text x={x} y={y + 0.5} textAnchor="middle" dominantBaseline="middle" fontSize="7" fontWeight="bold" fill="white">
+            <text x={x} y={y + 0.5} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="bold" fill="white">
               {s.discoveries > 1 ? s.discoveries : "!"}
             </text>
           </g>
@@ -134,13 +148,13 @@ export function LearningRadar({ sections, onSectionClick, focusedIndex = -1 }: P
       {sections.map((s, i) => {
         if (s.gaps === 0) return null;
         const angle = i * angleStep;
-        const r = Math.max((s.depth / RINGS) * MAX_RADIUS, 8) + 12;
+        const r = Math.max((s.depth / RINGS) * MAX_RADIUS, 8) + 16;
         const [x, y] = polarToXY(angle, Math.min(r, MAX_RADIUS - 5));
         return (
           <rect
             key={`g-${i}`}
-            x={x - 3} y={y - 3}
-            width="6" height="6"
+            x={x - 4} y={y - 4}
+            width="8" height="8"
             fill="rgba(239, 68, 68, 0.6)"
             stroke="rgb(239, 68, 68)"
             strokeWidth="0.5"
@@ -149,27 +163,10 @@ export function LearningRadar({ sections, onSectionClick, focusedIndex = -1 }: P
         );
       })}
 
-      {/* Clickable hit areas (invisible, on top) */}
-      {isInteractive && sections.map((_, i) => {
-        const angle = i * angleStep;
-        const [x, y] = polarToXY(angle, MAX_RADIUS * 0.6);
-        return (
-          <circle
-            key={`hit-${i}`}
-            cx={x} cy={y}
-            r={16}
-            fill="transparent"
-            className="cursor-pointer"
-            onClick={() => onSectionClick!(i)}
-          />
-        );
-      })}
-
       {/* Axis labels */}
       {sections.map((s, i) => {
         const angle = i * angleStep;
-        const [x, y] = polarToXY(angle, MAX_RADIUS + 18);
-        const isFocused = i === focusedIndex;
+        const [x, y] = polarToXY(angle, MAX_RADIUS + LABEL_OFFSET);
 
         // Determine text-anchor based on position
         const normalizedAngle = ((angle - Math.PI / 2 + 2 * Math.PI) % (2 * Math.PI));
@@ -183,13 +180,10 @@ export function LearningRadar({ sections, onSectionClick, focusedIndex = -1 }: P
             x={x} y={y}
             textAnchor={anchor}
             dominantBaseline="middle"
-            fontSize="8"
-            fill={isFocused ? "rgb(37, 99, 235)" : "rgb(107, 114, 128)"}
-            fontWeight={isFocused ? "bold" : "normal"}
-            className={isInteractive ? "cursor-pointer" : ""}
-            onClick={isInteractive ? () => onSectionClick!(i) : undefined}
+            fontSize="11"
+            fill="rgb(107, 114, 128)"
           >
-            {truncateLabel(s.label, 18)}
+            {truncateLabel(s.label, 22)}
           </text>
         );
       })}

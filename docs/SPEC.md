@@ -665,6 +665,8 @@ What's deliberately deferred: Mode 1 (expert-led), Mode 3 (hybrid), transcript p
 - **Mode 1 + Mode 3**: Expert-led and hybrid modes
 - **Transcript import + Transcript Processor agent**
 - **Preparation Brief Generator agent**
+- **`/gaps` command — review-against-conversation**: Agent diffs what was discussed in sessions vs. what was actually captured in sections. Surfaces things the team said but that never made it into the document — the oral history that would otherwise be lost. Uses existing session messages + section content, no new data needed.
+- **Cross-practice search**: Full-text search across all completed ORRs, incidents, discoveries, and teaching moments. "Show me every incident where retry logic was a contributing factor." The discoveries table + flags + cross-practice connections already capture the data; this adds a search/browse layer on top.
 - **Draft-then-approve teaching moment curation**
 - **Reviewer invitation and access**
 - **OIDC/SSO + OAuth token flow**: Proper auth for both humans and agents
