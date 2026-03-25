@@ -3,12 +3,13 @@ import { useParams, Link } from "react-router-dom";
 import { api } from "../api/client";
 import { ConversationPanel } from "../components/ConversationPanel";
 import { ExperimentsPanel } from "../components/ExperimentsPanel";
+import { LearningPanel } from "../components/LearningPanel";
 import { DEPTH_COLORS, DEPTH_LABELS, SEVERITY_COLORS_BOLD, FACTOR_CATEGORY_COLORS, EVENT_TYPE_COLORS } from "../lib/style-constants";
 import { renderMarkdown } from "../lib/markdown";
 import { parseResponses, getResponseText, answeredCount, totalQuestions } from "../lib/responses";
 import { useReviewSession, SlashCommand } from "../hooks/useReviewSession";
 
-type WorkspaceTab = "analysis" | "timeline" | "factors" | "actions" | "experiments";
+type WorkspaceTab = "analysis" | "timeline" | "factors" | "actions" | "experiments" | "learning";
 
 const SLASH_COMMANDS: SlashCommand[] = [
   {
@@ -45,6 +46,11 @@ const SLASH_COMMANDS: SlashCommand[] = [
     name: "experiments",
     description: "Suggest experiments to validate fixes or prevent recurrence",
     prompt: "Review the contributing factors and fixes we've discussed. For your top 2-3 recommendations, IMMEDIATELY call the suggest_experiment tool for each one — do not just describe them in text. Each experiment needs a type (chaos_experiment, load_test, or gameday), a clear hypothesis, rationale, and priority. Weight recurrence likelihood heavily.",
+  },
+  {
+    name: "learning",
+    description: "Extract learning signals from all sections",
+    prompt: "Review all sections for learning signals using the section summaries already in your context — DO NOT call read_section, you already have depth rationales, flags, code-sourced answer counts, and question stats for every section. For each surprise, mental model change, WAI-WAD gap, or blind spot you find, IMMEDIATELY call record_discovery with source='learning_command' — do not just describe them in text. Batch as many record_discovery calls as possible into each response. Include the section_id when the discovery relates to a specific section, omit it when it spans sections. IMPORTANT: Always pass source='learning_command' in every record_discovery call. Also consider contributing factors and escalation paths. Aim for specificity: not 'learned about incident response' but 'discovered that the escalation path had a 45-minute gap because the on-call rotation had no backup for the database team'. After recording all discoveries, summarize what you found.",
   },
 ];
 
@@ -260,7 +266,7 @@ export function IncidentView() {
         {/* Tab bar */}
         <div className="flex items-center border-b border-gray-200 bg-white px-1">
           <div className="flex">
-            {(["analysis", "timeline", "factors", "actions", "experiments"] as const).map((tab) => (
+            {(["analysis", "timeline", "factors", "actions", "experiments", "learning"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -544,6 +550,10 @@ export function IncidentView() {
           {activeTab === "experiments" && (
             <ExperimentsPanel practiceType="incident" practiceId={id!} />
           )}
+
+          {activeTab === "learning" && (
+            <LearningPanel practiceType="incident" practiceId={id!} />
+          )}
         </div>
       </div>
 
@@ -556,6 +566,7 @@ export function IncidentView() {
         notification={session.notification}
         setNotification={session.setNotification}
         streamStatus={session.streamStatus}
+        thinkingStatus={session.thinkingStatus}
         lastError={session.lastError}
         setLastError={session.setLastError}
         handleRetry={session.handleRetry}

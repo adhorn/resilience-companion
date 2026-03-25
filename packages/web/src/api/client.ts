@@ -196,6 +196,14 @@ export const api = {
       request<{ caseStudy: any }>(`/case-studies/${id}`),
   },
 
+  // Learning (per-practice learning signals)
+  learning: {
+    get: (practiceType: string, practiceId: string) =>
+      request<{ learning: any }>(
+        `/${practiceType === "orr" ? "orrs" : "incidents"}/${practiceId}/learning`,
+      ),
+  },
+
   // Insights (learning signals)
   insights: {
     get: () =>
@@ -216,6 +224,7 @@ export async function sendSSEMessage(
   content: string,
   sectionId: string | null,
   onEvent: (event: any) => void,
+  displayContent?: string,
 ): Promise<void> {
   const controller = new AbortController();
   let timeoutId = setTimeout(() => controller.abort(), 60_000);
@@ -223,7 +232,7 @@ export async function sendSSEMessage(
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, sectionId }),
+    body: JSON.stringify({ content, sectionId, ...(displayContent ? { displayContent } : {}) }),
     signal: controller.signal,
   });
 

@@ -270,6 +270,17 @@ export function migrate(db: Db) {
     created_at TEXT NOT NULL
   )`);
 
+  db.run(sql`CREATE TABLE IF NOT EXISTS discoveries (
+    id TEXT PRIMARY KEY,
+    practice_type TEXT NOT NULL,
+    practice_id TEXT NOT NULL,
+    section_id TEXT,
+    session_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'conversation',
+    created_at TEXT NOT NULL
+  )`);
+
   db.run(sql`CREATE TABLE IF NOT EXISTS dependencies (
     id TEXT PRIMARY KEY,
     orr_id TEXT NOT NULL REFERENCES orrs(id) ON DELETE CASCADE,
@@ -318,6 +329,7 @@ export function migrate(db: Db) {
   db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_services_team_name ON services(team_id, name)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_experiment_suggestions_service ON experiment_suggestions(service_id)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_experiment_suggestions_source ON experiment_suggestions(source_practice_type, source_practice_id)`);
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_discoveries_practice ON discoveries(practice_type, practice_id)`);
 
   // Backward-compat ALTERs for existing databases that were created before
   // these columns were added to the CREATE TABLE statements above.
@@ -331,6 +343,7 @@ export function migrate(db: Db) {
     ["orrs", "service_id", "TEXT REFERENCES services(id)"],
     ["incidents", "service_id", "TEXT REFERENCES services(id)"],
     ["sessions", "discoveries", "TEXT NOT NULL DEFAULT '[]'"],
+    ["discoveries", "source", "TEXT NOT NULL DEFAULT 'conversation'"],
   ];
   for (const [table, col, type] of migrations) {
     try {

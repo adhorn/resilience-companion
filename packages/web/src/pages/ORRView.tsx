@@ -4,13 +4,14 @@ import { api } from "../api/client";
 import { DependenciesPanel } from "../components/DependenciesPanel";
 import { ExperimentsPanel } from "../components/ExperimentsPanel";
 import { RisksPanel } from "../components/RisksPanel";
+import { LearningPanel } from "../components/LearningPanel";
 import { ConversationPanel } from "../components/ConversationPanel";
 import { DEPTH_COLORS, DEPTH_LABELS, FLAG_COLORS, SEVERITY_COLORS_BOLD } from "../lib/style-constants";
 import { renderMarkdown } from "../lib/markdown";
 import { parseResponses, getResponseText, getResponseSource, getResponseCodeRef, answeredCount, codeSourcedCount, totalQuestions } from "../lib/responses";
 import { useReviewSession, SlashCommand } from "../hooks/useReviewSession";
 
-type WorkspaceTab = "review" | "risks" | "experiments" | "dependencies";
+type WorkspaceTab = "review" | "risks" | "experiments" | "dependencies" | "learning";
 
 const SLASH_COMMANDS: SlashCommand[] = [
   {
@@ -47,6 +48,11 @@ const SLASH_COMMANDS: SlashCommand[] = [
     name: "experiments",
     description: "Suggest chaos experiments, load tests, or gamedays",
     prompt: "Review all sections we've discussed so far. For the highest-ROI experiments, IMMEDIATELY call suggest_experiment for each one — do not just describe them in text. Each needs a type (chaos_experiment, load_test, or gameday), a clear hypothesis, rationale, and priority. Prioritize by blast radius and confidence gaps. Aim for 2-3 experiments.",
+  },
+  {
+    name: "learning",
+    description: "Extract learning signals from all sections",
+    prompt: "Review all sections for learning signals using the section summaries already in your context — DO NOT call read_section, you already have depth rationales, flags, code-sourced answer counts, and question stats for every section. For each surprise, mental model change, WAI-WAD gap, or blind spot you find, IMMEDIATELY call record_discovery with source='learning_command' — do not just describe them in text. Batch as many record_discovery calls as possible into each response. Include the section_id when the discovery relates to a specific section, omit it when it spans sections. IMPORTANT: Always pass source='learning_command' in every record_discovery call. Aim for specificity: not 'learned about architecture' but 'discovered retry logic has no jitter, risking thundering herd at scale'. After recording all discoveries, summarize what you found.",
   },
 ];
 
@@ -316,7 +322,7 @@ export function ORRView() {
         {/* Tab bar */}
         <div className="flex items-center border-b border-gray-200 bg-white px-1">
           <div className="flex">
-            {(["review", "risks", "experiments", "dependencies"] as const).map((tab) => (
+            {(["review", "risks", "experiments", "dependencies", "learning"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -348,7 +354,9 @@ export function ORRView() {
           </div>
         </div>
 
-        {activeTab === "dependencies" ? (
+        {activeTab === "learning" ? (
+          <LearningPanel practiceType="orr" practiceId={id!} />
+        ) : activeTab === "dependencies" ? (
           <DependenciesPanel orrId={id!} serviceName={orr.serviceName} sections={sections} />
         ) : activeTab === "experiments" ? (
           <ExperimentsPanel practiceType="orr" practiceId={id!} />
@@ -560,6 +568,7 @@ export function ORRView() {
         notification={session.notification}
         setNotification={session.setNotification}
         streamStatus={session.streamStatus}
+        thinkingStatus={session.thinkingStatus}
         lastError={session.lastError}
         setLastError={session.setLastError}
         handleRetry={session.handleRetry}

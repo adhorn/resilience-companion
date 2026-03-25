@@ -7,7 +7,7 @@
     "packages/web"
   ],
   "scripts": {
-    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @orr/api\" \"npm run dev -w @orr/web\"",
+    "dev": "concurrently --kill-others --kill-signal SIGTERM -n api,web -c blue,green \"cd packages/api && npx tsx watch --env-file=../../.env src/index.ts\" \"cd packages/web && npx vite\"",
     "build": "npm run build -w @orr/shared && npm run build -w @orr/api && npm run build -w @orr/web",
     "test": "vitest run",
     "test:mutate": "stryker run",

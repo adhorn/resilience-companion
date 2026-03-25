@@ -178,6 +178,23 @@ export function createSharedToolDefs(practiceLabel: string): LLMToolDef[] {
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "record_discovery",
+        description:
+          "Record a learning signal — something that surprised the team, contradicted expectations, or revealed a gap between how they thought the system works and how it actually works. Call this immediately when you detect a surprise, mental model update, or WAI-WAD gap. Be specific: not 'learned about architecture' but 'discovered retry logic has no jitter, risking thundering herd at scale'.",
+        parameters: {
+          type: "object",
+          properties: {
+            section_id: { type: "string", description: "The section this discovery relates to. Omit if it spans multiple sections." },
+            text: { type: "string", description: "Specific description of what was learned or what surprised the team" },
+            source: { type: "string", enum: ["conversation", "learning_command"], description: "Origin: 'conversation' for real-time discoveries during chat, 'learning_command' for retroactive extraction via /learning. Defaults to 'conversation'." },
+          },
+          required: ["text"],
+        },
+      },
+    },
   ];
 }
 
@@ -486,6 +503,37 @@ export function executeSharedTool(
         .where(eq(schema.sessions.id, sessionId))
         .run();
       return JSON.stringify({ success: true, discoveryCount: (args.discoveries as string[] || []).length });
+    }
+
+    case "record_discovery": {
+      const discSource = (args.source as string) === "learning_command" ? "learning_command" : "conversation";
+
+      // Dedup by exact text (within same source)
+      const existingDisc = db.select().from(schema.discoveries)
+        .where(and(
+          eq(schema.discoveries.practiceType, practiceType),
+          eq(schema.discoveries.practiceId, practiceId),
+          eq(schema.discoveries.text, args.text as string),
+        ))
+        .get();
+
+      if (existingDisc) {
+        return JSON.stringify({ success: true, discoveryId: existingDisc.id, deduplicated: true });
+      }
+
+      const discId = nanoid();
+      db.insert(schema.discoveries).values({
+        id: discId,
+        practiceType,
+        practiceId,
+        sectionId: (args.section_id as string) || null,
+        sessionId,
+        text: args.text as string,
+        source: discSource,
+        createdAt: now,
+      }).run();
+
+      return JSON.stringify({ success: true, discoveryId: discId, text: args.text });
     }
 
     // --- Cross-practice tools ---

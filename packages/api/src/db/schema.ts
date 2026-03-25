@@ -340,6 +340,19 @@ export const crossPracticeSuggestions = sqliteTable("cross_practice_suggestions"
   createdAt: text("created_at").notNull(),
 });
 
+// --- Discoveries (per-section learning signals) ---
+
+export const discoveries = sqliteTable("discoveries", {
+  id: text("id").primaryKey(),
+  practiceType: text("practice_type", { enum: ["orr", "incident"] }).notNull(),
+  practiceId: text("practice_id").notNull(),
+  sectionId: text("section_id"),
+  sessionId: text("session_id").notNull(),
+  text: text("text").notNull(),
+  source: text("source", { enum: ["conversation", "learning_command"] }).notNull().default("conversation"),
+  createdAt: text("created_at").notNull(),
+});
+
 // --- Services (first-class entity connecting all practices) ---
 
 export const services = sqliteTable("services", {

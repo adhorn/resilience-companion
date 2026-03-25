@@ -53,6 +53,7 @@ export function useReviewSession({
   const [streaming, setStreaming] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [streamStatus, setStreamStatus] = useState<string | null>(null);
+  const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const lastUserMessageRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -95,13 +96,14 @@ export function useReviewSession({
 
   // --- Streaming ---
 
-  const doSend = useCallback(async (userMessage: string) => {
+  const doSend = useCallback(async (userMessage: string, displayContent?: string) => {
     if (!practiceId || !sessionId || streaming) return;
 
     lastUserMessageRef.current = userMessage;
     setLastError(null);
     setStreaming(true);
     setStreamStatus(null);
+    setThinkingStatus("Thinking...");
 
     let assistantContent = "";
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -111,6 +113,7 @@ export function useReviewSession({
       await sendSSEMessage(url, userMessage, activeSection, (event) => {
         if (event.type === "content_delta") {
           setStreamStatus(null);
+          setThinkingStatus(null);
           assistantContent += event.content;
           setMessages((prev) => {
             const updated = [...prev];
@@ -131,7 +134,25 @@ export function useReviewSession({
           }
         }
         if (event.type === "error") { setLastError(event.message); setStreamStatus(null); }
-        if (event.type === "tool_call" && event.args?.section_id) setActiveSection(event.args.section_id);
+        if (event.type === "tool_call") {
+          if (event.args?.section_id) setActiveSection(event.args.section_id);
+          const toolLabels: Record<string, string> = {
+            read_section: "Reading section...",
+            update_section_content: "Writing observations...",
+            update_depth_assessment: "Assessing depth...",
+            set_flags: "Setting flags...",
+            update_question_response: "Recording answer...",
+            query_teaching_moments: "Searching teaching moments...",
+            query_case_studies: "Searching case studies...",
+            write_session_summary: "Writing summary...",
+            record_discovery: "Recording discovery...",
+            suggest_experiment: "Suggesting experiment...",
+            suggest_cross_practice_action: "Connecting practices...",
+            record_action_item: "Recording action item...",
+            record_contributing_factor: "Recording factor...",
+          };
+          setThinkingStatus(toolLabels[event.name as string] || "Working...");
+        }
         if (event.type === "section_updated") {
           if (event.sectionId) setActiveSection(event.sectionId);
           debouncedReload();
@@ -146,12 +167,13 @@ export function useReviewSession({
           setNotification(renewalMessage);
           setTimeout(() => setNotification(null), 8000);
         }
-      });
+      }, displayContent);
     } catch {
       setLastError((prev) => prev || "Connection lost. Your conversation is saved — reload the page to continue.");
     }
 
     setStreamStatus(null);
+    setThinkingStatus(null);
 
     if (!assistantContent.trim()) {
       setLastError((prev) => prev || "No response received. The AI may be overloaded.");
@@ -182,7 +204,7 @@ export function useReviewSession({
     setSlashFilter("");
     setSlashSelectedIndex(0);
     setMessages((prev) => [...prev, { role: "user", content: `/${cmd.name}` }]);
-    doSend(cmd.prompt);
+    doSend(cmd.prompt, `/${cmd.name}`);
   }, [doSend]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -290,6 +312,7 @@ export function useReviewSession({
     streaming,
     notification, setNotification,
     streamStatus,
+    thinkingStatus,
     lastError, setLastError,
     handleRetry,
     messagesEndRef,

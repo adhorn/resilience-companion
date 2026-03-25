@@ -15,9 +15,13 @@ export interface SectionSummary {
   position: number;
   title: string;
   depth: string;
-  flags: string[];
+  depthRationale: string | null;
+  flags: { type: string; note: string; severity?: string }[];
   hasContent: boolean;
   snippet: string | null;
+  questionsAnswered: number;
+  questionsTotal: number;
+  codeSourced: number;
 }
 
 export interface ActiveSectionDetail {
@@ -99,7 +103,17 @@ You also have a record_action_item tool for structured follow-ups with owner, pr
 export const SHARED_DISCOVERY_GUIDANCE = `
 ## Recording Discoveries
 
-When wrapping up a session with write_session_summary, include a discoveries array listing anything that surprised the team or contradicted their expectations. Discovery rate is a key signal that the practice is producing learning rather than just executing. If nothing surprised the team, that might mean the review went too safe — note that in the summary.
+You have a record_discovery tool to capture learning signals in real time. Call it IMMEDIATELY when you detect:
+- **Surprises** — the team says "I didn't know that", "wait, really?", or reacts to unexpected information
+- **Wrong predictions** — "I thought it would fail gracefully but...", "I assumed X but actually Y"
+- **WAI-WAD gaps** — differences between how the team thinks the system works vs how it actually works (visible in code-sourced answers vs team memory)
+- **Blind spots** — sections where the team can't answer from memory, or explicitly acknowledges unknowns
+
+Be specific: not "the team learned about architecture" but "the team discovered that their retry logic (3 retries, exponential backoff) has no jitter, which at scale could cause thundering herd".
+
+Include the section_id when the discovery relates to a specific section. Omit it when the discovery spans sections.
+
+When wrapping up a session with write_session_summary, also include a discoveries array as a catch-all. But the primary capture mechanism is record_discovery during conversation. If nothing surprised the team, that might mean the review went too safe — note that in the summary.
 `;
 
 // --- Shared prompt builder functions ---
@@ -119,9 +133,20 @@ export function buildSectionOverview(ctx: PromptSections): string {
   const parts: string[] = ["\n## Section Overview"];
   for (const s of ctx.sections) {
     const depthIcon = { UNKNOWN: "[ ]", SURFACE: "[S]", MODERATE: "[M]", DEEP: "[D]" }[s.depth] || "[ ]";
-    const flags = s.flags.length > 0 ? ` [${s.flags.join(", ")}]` : "";
+    const flagTypes = s.flags.length > 0 ? ` [${s.flags.map((f) => f.type).join(", ")}]` : "";
     const active = s.id === ctx.activeSectionId ? " ← ACTIVE" : "";
-    parts.push(`${s.position}. [id=${s.id}] ${s.title} ${depthIcon} ${s.depth}${flags}${active}`);
+    const qa = `${s.questionsAnswered}/${s.questionsTotal} answered`;
+    const codeSrc = s.codeSourced > 0 ? `, ${s.codeSourced} code-sourced` : "";
+    parts.push(`${s.position}. [id=${s.id}] ${s.title} ${depthIcon} ${s.depth}${flagTypes}${active} (${qa}${codeSrc})`);
+    if (s.depthRationale) {
+      parts.push(`   Depth rationale: ${s.depthRationale}`);
+    }
+    if (s.flags.length > 0) {
+      for (const f of s.flags) {
+        const sev = f.severity ? ` [${f.severity}]` : "";
+        parts.push(`   - ${f.type}${sev}: ${f.note}`);
+      }
+    }
     if (s.snippet) {
       parts.push(`   Last note: ${s.snippet}`);
     }
