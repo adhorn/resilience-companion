@@ -197,6 +197,8 @@ resilience-companion/
 
 ### How the Agent System Works
 
+For a detailed walkthrough of how learning signals are captured — from message to persistence — see **[How Learning Works: The Life of a Message](docs/HOW-LEARNING-WORKS.md)**.
+
 Both practices share one agent loop (`agent/loop.ts`) with practice-specific configuration plugged in:
 
 ```
