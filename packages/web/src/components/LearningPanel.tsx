@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
-import { LearningRadar } from "./LearningRadar";
+import { SignalRadar, RadarLegend, RADAR_COLORS } from "./LearningRadar";
 import { PRIORITY_COLORS } from "../lib/style-constants";
 
 interface Props {
@@ -49,7 +49,7 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
   }
 
   const { sections, discoveries, crossPracticeLinks, actionItems, totals } = data;
-  const hasSignals = totals.discoveries > 0 || totals.crossPracticeLinks > 0 || actionItems.length > 0 || totals.experiments > 0;
+  const hasSignals = totals.discoveries > 0 || totals.strengths > 0 || totals.crossPracticeLinks > 0 || actionItems.length > 0 || totals.experiments > 0;
 
   // Group discoveries by section
   const discoveriesBySection = new Map<string | null, any[]>();
@@ -63,6 +63,8 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
     <div className="flex-1 overflow-y-auto">
       {/* Header: summary counts + refresh */}
       <div className="px-4 py-2 border-b border-gray-200 bg-white flex items-center gap-4 text-xs">
+        <span className="text-green-600">{totals.strengths} strength{totals.strengths !== 1 ? "s" : ""}</span>
+        <span className="text-gray-300">|</span>
         <span className="text-gray-500">{totals.discoveries} surprise{totals.discoveries !== 1 ? "s" : ""}</span>
         <span className="text-gray-300">|</span>
         <span className="text-gray-500">{totals.gaps} gap{totals.gaps !== 1 ? "s" : ""}</span>
@@ -91,62 +93,53 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
 
       {hasSignals && (
         <div className="p-4 space-y-4">
-          {/* ── Dashboard header: radar + stats ── */}
-          <div className="flex gap-4">
-            {/* Radar */}
-            <div className="flex-shrink-0">
-              <LearningRadar
-                sections={sections.map((s: any) => ({
-                  label: s.title,
-                  depth: s.depth,
-                  discoveries: s.discoveries,
-                  gaps: s.gaps,
-                }))}
-              />
-              <div className="mt-1 flex justify-center gap-3 text-[10px] text-gray-500">
-                <span className="flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-green-400" /> Deep
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-yellow-400" /> Moderate
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-red-400" /> Surface
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400" /> Surprise
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 rounded-sm bg-red-500" /> Gap
-                </span>
-              </div>
-            </div>
+          {/* ── Signal radars: Strengths, Surprises, Gaps ── */}
+          <div className="grid grid-cols-3 gap-2">
+            <SignalRadar
+              title="Strengths"
+              axes={sections.map((s: any) => ({ label: s.title, value: s.strengths }))}
+              color={RADAR_COLORS.strengths}
+            />
+            <SignalRadar
+              title="Surprises"
+              axes={sections.map((s: any) => ({ label: s.title, value: s.discoveries }))}
+              color={RADAR_COLORS.surprises}
+            />
+            <SignalRadar
+              title="Gaps"
+              axes={sections.map((s: any) => ({ label: s.title, value: s.gaps }))}
+              color={RADAR_COLORS.gaps}
+            />
+          </div>
+          <RadarLegend sections={sections.map((s: any) => ({ position: s.position, title: s.title }))} />
 
-            {/* Stats cards + coverage bar */}
-            <div className="flex-1 grid grid-cols-2 gap-2 content-start">
-              <StatCard label="Surprises" value={totals.discoveries} color="amber" />
-              <StatCard label="Gaps" value={totals.gaps} color="red" />
-              <StatCard label="Connections" value={totals.crossPracticeLinks} color="indigo" />
-              <StatCard label="Experiments" value={totals.experiments} color="purple" />
+          {/* ── Stats + coverage ── */}
+          <div className="grid grid-cols-4 gap-2">
+            <StatCard label="Strengths" value={totals.strengths} color="green" />
+            <StatCard label="Surprises" value={totals.discoveries} color="amber" />
+            <StatCard label="Gaps" value={totals.gaps} color="red" />
+            <StatCard label="Connections" value={totals.crossPracticeLinks} color="indigo" />
+          </div>
 
-              {/* Coverage bar */}
-              <div className="col-span-2 bg-gray-50 rounded-lg border border-gray-200 p-2">
-                <div className="text-[10px] text-gray-400 mb-1.5">Section Depth</div>
-                <div className="flex gap-0.5">
-                  {sections.map((s: any) => (
-                    <div
-                      key={s.id}
-                      className={`flex-1 h-5 rounded-sm ${DEPTH_BAR[s.depth]} relative group flex items-center justify-center`}
-                      title={`${s.title}: ${DEPTH_LABELS[s.depth]}`}
-                    >
-                      <span className="text-[8px] font-bold text-white/80 leading-none">{s.position}</span>
-                      {s.discoveries > 0 && (
-                        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-amber-400 rounded-full" />
-                      )}
-                    </div>
-                  ))}
+          {/* Section depth coverage bar */}
+          <div className="bg-gray-50 rounded-lg border border-gray-200 p-2">
+            <div className="text-[10px] text-gray-400 mb-1.5">Section Depth</div>
+            <div className="flex gap-0.5">
+              {sections.map((s: any) => (
+                <div
+                  key={s.id}
+                  className={`flex-1 h-5 rounded-sm ${DEPTH_BAR[s.depth]} relative group flex items-center justify-center`}
+                  title={`${s.title}: ${DEPTH_LABELS[s.depth]}`}
+                >
+                  <span className="text-[8px] font-bold text-white/80 leading-none">{s.position}</span>
                 </div>
-              </div>
+              ))}
+            </div>
+            <div className="flex justify-center gap-4 mt-1.5 text-[9px] text-gray-400">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-green-500 inline-block" /> Deep</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-yellow-400 inline-block" /> Moderate</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-400 inline-block" /> Surface</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-gray-300 inline-block" /> Not reviewed</span>
             </div>
           </div>
 
@@ -154,7 +147,7 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
           <div className="space-y-3">
             {sections.map((s: any) => {
               const sectionDiscoveries = discoveriesBySection.get(s.id) || [];
-              const hasContent = s.depth > 0 || sectionDiscoveries.length > 0 || s.gaps > 0 || s.codeSourced > 0;
+              const hasContent = s.depth > 0 || sectionDiscoveries.length > 0 || s.gaps > 0 || s.strengths > 0 || s.codeSourced > 0;
 
               return (
                 <div
@@ -185,6 +178,9 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
                   {hasContent && (
                     <div className="flex gap-3 text-[10px] mb-2">
                       <span className="text-gray-500">{s.questionsAnswered}/{s.questionsTotal} questions</span>
+                      {s.strengths > 0 && (
+                        <span className="text-green-600 font-medium">{s.strengths} strength{s.strengths !== 1 ? "s" : ""}</span>
+                      )}
                       {sectionDiscoveries.length > 0 && (
                         <span className="text-amber-600 font-medium">{sectionDiscoveries.length} surprise{sectionDiscoveries.length !== 1 ? "s" : ""}</span>
                       )}
@@ -200,6 +196,17 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
                   {/* Depth rationale */}
                   {s.depthRationale && (
                     <p className="text-[11px] text-gray-500 italic mb-2">{s.depthRationale}</p>
+                  )}
+
+                  {/* Strengths */}
+                  {s.strengthNotes?.length > 0 && (
+                    <div className="space-y-1.5 mt-2">
+                      {s.strengthNotes.map((note: string, idx: number) => (
+                        <div key={`str-${idx}`} className="bg-white/70 border border-green-200/60 rounded px-2.5 py-1.5">
+                          <p className="text-xs text-gray-700">{note}</p>
+                        </div>
+                      ))}
+                    </div>
                   )}
 
                   {/* Discoveries */}
@@ -251,6 +258,7 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
 
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
   const colors: Record<string, string> = {
+    green: "bg-green-50 border-green-200 text-green-700",
     amber: "bg-amber-50 border-amber-200 text-amber-700",
     red: "bg-red-50 border-red-200 text-red-700",
     indigo: "bg-indigo-50 border-indigo-200 text-indigo-700",

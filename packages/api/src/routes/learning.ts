@@ -86,8 +86,9 @@ function buildLearningResponse(
     });
     const codeSourced = answered.filter(([, v]: any) => typeof v === "object" && v?.source === "code").length;
 
-    // Count GAP flags
+    // Count flags by type
     const gapCount = flags.filter((f: any) => f.type === "GAP").length;
+    const strengthCount = flags.filter((f: any) => f.type === "STRENGTH").length;
 
     // Count discoveries for this section
     const sectionDiscoveries = allDiscoveries.filter((d) => d.sectionId === s.id).length;
@@ -100,6 +101,8 @@ function buildLearningResponse(
       depthRationale: s.depthRationale || null,
       discoveries: sectionDiscoveries,
       gaps: gapCount,
+      strengths: strengthCount,
+      strengthNotes: flags.filter((f: any) => f.type === "STRENGTH").map((f: any) => f.note),
       codeSourced,
       questionsAnswered: answered.length,
       questionsTotal: prompts.length,
@@ -110,6 +113,7 @@ function buildLearningResponse(
   const totals = {
     discoveries: allDiscoveries.length,
     gaps: sections.reduce((sum: number, s: any) => sum + s.gaps, 0),
+    strengths: sections.reduce((sum: number, s: any) => sum + s.strengths, 0),
     crossPracticeLinks: crossPracticeLinks.length,
     experiments: experiments.length,
   };
