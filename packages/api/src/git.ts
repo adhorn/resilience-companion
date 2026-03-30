@@ -9,8 +9,8 @@
  * - Clone targets are sandboxed under REPOS_DIR
  */
 
-import { existsSync, mkdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
@@ -142,11 +142,50 @@ export function getLocalPath(gitUrl: string): string | null {
 // AES-256-GCM using a key derived from JWT_SECRET.
 // Not a substitute for a proper secrets manager, but prevents plaintext tokens in SQLite.
 
-function deriveKey(): Buffer {
-  const secret = process.env.JWT_SECRET;
-  if (!secret || secret === "change-me-in-production") {
-    throw new Error("JWT_SECRET must be set to a unique value (not the default). Token encryption depends on it.");
+/**
+ * Resolve the encryption secret. Priority:
+ * 1. JWT_SECRET env var (if set and not the placeholder)
+ * 2. Auto-generated secret persisted in the data directory
+ *
+ * Auto-generation means customers never need to configure this manually.
+ * The secret file lives alongside the SQLite DB so it's included in
+ * volume mounts and backups.
+ */
+function getSecretFilePath(): string {
+  const monorepoRoot = resolve(import.meta.dirname, "..", "..", "..");
+  const rawDbPath = process.env.DB_PATH || "./data/resilience-companion.db";
+  const dbPath = rawDbPath.startsWith("/") ? rawDbPath : resolve(monorepoRoot, rawDbPath);
+  return resolve(dirname(dbPath), ".encryption-key");
+}
+
+let cachedSecret: string | null = null;
+
+function getOrCreateSecret(): string {
+  if (cachedSecret) return cachedSecret;
+
+  // 1. Explicit env var takes precedence
+  const envSecret = process.env.JWT_SECRET;
+  if (envSecret && envSecret !== "change-me-in-production") {
+    cachedSecret = envSecret;
+    return cachedSecret;
   }
+
+  // 2. Read from persisted file, or auto-generate
+  const secretPath = getSecretFilePath();
+  if (existsSync(secretPath)) {
+    cachedSecret = readFileSync(secretPath, "utf8").trim();
+    return cachedSecret;
+  }
+
+  // Auto-generate and persist
+  cachedSecret = randomBytes(32).toString("hex");
+  mkdirSync(dirname(secretPath), { recursive: true });
+  writeFileSync(secretPath, cachedSecret, { mode: 0o600 });
+  return cachedSecret;
+}
+
+function deriveKey(): Buffer {
+  const secret = getOrCreateSecret();
   return createHash("sha256").update(secret).digest(); // 32 bytes = AES-256
 }
 
