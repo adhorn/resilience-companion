@@ -22,6 +22,7 @@ import { getLLM } from "../../llm/index.js";
 import type { LLMToolDef, LLMMessage } from "../../llm/index.js";
 import type { PracticeConfig } from "../../agent/practice.js";
 import { log } from "../../logger.js";
+import { sendMessageSchema, validateBody, safeJsonParse } from "../../validation.js";
 
 // --- Shared utilities ---
 
@@ -373,11 +374,9 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
     const practiceId = c.req.param(opts.practiceIdParam)!;
     const sessionId = c.req.param("sessionId")!;
     const body = await c.req.json();
-    const { content, sectionId, displayContent } = body;
-
-    if (!content) {
-      return c.json({ error: "validation", message: "content is required" }, 400);
-    }
+    const mv = validateBody(sendMessageSchema, body);
+    if (!mv.success) return c.json({ error: "validation", message: mv.error }, 400);
+    const { content, sectionId, displayContent } = mv.data;
 
     const db = getDb();
 
@@ -414,9 +413,7 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
       const oldMessages = db.select().from(schema.sessionMessages)
         .where(eq(schema.sessionMessages.sessionId, sessionId))
         .all();
-      const oldDiscussed = typeof session.sectionsDiscussed === "string"
-        ? JSON.parse(session.sectionsDiscussed) as string[]
-        : session.sectionsDiscussed as string[];
+      const oldDiscussed = safeJsonParse<string[]>(session.sectionsDiscussed, []);
 
       // Pre-renewal flush: try to get the LLM to write a proper summary
       // before we close this session. Only if no summary exists yet
@@ -515,9 +512,7 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
       const activeSession = db.select().from(schema.sessions)
         .where(eq(schema.sessions.id, activeSessionId))
         .get();
-      const discussed = typeof activeSession!.sectionsDiscussed === "string"
-        ? JSON.parse(activeSession!.sectionsDiscussed)
-        : activeSession!.sectionsDiscussed;
+      const discussed = safeJsonParse<string[]>(activeSession!.sectionsDiscussed, []);
       if (!(discussed as string[]).includes(sectionId)) {
         (discussed as string[]).push(sectionId);
         db.update(schema.sessions)

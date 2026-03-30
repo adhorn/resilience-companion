@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { eq, like, or } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
+import { safeJsonParse } from "../validation.js";
 
 export const teachingMomentRoutes = new Hono();
 
@@ -43,10 +44,8 @@ teachingMomentRoutes.get("/", (c) => {
 
   if (sectionTag) {
     results = results.filter((tm) => {
-      const tags = typeof tm.sectionTags === "string"
-        ? JSON.parse(tm.sectionTags)
-        : tm.sectionTags;
-      return (tags as string[]).includes(sectionTag);
+      const tags: string[] = safeJsonParse(tm.sectionTags, []);
+      return tags.includes(sectionTag);
     });
   }
 

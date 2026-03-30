@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
+import { updateSectionSchema, validateBody } from "../validation.js";
 
 export const incidentSectionRoutes = new Hono();
 incidentSectionRoutes.use("*", requireAuth);
@@ -51,12 +52,16 @@ incidentSectionRoutes.patch("/:sectionId", async (c) => {
     .get();
   if (!section) return c.json({ error: "not_found", message: "Section not found" }, 404);
 
+  const v = validateBody(updateSectionSchema, body);
+  if (!v.success) return c.json({ error: "validation", message: v.error }, 400);
+  const d = v.data;
+
   const now = new Date().toISOString();
   const updates: Record<string, unknown> = { updatedAt: now };
 
-  if (body.content !== undefined) updates.content = body.content;
-  if (body.prompts !== undefined) updates.prompts = JSON.stringify(body.prompts);
-  if (body.promptResponses !== undefined) updates.promptResponses = body.promptResponses;
+  if (d.content !== undefined) updates.content = d.content;
+  if (d.prompts !== undefined) updates.prompts = JSON.stringify(d.prompts);
+  if (d.promptResponses !== undefined) updates.promptResponses = d.promptResponses;
 
   db.update(schema.incidentSections)
     .set(updates)

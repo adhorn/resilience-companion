@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
+import { safeJsonParse } from "../validation.js";
 
 export const exportRoutes = new Hono();
 
@@ -182,22 +183,18 @@ exportRoutes.get("/markdown", (c) => {
     }
 
     // Flags
-    const flags = typeof section.flags === "string"
-      ? JSON.parse(section.flags)
-      : section.flags;
-    if ((flags as Array<{ type: string; note: string }>).length > 0) {
+    const flags: Array<{ type: string; note: string }> = safeJsonParse(section.flags, []);
+    if (flags.length > 0) {
       lines.push("");
       lines.push("**Flags:**");
-      for (const f of flags as Array<{ type: string; note: string }>) {
+      for (const f of flags) {
         const icon = { RISK: "⚠️", GAP: "🔴", STRENGTH: "✅", FOLLOW_UP: "📋" }[f.type] || "•";
         lines.push(`- ${icon} **${f.type}:** ${f.note}`);
       }
     }
 
     // Prompts
-    const prompts = typeof section.prompts === "string"
-      ? JSON.parse(section.prompts)
-      : section.prompts;
+    const prompts: string[] = safeJsonParse(section.prompts, []);
     lines.push("");
     lines.push("### Prompts");
     for (const p of prompts as string[]) {

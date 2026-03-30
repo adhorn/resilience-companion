@@ -5,6 +5,7 @@ import type { TemplateSection } from "@orr/shared";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
 import { validateGitUrl, ensureRepo, encryptToken, decryptToken } from "../git.js";
+import { createOrrSchema, updateOrrSchema, validateBody, safeJsonParse } from "../validation.js";
 
 export const orrRoutes = new Hono();
 
@@ -41,11 +42,9 @@ orrRoutes.get("/", (c) => {
 orrRoutes.post("/", async (c) => {
   const user = c.get("user");
   const body = await c.req.json();
-  const { serviceName, templateId, repositoryUrl, repositoryToken } = body;
-
-  if (!serviceName) {
-    return c.json({ error: "validation", message: "serviceName is required" }, 400);
-  }
+  const v = validateBody(createOrrSchema, body);
+  if (!v.success) return c.json({ error: "validation", message: v.error }, 400);
+  const { serviceName, templateId, repositoryUrl, repositoryToken } = v.data;
 
   // Validate git URL if provided
   let encryptedToken: string | null = null;
@@ -113,11 +112,9 @@ orrRoutes.post("/", async (c) => {
     .run();
 
   // Create sections from template
-  const templateSections = (
-    typeof template.sections === "string"
-      ? JSON.parse(template.sections)
-      : template.sections
-  ) as TemplateSection[];
+  const templateSections = safeJsonParse<TemplateSection[]>(
+    template.sections, [],
+  );
 
   for (const ts of templateSections) {
     db.insert(schema.sections)
@@ -193,6 +190,8 @@ orrRoutes.get("/:id", (c) => {
 orrRoutes.patch("/:id", async (c) => {
   const user = c.get("user");
   const body = await c.req.json();
+  const v = validateBody(updateOrrSchema, body);
+  if (!v.success) return c.json({ error: "validation", message: v.error }, 400);
   const db = getDb();
 
   const orr = db
@@ -209,42 +208,43 @@ orrRoutes.patch("/:id", async (c) => {
 
   const now = new Date().toISOString();
   const updates: Record<string, unknown> = { updatedAt: now };
+  const d = v.data;
 
-  if (body.status) {
-    updates.status = body.status;
-    if (body.status === "COMPLETE") {
+  if (d.status) {
+    updates.status = d.status;
+    if (d.status === "COMPLETE") {
       updates.completedAt = now;
     }
   }
-  if (body.serviceName) {
-    updates.serviceName = body.serviceName;
+  if (d.serviceName) {
+    updates.serviceName = d.serviceName;
   }
-  if (body.steeringTier && ["standard", "thorough", "rigorous"].includes(body.steeringTier)) {
-    updates.steeringTier = body.steeringTier;
+  if (d.steeringTier) {
+    updates.steeringTier = d.steeringTier;
   }
-  if (body.repositoryUrl !== undefined) {
-    if (body.repositoryUrl) {
-      const validation = validateGitUrl(body.repositoryUrl);
+  if (d.repositoryUrl !== undefined) {
+    if (d.repositoryUrl) {
+      const validation = validateGitUrl(d.repositoryUrl);
       if (!validation.valid) {
         return c.json({ error: "validation", message: validation.error }, 400);
       }
 
       // Decrypt existing token if no new one provided
-      let token = body.repositoryToken;
+      let token: string | undefined = d.repositoryToken;
       if (!token && orr.repositoryToken) {
-        token = decryptToken(orr.repositoryToken);
+        token = decryptToken(orr.repositoryToken) ?? undefined;
       }
 
-      if (body.repositoryToken) {
-        updates.repositoryToken = encryptToken(body.repositoryToken);
+      if (d.repositoryToken) {
+        updates.repositoryToken = encryptToken(d.repositoryToken);
       }
 
-      const result = ensureRepo(body.repositoryUrl, token || undefined);
+      const result = ensureRepo(d.repositoryUrl, token || undefined);
       if ("error" in result) {
         return c.json({ error: "clone_failed", message: result.error }, 400);
       }
 
-      updates.repositoryPath = body.repositoryUrl;
+      updates.repositoryPath = d.repositoryUrl;
       updates.repositoryLocalPath = result.localPath;
     } else {
       updates.repositoryPath = null;

@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
+import { safeJsonParse } from "../validation.js";
 
 export const incidentExportRoutes = new Hono();
 incidentExportRoutes.use("*", requireAuth);
@@ -120,8 +121,8 @@ incidentExportRoutes.get("/markdown", (c) => {
     if (section.depthRationale) lines.push(`**Assessment:** ${section.depthRationale}`);
 
     // Flags
-    const flags = typeof section.flags === "string" ? JSON.parse(section.flags) : section.flags;
-    if ((flags as any[]).length > 0) {
+    const flags: any[] = safeJsonParse(section.flags, []);
+    if (flags.length > 0) {
       lines.push("");
       lines.push("**Flags:**");
       for (const f of flags as Array<{ type: string; note: string }>) {
@@ -131,14 +132,13 @@ incidentExportRoutes.get("/markdown", (c) => {
     }
 
     // Questions & responses
-    const prompts = typeof section.prompts === "string" ? JSON.parse(section.prompts) : section.prompts;
-    const responses = typeof section.promptResponses === "string"
-      ? JSON.parse(section.promptResponses) : section.promptResponses || {};
+    const prompts: string[] = safeJsonParse(section.prompts, []);
+    const responses: Record<string, any> = safeJsonParse(section.promptResponses, {});
 
-    if ((prompts as string[]).length > 0) {
+    if (prompts.length > 0) {
       lines.push("");
       lines.push("### Questions");
-      (prompts as string[]).forEach((p, i) => {
+      prompts.forEach((p: string, i: number) => {
         const resp = responses[i];
         const answer = typeof resp === "string" ? resp : resp?.answer || "";
         lines.push(`- **${p}**`);
