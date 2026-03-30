@@ -303,12 +303,14 @@ The agent receives:
 - Type badges in ORR list, feature context (change types, description, parent link) in ORR sidebar
 - Tests: 14 covering template generation and context building
 
-### Phase 2: Parent-Child Interaction
+### Phase 2: Parent-Child Interaction — ✅ IMPLEMENTED
 
-- Parent update suggestions from Feature ORR
-- Feature ORR list on Service ORR view
-- Parent context panel in Feature ORR view
-- Impact indicators
+- Feature ORR list on Service ORR sidebar (child ORRs with change types)
+- Parent context panel in Feature ORR view (collapsible, shows parent sections with content/depth/flags)
+- Impact indicators (blue dot on "Impact on Existing Service" section)
+- Parent update suggestions: agent auto-links `suggest_cross_practice_action(target: "orr")` to parent via `linkedPracticeId`, pending suggestions shown on parent ORR sidebar with accept/dismiss, system prompt instructs feature ORR agent to suggest updates
+- API: GET `/orrs/:id` returns `parentOrr`, `childOrrs`, `pendingSuggestions`, `featureSuggestions`
+- API: PATCH `/orrs/:id/suggestions/:suggestionId` for accept/dismiss
 
 ### Phase 3: Team Customization
 
