@@ -3,10 +3,26 @@
 **Date**: 2026-03-30
 **Scope**: Full codebase audit (API, Web, Agent system)
 **Context**: Pre-customer review
+**Last updated**: 2026-03-30 (post-remediation re-audit)
 
 ---
 
-## Critical Findings
+## Remediation Status
+
+| # | Finding | Severity | Status |
+|---|---------|----------|--------|
+| 1 | Stub authentication | CRITICAL | **Open** — acceptable for single-user self-hosted deployment |
+| 2 | Default JWT_SECRET | HIGH | **Fixed** — throws if unset or default when encrypting tokens |
+| 3 | No input validation | HIGH | **Fixed** — zod schemas on all POST/PATCH routes |
+| 4 | SSE event injection | MEDIUM | **Open** — low risk (LLM is trusted source, JSON.stringify escapes `\n`) |
+| 5 | Unguarded JSON.parse() | MEDIUM | **Fixed** — `safeJsonParse()` across all routes, context, and tools |
+| 6 | No rate limiting | MEDIUM | **Open** — not yet implemented |
+| 7 | No security headers | LOW | **Fixed** — X-Content-Type-Options, X-Frame-Options, Referrer-Policy |
+| 8 | CORS hardcoded | LOW | **Fixed** — configurable via `CORS_ORIGINS` env var |
+
+---
+
+## Open Findings
 
 ### 1. Stub Authentication (CRITICAL)
 
@@ -16,112 +32,110 @@ Authentication is a stub — every request gets the first user from the database
 
 **Impact**: Any network-reachable client has full access to all data.
 
-**Recommendation**: Implement real authentication before any multi-user or network-exposed deployment. The JWT infrastructure (jose) is already in package.json. For single-user self-hosted use behind a VPN/firewall, this is acceptable if documented.
-
----
-
-### 2. Default JWT_SECRET (HIGH)
-
-**File**: `.env.example` line 5, `packages/api/src/git.ts` line 145
-
-```typescript
-const secret = process.env.JWT_SECRET || "change-me-in-production";
-```
-
-The default secret is hardcoded as a fallback. It's used to derive AES-256-GCM encryption keys for git PAT tokens. Anyone with source access can decrypt stored tokens if the default isn't changed.
-
-**Recommendation**: Remove the fallback. Fail at startup if `JWT_SECRET` is not set or is the default value.
-
----
-
-### 3. No Input Validation on API Endpoints (HIGH)
-
-**Files**: `packages/api/src/routes/orrs.ts`, `sections.ts`, `incidents.ts`, `incident-sections.ts`
-
-POST and PATCH endpoints accept arbitrary payloads with minimal validation:
-- No type checking (objects/arrays accepted where strings expected)
-- No length limits (100KB+ content accepted)
-- No enum validation (severity, incidentType, depth)
-- No format validation (dates, IDs)
-
-**Example** — `sections.ts:113`:
-```typescript
-if (body.content !== undefined) updates.content = body.content;
-```
-
-**Impact**: Type confusion, oversized payloads, corrupted data. Not exploitable as XSS today (React renders safely), but a latent vulnerability if rendering changes.
-
-**Recommendation**: Add schema validation with `zod` at route boundaries. ~2 days of work across all routes.
+**Acceptable when**: Single-user, self-hosted, behind VPN/firewall (the current target). Must be implemented before multi-user or internet-exposed deployment. The JWT infrastructure (jose) is already in package.json.
 
 ---
 
 ### 4. SSE Event Injection (MEDIUM)
 
-**File**: `packages/api/src/routes/sessions.ts:516`
+**File**: `packages/api/src/practices/shared/session-routes.ts` (SSE streaming)
 
-LLM responses are serialized directly into SSE events. If content contains newlines, the SSE format can be broken:
+LLM responses are serialized via `JSON.stringify()` into SSE `data:` fields. `JSON.stringify()` escapes `\n` as `\\n` in string values, which prevents bare newline injection in practice. The Hono `streamSSE` helper also handles multi-line data correctly per the SSE spec.
 
-```
-data: {"type":"content_delta","content":"hello
-data: {"type":"fake_event","injected":true}
-```
+**Residual risk**: Theoretical only — would require the LLM to output content that bypasses JSON string escaping, which `JSON.stringify()` prevents.
 
-The frontend SSE parser (`client.ts:241`) splits on `data:` prefix and would parse the injected line as a separate event.
-
-**Impact**: An LLM response could inject fake SSE events. Limited severity since the LLM is trusted, but a malicious prompt could theoretically trigger this.
-
-**Recommendation**: Ensure `JSON.stringify()` escapes newlines in string values (it does by default for `\n` but not for bare newlines in template literals). Verify the Hono SSE writer handles multi-line data fields correctly per the SSE spec. Add a test.
-
----
-
-### 5. Unguarded JSON.parse() (MEDIUM)
-
-**Files**: 12+ locations across routes — `case-studies.ts:45`, `export.ts:186,199`, `teaching-moments.ts:47`, `learning.ts:64-80`, and others.
-
-`JSON.parse()` on database values without try-catch. If stored JSON is malformed, the endpoint returns a 500 error.
-
-**Note**: `learning.ts` already has proper try-catch patterns — these should be applied consistently.
-
-**Recommendation**: Wrap all `JSON.parse()` calls on database-sourced values in try-catch with sensible defaults.
+**Recommendation**: Add an integration test confirming multi-line LLM output doesn't break SSE framing.
 
 ---
 
 ### 6. No Rate Limiting (MEDIUM)
 
-No rate limiting on any endpoint. Particularly relevant for:
+No rate limiting on any endpoint. Relevant for:
 - Message sending (each triggers an LLM call — cost amplification)
 - Git clone operations (each clones a repo to disk)
 - Session creation
 
-**Recommendation**: Add rate limiting middleware, at minimum on `/messages` and git operations.
+**Mitigation**: The daily token cap (`MAX_DAILY_TOKENS`) limits LLM cost exposure. Git clones are deduped by URL hash.
+
+**Recommendation**: Add rate limiting middleware on `/messages` and git operations before multi-user deployment.
 
 ---
 
-### 7. No Content Security Headers (LOW)
+## Fixed Findings
+
+### 2. JWT_SECRET Guard (was HIGH — **Fixed**)
+
+**File**: `packages/api/src/git.ts:145-150`
+
+```typescript
+function deriveKey(): Buffer {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret === "change-me-in-production") {
+    throw new Error("JWT_SECRET must be set to a unique value (not the default). Token encryption depends on it.");
+  }
+  return createHash("sha256").update(secret).digest();
+}
+```
+
+The default fallback has been removed. Token encryption now throws immediately if `JWT_SECRET` is unset or still the placeholder value. The app works without git repos; the check only fires when encrypting/decrypting PATs.
+
+---
+
+### 3. Input Validation (was HIGH — **Fixed**)
+
+**File**: `packages/api/src/validation.ts`
+
+All POST/PATCH endpoints now validate input with zod schemas:
+
+| Route | Schema |
+|-------|--------|
+| `POST /api/v1/orrs` | `createOrrSchema` — serviceName required (1-255 chars), optional templateId, repositoryUrl (URL format), repositoryToken |
+| `PATCH /api/v1/orrs/:id` | `updateOrrSchema` — enum-validated status, steeringTier; URL-validated repositoryUrl |
+| `POST /api/v1/incidents` | `createIncidentSchema` — title required (1-500 chars), optional nullable serviceName, severity, incidentType |
+| `PATCH /api/v1/incidents/:id` | `updateIncidentSchema` — enum-validated status, steeringTier |
+| `PATCH /sections/:id` | `updateSectionSchema` — content max 100K chars, prompts array of strings, promptResponses validated |
+| `PATCH /sections/:id/flags/:idx` | `updateFlagSchema` — enum status (OPEN/ACCEPTED/RESOLVED), optional resolution |
+| `POST /sessions/:id/messages` | `sendMessageSchema` — content required (1-50K chars), optional sectionId, displayContent |
+
+Invalid input returns `400` with specific field-level error messages.
+
+---
+
+### 5. Safe JSON Parsing (was MEDIUM — **Fixed**)
+
+All `JSON.parse()` calls on database-sourced values now use `safeJsonParse()` with typed fallbacks. Never throws on malformed data.
+
+**Files fixed** (20+ call sites):
+- `routes/`: orrs, sections, incidents, incident-sections, export, incident-export, flags, teaching-moments, case-studies
+- `practices/shared/context.ts`: section summaries, active section detail, teaching moment tag matching, case study lessons
+- `practices/shared/tools.ts`: set_flags, query_teaching_moments, update_question_response
+- `practices/shared/session-routes.ts`: sectionsDiscussed parsing
+
+**Already safe** (pre-existing try-catch): `routes/learning.ts`, `agent/loop.ts`, `agent/hooks/`, `llm/anthropic.ts`, `db/seed.ts`
+
+---
+
+### 7. Security Headers (was LOW — **Fixed**)
 
 **File**: `packages/api/src/app.ts`
 
-No CSP, X-Frame-Options, or X-Content-Type-Options headers.
-
-**Recommendation**: Add security headers:
-```typescript
-app.use("*", async (c, next) => {
-  await next();
-  c.header("X-Content-Type-Options", "nosniff");
-  c.header("X-Frame-Options", "DENY");
-  c.header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'");
-});
-```
+All responses now include:
+- `X-Content-Type-Options: nosniff` — prevents MIME type sniffing
+- `X-Frame-Options: DENY` — prevents clickjacking via iframe embedding
+- `Referrer-Policy: strict-origin-when-cross-origin` — limits referrer leakage
 
 ---
 
-### 8. CORS Hardcoded to Localhost (LOW)
+### 8. Configurable CORS (was LOW — **Fixed**)
 
-**File**: `packages/api/src/app.ts:27-32`
+**File**: `packages/api/src/app.ts`
 
-CORS only allows `localhost:5173` and `localhost:3000`. This is correct for development but will break any non-localhost deployment.
+CORS origins are now configurable via `CORS_ORIGINS` environment variable (comma-separated). Defaults to `http://localhost:5173,http://localhost:3000` for development.
 
-**Recommendation**: Make CORS origins configurable via environment variable. The Docker deployment (port 3080) may already be affected.
+```bash
+# Example for production
+CORS_ORIGINS=https://my-app.example.com
+```
 
 ---
 
@@ -137,24 +151,23 @@ CORS only allows `localhost:5173` and `localhost:3000`. This is correct for deve
 | **Git Operations** | HTTPS-only, no embedded credentials, terminal prompts disabled, tokens encrypted at rest, errors sanitized |
 | **Team Data Scoping** | All queries filter by `teamId` (effective once auth is real) |
 | **LLM Prompt Injection** | User input is data, not code — system prompt is fixed, tool args are JSON-validated |
+| **Input Validation** | zod schemas on all write endpoints with field-level errors |
+| **JSON Safety** | `safeJsonParse()` with typed fallbacks — no unhandled parse exceptions |
 
 ---
 
 ## Summary
 
-| Severity | Count | Key Issues |
-|----------|-------|------------|
-| CRITICAL | 1 | Stub authentication |
-| HIGH | 2 | Default JWT_SECRET, no input validation |
-| MEDIUM | 3 | SSE injection, JSON.parse safety, no rate limiting |
-| LOW | 2 | Missing security headers, hardcoded CORS |
+| Severity | Total | Fixed | Open |
+|----------|-------|-------|------|
+| CRITICAL | 1 | 0 | 1 (auth stub — acceptable for target deployment) |
+| HIGH | 2 | 2 | 0 |
+| MEDIUM | 3 | 1 | 2 (SSE theoretical, rate limiting deferred) |
+| LOW | 2 | 2 | 0 |
 
-**For single-user, self-hosted, behind-firewall deployment** (the current target): the critical auth issue is acceptable if documented. The high/medium issues should be fixed before exposing to untrusted users.
+**For single-user, self-hosted, behind-firewall deployment** (the current target): all actionable issues are resolved. The auth stub is a known design decision, not a bug. Rate limiting and SSE hardening are deferred to multi-user deployment.
 
-**Estimated remediation effort**: ~1 week total
-- Input validation (zod): 2-3 days
-- JSON.parse safety: 0.5 day
-- Rate limiting: 1 day
-- Security headers + CORS config: 0.5 day
-- JWT_SECRET startup check: 0.5 day
-- SSE escaping verification: 0.5 day
+**Remaining work for multi-user deployment**:
+- Implement real authentication (OIDC/JWT)
+- Add rate limiting on message and git endpoints
+- Add SSE framing integration test

@@ -7,6 +7,7 @@
  */
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "../../db/index.js";
+import { safeJsonParse } from "../../validation.js";
 import type { SectionSummary, ActiveSectionDetail, TeachingMomentSummary, CaseStudySummary } from "./system-prompt-base.js";
 
 // In-memory caches for seed data that rarely changes.
@@ -69,15 +70,9 @@ export function buildBaseContext(
 
   // Build section summaries
   const sections: SectionSummary[] = allSectionRows.map((s) => {
-    const flags = typeof s.flags === "string" ? JSON.parse(s.flags) : (s.flags || []);
-    const prompts = (() => {
-      try { return typeof s.prompts === "string" ? JSON.parse(s.prompts as string) : (s.prompts || []); }
-      catch { return []; }
-    })() as string[];
-    const promptResponses = (() => {
-      try { return typeof s.promptResponses === "string" ? JSON.parse(s.promptResponses as string) : (s.promptResponses || {}); }
-      catch { return {}; }
-    })() as Record<string, any>;
+    const flags: any[] = safeJsonParse(s.flags, []);
+    const prompts = safeJsonParse<string[]>(s.prompts, []);
+    const promptResponses = safeJsonParse<Record<string, any>>(s.promptResponses, {});
 
     const answered = Object.entries(promptResponses).filter(([, v]) => {
       const text = typeof v === "string" ? v : (v as any)?.answer || "";
@@ -109,11 +104,9 @@ export function buildBaseContext(
   if (activeSectionId) {
     const sec = allSectionRows.find((s) => s.id === activeSectionId);
     if (sec) {
-      const flags = typeof sec.flags === "string" ? JSON.parse(sec.flags) : sec.flags;
-      const prompts = typeof sec.prompts === "string" ? JSON.parse(sec.prompts as string) : sec.prompts;
-      const promptResponses = typeof sec.promptResponses === "string"
-        ? JSON.parse(sec.promptResponses as string)
-        : (sec.promptResponses || {});
+      const flags: any[] = safeJsonParse(sec.flags, []);
+      const prompts = safeJsonParse<string[]>(sec.prompts, []);
+      const promptResponses = safeJsonParse<Record<string, any>>(sec.promptResponses, {});
       activeSection = {
         id: sec.id,
         title: sec.title,
@@ -140,8 +133,8 @@ export function buildBaseContext(
   let caseStudies: CaseStudySummary[] = [];
   if (activeSection) {
     const matchesSection = (tags: unknown) => {
-      const parsed = typeof tags === "string" ? JSON.parse(tags) : tags;
-      return (parsed as string[]).some((tag) =>
+      const parsed = safeJsonParse<string[]>(tags, []);
+      return parsed.some((tag: string) =>
         activeSection!.title.toLowerCase().includes(tag.toLowerCase()) ||
         tag.toLowerCase().includes(activeSection!.title.toLowerCase()),
       );
@@ -165,7 +158,7 @@ export function buildBaseContext(
         company: cs.company,
         year: cs.year,
         summary: cs.summary,
-        lessons: typeof cs.lessons === "string" ? JSON.parse(cs.lessons) : cs.lessons,
+        lessons: safeJsonParse(cs.lessons, []),
         failureCategory: cs.failureCategory,
       }));
   }

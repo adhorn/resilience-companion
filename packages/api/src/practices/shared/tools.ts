@@ -11,6 +11,7 @@ import { nanoid } from "nanoid";
 import { getDb, schema } from "../../db/index.js";
 import type { LLMToolDef } from "../../llm/index.js";
 import type { PracticeType } from "../../agent/practice.js";
+import { safeJsonParse } from "../../validation.js";
 
 // --- Tool definitions ---
 // These are the same for every practice; only descriptions vary slightly.
@@ -388,9 +389,7 @@ export function executeSharedTool(
         .get();
 
       const existingFlags: any[] = existingSection
-        ? typeof existingSection.flags === "string"
-          ? JSON.parse(existingSection.flags)
-          : (existingSection.flags as any[]) || []
+        ? safeJsonParse(existingSection.flags, [])
         : [];
 
       const preservedFlags = existingFlags.filter(
@@ -428,8 +427,8 @@ export function executeSharedTool(
 
       if (sectionTag) {
         results = results.filter((tm) => {
-          const tags = typeof tm.sectionTags === "string" ? JSON.parse(tm.sectionTags) : tm.sectionTags;
-          return (tags as string[]).some((t) => t.toLowerCase().includes(sectionTag.toLowerCase()));
+          const tags: string[] = safeJsonParse(tm.sectionTags, []);
+          return tags.some((t) => t.toLowerCase().includes(sectionTag.toLowerCase()));
         });
       }
 
@@ -463,9 +462,7 @@ export function executeSharedTool(
         .get();
       if (!section) return JSON.stringify({ error: "Section not found" });
 
-      const existing = typeof section.promptResponses === "string"
-        ? JSON.parse(section.promptResponses as string)
-        : (section.promptResponses || {});
+      const existing = safeJsonParse<Record<string, any>>(section.promptResponses, {});
 
       const source = args.source as string | undefined;
       if (source) {
