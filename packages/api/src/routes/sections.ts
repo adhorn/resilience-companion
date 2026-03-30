@@ -93,6 +93,10 @@ sectionRoutes.patch("/:sectionId", async (c) => {
     return c.json({ error: "not_found", message: "ORR not found" }, 404);
   }
 
+  if (orr.status === "TERMINATED" || orr.status === "ARCHIVED") {
+    return c.json({ error: "forbidden", message: `Cannot modify a ${orr.status.toLowerCase()} ORR` }, 403);
+  }
+
   const section = db
     .select()
     .from(schema.sections)
@@ -160,6 +164,10 @@ sectionRoutes.patch("/:sectionId/flags/:flagIndex", async (c) => {
 
   if (!orr) {
     return c.json({ error: "not_found", message: "ORR not found" }, 404);
+  }
+
+  if (orr.status === "TERMINATED" || orr.status === "ARCHIVED") {
+    return c.json({ error: "forbidden", message: `Cannot modify flags on a ${orr.status.toLowerCase()} ORR` }, 403);
   }
 
   const section = db

@@ -35,6 +35,7 @@ dashboardRoutes.get("/", (c) => {
     DRAFT: 0,
     IN_PROGRESS: 0,
     COMPLETE: 0,
+    TERMINATED: 0,
     ARCHIVED: 0,
   };
 

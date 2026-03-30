@@ -4,6 +4,7 @@ data/
 repos/
 logs/
 .env
+.encryption-key
 *.db
 *.db-journal
 *.db-wal
