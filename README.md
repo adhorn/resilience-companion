@@ -70,6 +70,22 @@ The default ORR template is extracted from the book's appendix — **107 prompts
 10. **Disaster Recovery** — DR exercises, backup restoration, operational levers
 11. **Organizational Learning** — Blameless reviews, design decision capture, lessons-to-action tracking
 
+#### Feature ORRs (Lightweight Change Reviews)
+
+Not every change needs a full 11-section review. Feature ORRs are lightweight, change-scoped reviews for teams that already have a Service ORR. When creating an ORR, choose between:
+
+- **Service ORR** — Full operational readiness review (11 sections, 107 prompts). Best for new services or periodic re-reviews.
+- **Feature ORR** — Tailored to specific changes (typically 2-4 sections, 15-30 prompts). Best for adding dependencies, new endpoints, schema migrations, scaling changes, or security boundary shifts.
+
+Feature ORRs generate questions from three sources:
+1. **Impact questions** — "Does this change affect what the service ORR established?" (architecture, failures, monitoring, deployment, operations, DR)
+2. **Readiness questions** — Per change type: dependency readiness, endpoint readiness, data model readiness, etc.
+3. **Universal questions** — Always included: rollback plan, validation strategy, monitoring confidence, blind spots, communication
+
+The creation wizard lets you select change types, describe the change, optionally link to a parent Service ORR, and review/customize the generated questions before creating.
+
+When linked to a parent ORR, the AI agent receives the parent's section summaries as context and can check your change against what was previously established.
+
 ### Incident Analysis
 
 A learning-focused post-incident analysis template — **~110 prompts across 14 sections**:
@@ -121,6 +137,8 @@ Type `/` in the chat to access quick actions. Each practice has its own set:
 | `/incidents` | Find real-world incidents relevant to your architecture |
 | `/status` | Overview of all sections: depth, coverage, flags |
 | `/risks` | List all risks and gaps, grouped by severity |
+| `/experiments` | Suggest chaos experiments, load tests, or gamedays |
+| `/learning` | Extract learning signals from all sections |
 
 **Incident analysis commands:**
 
@@ -290,6 +308,7 @@ This is a Phase 1 MVP designed for local, single-team use.
 
 **What works today:**
 - ORR reviews with AI facilitation (11 sections, 107 prompts)
+- Feature ORRs — lightweight change-scoped reviews with tailored question generation
 - Incident analysis with AI facilitation (14 sections, ~110 prompts)
 - Incident timeline, contributing factors, and action item tracking
 - Cross-practice experiment suggestions

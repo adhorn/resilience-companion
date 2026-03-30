@@ -291,14 +291,17 @@ The agent receives:
 
 ## Implementation Phases
 
-### Phase 1: Core Feature ORR
+### Phase 1: Core Feature ORR ✅ IMPLEMENTED
 
-- ORR type selection at creation
-- Change type tags + description
-- Feature ORR template generation (change-type → questions mapping)
-- Question review/customization at creation time
-- Parent ORR linking (read-only context)
-- Agent system prompt updated with parent context
+- ORR type selection at creation (3-step wizard: type → details → question review)
+- Change type tags + description (7 predefined change types)
+- Feature ORR template generation (`generateFeatureTemplate()` in shared package)
+- Question review/customization at creation time (toggle sections on/off)
+- Parent ORR linking (read-only context injected into agent system prompt)
+- Agent system prompt updated with parent context (section summaries, depth, flags)
+- Schema migrations for `orr_type`, `parent_orr_id`, `change_types`, `change_description`
+- Type badges in ORR list, feature context (change types, description, parent link) in ORR sidebar
+- Tests: 14 covering template generation and context building
 
 ### Phase 2: Parent-Child Interaction
 

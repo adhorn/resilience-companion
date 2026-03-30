@@ -15,7 +15,7 @@ Resilience Companion is a web application for facilitating resilience practices 
 ```bash
 npm run dev          # Start API (port 3000) + Web (port 5173) concurrently
 npm run build        # Build all packages in order: shared → api → web
-npm test             # Vitest (no tests written yet)
+npm test             # Vitest — runs tests in packages/*/src/**/*.test.ts
 npm run lint         # TypeScript type-check (--noEmit) for api + web
 ```
 
@@ -28,8 +28,9 @@ TypeScript monorepo, three npm workspaces. SQLite database.
 ### `packages/shared` (@orr/shared)
 Pure TypeScript types and constants — no runtime code. **Must be built first.**
 - `types.ts` — All entity types and API DTOs
-- `constants.ts` — Enums (status, depth, flags, roles, agent profiles, staleness thresholds)
+- `constants.ts` — Enums (status, depth, flags, roles, agent profiles, staleness thresholds, ORR types, change types)
 - `template/default-template.ts` — 11-section ORR template with 107 prompts from the book's appendix
+- `template/feature-template.ts` — Feature ORR question bank: impact, readiness (per change type), and universal questions + `generateFeatureTemplate()`
 
 ### `packages/api` (@orr/api)
 Hono web framework + SQLite (Drizzle ORM + better-sqlite3).
@@ -47,7 +48,7 @@ Hono web framework + SQLite (Drizzle ORM + better-sqlite3).
 
 **Database**: Schema in `src/db/schema.ts`. Pragmas: WAL mode, foreign keys ON, 5s busy timeout. `createTestDb()` available for in-memory test DBs.
 
-Key tables: `orrs`, `sections` (11 per ORR), `sessions`, `sessionMessages`, `teachingMoments`, `caseStudies`, `orrVersions` (full snapshots on session end).
+Key tables: `orrs` (supports `orrType` service/feature, `parentOrrId` for feature→service linking, `changeTypes`, `changeDescription`), `sections` (11 per Service ORR, 2-4 per Feature ORR), `sessions`, `sessionMessages`, `teachingMoments`, `caseStudies`, `orrVersions` (full snapshots on session end).
 
 Design decisions: sections store prompts/promptResponses as JSON, teaching moments link by tag (not FK), ORR versions are full snapshots (not incremental), last-writer-wins concurrency.
 
@@ -57,7 +58,7 @@ React 19 + Vite + TailwindCSS + React Query.
 **Routes** (React Router v7):
 - `/dashboard` — Stats, staleness, coverage, recent activity
 - `/orrs` — Team's ORRs list
-- `/orrs/new` — Create ORR (select service + template)
+- `/orrs/new` — Create ORR (3-step wizard: type selection → details → question review for Feature ORRs)
 - `/orrs/:id` — Full-screen split-pane: section nav + prompts/conversation with AI
 - `/learn` — Browse teaching moments and case studies
 
