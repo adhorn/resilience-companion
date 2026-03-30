@@ -142,7 +142,11 @@ export function ORRView() {
     const res = await api.sessions.create(id);
     session.setSessionId(res.session.id);
     session.setSessionTokens(0);
-    session.setMessages([]);
+    if (res.session.welcomeMessage) {
+      session.setMessages([{ role: "assistant", content: res.session.welcomeMessage }]);
+    } else {
+      session.setMessages([]);
+    }
   }, [id, session]);
 
   const endSession = useCallback(async () => {
@@ -186,6 +190,7 @@ export function ORRView() {
       : currentSection.flags
     : [];
   const savedResponses = parseResponses(currentSection);
+  const isReadOnly = orr.status === "TERMINATED" || orr.status === "ARCHIVED";
 
   return (
     <div className="flex h-screen">
@@ -194,7 +199,51 @@ export function ORRView() {
         <div className="p-3 border-b border-gray-200">
           <Link to="/orrs" className="text-[10px] text-gray-400 hover:text-blue-600">&larr; All ORRs</Link>
           <h2 className="font-bold text-sm text-gray-900 truncate mt-1">{orr.serviceName}</h2>
-          <div className="text-[10px] text-gray-500 mt-1">{orr.status.replace("_", " ")}</div>
+          <div className="text-[10px] text-gray-500 mt-1 flex items-center gap-1.5">
+            <span>{orr.status.replace(/_/g, " ")}</span>
+            <span
+              className={`px-1.5 py-0.5 rounded font-medium ${
+                orr.orrType === "feature"
+                  ? "bg-purple-100 text-purple-700"
+                  : "bg-gray-100 text-gray-600"
+              }`}
+            >
+              {orr.orrType === "feature" ? "Feature" : "Service"}
+            </span>
+            {orr.status === "TERMINATED" && orr.terminationReason && (
+              <span className="block mt-0.5 text-red-600" title={orr.terminationReason}>
+                Reason: {orr.terminationReason.length > 60 ? orr.terminationReason.slice(0, 60) + "..." : orr.terminationReason}
+              </span>
+            )}
+          </div>
+
+          {/* Feature ORR context */}
+          {orr.orrType === "feature" && (
+            <div className="mt-1.5 space-y-1">
+              {orr.changeTypes && orr.changeTypes.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {(typeof orr.changeTypes === "string" ? JSON.parse(orr.changeTypes) : orr.changeTypes).map((ct: string) => (
+                    <span key={ct} className="px-1 py-0.5 rounded bg-purple-50 text-purple-600 text-[9px]">
+                      {ct.replace(/_/g, " ")}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {orr.changeDescription && (
+                <p className="text-[10px] text-gray-500 line-clamp-3" title={orr.changeDescription}>
+                  {orr.changeDescription}
+                </p>
+              )}
+              {orr.parentOrrId && orr.parentOrr && (
+                <Link
+                  to={`/orrs/${orr.parentOrrId}`}
+                  className="text-[10px] text-blue-600 hover:underline block"
+                >
+                  Parent: {orr.parentOrr.serviceName}
+                </Link>
+              )}
+            </div>
+          )}
 
           {/* Steering tier */}
           <select
@@ -204,7 +253,8 @@ export function ORRView() {
               setOrr({ ...orr, steeringTier: tier });
               await api.orrs.update(id!, { steeringTier: tier });
             }}
-            className="mt-1.5 w-full text-[10px] px-1.5 py-0.5 border border-gray-300 rounded bg-white text-gray-700"
+            disabled={isReadOnly}
+            className={`mt-1.5 w-full text-[10px] px-1.5 py-0.5 border border-gray-300 rounded bg-white text-gray-700 ${isReadOnly ? "opacity-50 cursor-not-allowed" : ""}`}
             title="Agent steering rigor — controls how strictly the AI follows review workflow rules"
           >
             <option value="standard">Standard — fast, fewer checks</option>
@@ -279,6 +329,25 @@ export function ORRView() {
               />
             ))}
           </div>
+
+          {/* Terminate button — only for non-terminal statuses */}
+          {(orr.status === "DRAFT" || orr.status === "IN_PROGRESS") && (
+            <button
+              onClick={async () => {
+                const reason = window.prompt("Why are you terminating this ORR? (required)");
+                if (!reason?.trim()) return;
+                try {
+                  const res = await api.orrs.terminate(id!, reason.trim());
+                  setOrr(res.orr);
+                } catch (err: any) {
+                  alert(err.message || "Failed to terminate ORR");
+                }
+              }}
+              className="mt-2 w-full text-[10px] px-1.5 py-1 text-red-600 hover:bg-red-50 border border-red-200 rounded transition-colors"
+            >
+              Terminate ORR
+            </button>
+          )}
         </div>
 
         {/* Section list */}
@@ -418,8 +487,8 @@ export function ORRView() {
                         />
                       ) : savedValue ? (
                         <div
-                          onClick={() => session.setEditingResponses((prev) => ({ ...prev, [i]: savedValue }))}
-                          className="w-full bg-gray-50 rounded border border-gray-200 p-2.5 text-sm text-gray-700 cursor-text hover:border-gray-300 hover:bg-gray-100 transition-colors"
+                          onClick={isReadOnly ? undefined : () => session.setEditingResponses((prev) => ({ ...prev, [i]: savedValue }))}
+                          className={`w-full bg-gray-50 rounded border border-gray-200 p-2.5 text-sm text-gray-700 ${isReadOnly ? "" : "cursor-text hover:border-gray-300 hover:bg-gray-100"} transition-colors`}
                         >
                           {renderMarkdown(savedValue)}
                           {source === "code" && (
@@ -432,12 +501,16 @@ export function ORRView() {
                             </div>
                           )}
                         </div>
-                      ) : (
+                      ) : !isReadOnly ? (
                         <div
                           onClick={() => session.setEditingResponses((prev) => ({ ...prev, [i]: "" }))}
                           className="w-full bg-gray-50 rounded border border-gray-200 border-dashed p-2.5 text-sm text-gray-400 cursor-text hover:border-gray-300 transition-colors"
                         >
                           Click to answer, or let the AI capture your response during the review...
+                        </div>
+                      ) : (
+                        <div className="w-full bg-gray-50 rounded border border-gray-200 border-dashed p-2.5 text-sm text-gray-400">
+                          Not answered
                         </div>
                       )}
                     </div>

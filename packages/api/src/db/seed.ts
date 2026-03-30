@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import {
   DEFAULT_TEMPLATE_SECTIONS,
   DEFAULT_TEMPLATE_NAME,
+  FEATURE_TEMPLATE_NAME,
 } from "@orr/shared";
 import type { Db } from "./connection.js";
 import * as schema from "./schema.js";
@@ -67,6 +68,27 @@ export async function seed(db: Db) {
       })
       .run();
     console.log(`Seeded default template: ${DEFAULT_TEMPLATE_NAME}`);
+  }
+
+  // Seed feature ORR template placeholder (actual questions are generated per-ORR)
+  const existingFeatureTemplate = db
+    .select()
+    .from(schema.templates)
+    .where(eq(schema.templates.name, FEATURE_TEMPLATE_NAME))
+    .get();
+
+  if (!existingFeatureTemplate) {
+    db.insert(schema.templates)
+      .values({
+        id: nanoid(),
+        name: FEATURE_TEMPLATE_NAME,
+        isDefault: false,
+        sections: JSON.stringify([]), // placeholder — actual sections generated per-ORR at creation time
+        createdBy: null,
+        createdAt: now,
+      })
+      .run();
+    console.log(`Seeded feature template placeholder: ${FEATURE_TEMPLATE_NAME}`);
   }
 
   // Seed teaching moments and case studies from curated incidents

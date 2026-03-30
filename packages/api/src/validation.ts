@@ -17,6 +17,19 @@ export const createOrrSchema = z.object({
   templateId: z.string().max(100).optional(),
   repositoryUrl: z.string().url().max(2000).optional(),
   repositoryToken: z.string().max(2000).optional(),
+  // Feature ORR fields
+  orrType: z.enum(["service", "feature"]).optional().default("service"),
+  parentOrrId: z.string().max(100).optional(),
+  changeTypes: z.array(z.string().max(100)).max(20).optional().default([]),
+  changeDescription: z.string().max(5000).optional(),
+  selectedSections: z.array(z.object({
+    title: z.string().max(255),
+    prompts: z.array(z.string().max(2000)),
+  })).optional(),
+});
+
+export const terminateOrrSchema = z.object({
+  reason: z.string().min(1, "Termination reason is required").max(2000),
 });
 
 export const updateOrrSchema = z.object({

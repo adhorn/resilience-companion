@@ -1,8 +1,39 @@
+// ORR types
+export const ORRType = {
+  SERVICE: "service",
+  FEATURE: "feature",
+} as const;
+export type ORRType = (typeof ORRType)[keyof typeof ORRType];
+
+// Feature ORR change type tags
+export const ChangeType = {
+  NEW_DEPENDENCY: "new_dependency",
+  NEW_ENDPOINT: "new_endpoint",
+  DATA_MODEL_CHANGE: "data_model_change",
+  SCALING_CHANGE: "scaling_change",
+  INFRASTRUCTURE_CHANGE: "infrastructure_change",
+  SECURITY_BOUNDARY_CHANGE: "security_boundary_change",
+  FAILURE_DOMAIN_CHANGE: "failure_domain_change",
+} as const;
+export type ChangeType = (typeof ChangeType)[keyof typeof ChangeType];
+
+/** Human-readable labels for change types */
+export const CHANGE_TYPE_LABELS: Record<ChangeType, string> = {
+  new_dependency: "New dependency",
+  new_endpoint: "New endpoint / API",
+  data_model_change: "Data model change",
+  scaling_change: "Scaling change",
+  infrastructure_change: "Infrastructure change",
+  security_boundary_change: "Security boundary change",
+  failure_domain_change: "Failure domain change",
+};
+
 // ORR lifecycle status
 export const ORRStatus = {
   DRAFT: "DRAFT",
   IN_PROGRESS: "IN_PROGRESS",
   COMPLETE: "COMPLETE",
+  TERMINATED: "TERMINATED",
   ARCHIVED: "ARCHIVED",
 } as const;
 export type ORRStatus = (typeof ORRStatus)[keyof typeof ORRStatus];

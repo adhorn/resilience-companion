@@ -153,7 +153,11 @@ export function IncidentView() {
     const res = await api.incidentSessions.create(id);
     session.setSessionId(res.session.id);
     session.setSessionTokens(0);
-    session.setMessages([]);
+    if (res.session.welcomeMessage) {
+      session.setMessages([{ role: "assistant", content: res.session.welcomeMessage }]);
+    } else {
+      session.setMessages([]);
+    }
   }, [id, session]);
 
   const endSession = useCallback(async () => {
