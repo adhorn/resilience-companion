@@ -1,4 +1,6 @@
 import type {
+  ORRType,
+  ChangeType,
   ORRStatus,
   SectionDepth,
   SectionFlag,
@@ -44,11 +46,16 @@ export interface ORR {
   serviceName: string;
   teamId: string;
   templateVersion: string;
+  orrType: ORRType;
+  parentOrrId: string | null;
+  changeTypes: ChangeType[];
+  changeDescription: string | null;
   status: ORRStatus;
   repositoryPath: string | null; // path to source code for code exploration
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  terminationReason: string | null;
 }
 
 export interface Section {
@@ -179,6 +186,12 @@ export interface CreateORRInput {
   serviceName: string;
   templateId?: string; // defaults to default template
   repositoryPath?: string; // optional: path to source code for code exploration
+  orrType?: ORRType;
+  parentOrrId?: string;
+  changeTypes?: ChangeType[];
+  changeDescription?: string;
+  /** For feature ORRs: the user's customized question selection from the creation wizard */
+  selectedSections?: Array<{ title: string; prompts: string[] }>;
 }
 
 // --- Answer source tracking ---

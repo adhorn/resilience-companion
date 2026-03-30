@@ -95,8 +95,61 @@ export function seedTestOrr(db: Db) {
 }
 
 /**
- * Seed an active session for the given ORR and user.
+ * Seed a feature ORR linked to an existing parent ORR.
+ * Requires seedTestOrr() to have run first.
  */
+export function seedTestFeatureOrr(db: Db, parentOrrId: string) {
+  const now = new Date().toISOString();
+  const featureOrrId = "test-feature-orr";
+  const featureSectionIds = ["fsec-1", "fsec-2"];
+
+  const featureTemplateId = "test-feature-template";
+  db.insert(schema.templates).values({
+    id: featureTemplateId,
+    name: "Feature ORR Template",
+    isDefault: false,
+    sections: [] as any,
+    createdAt: now,
+  }).run();
+
+  db.insert(schema.orrs).values({
+    id: featureOrrId,
+    serviceName: "Test Service",
+    teamId: "test-team",
+    templateVersion: featureTemplateId,
+    status: "DRAFT",
+    steeringTier: "thorough",
+    orrType: "feature",
+    parentOrrId,
+    changeTypes: JSON.stringify(["new_dependency", "new_endpoint"]),
+    changeDescription: "Adding Redis cache and new /sessions endpoint",
+    createdAt: now,
+    updatedAt: now,
+  }).run();
+
+  const sectionData = [
+    { id: featureSectionIds[0], title: "Dependency Readiness", prompts: ["Describe the dependency"], position: 1 },
+    { id: featureSectionIds[1], title: "General Readiness", prompts: ["Rollback plan?"], position: 2 },
+  ];
+
+  for (const s of sectionData) {
+    db.insert(schema.sections).values({
+      id: s.id,
+      orrId: featureOrrId,
+      position: s.position,
+      title: s.title,
+      prompts: s.prompts as any,
+      content: "",
+      depth: "UNKNOWN",
+      promptResponses: {} as any,
+      flags: [] as any,
+      updatedAt: now,
+    }).run();
+  }
+
+  return { featureOrrId, featureSectionIds, featureTemplateId };
+}
+
 /**
  * Seed a minimal incident with team, user, incident, and 3 sections.
  * Returns all IDs needed for incident tool tests.

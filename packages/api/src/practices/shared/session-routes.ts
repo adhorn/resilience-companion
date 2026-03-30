@@ -212,6 +212,12 @@ export interface SessionRouteOptions {
 
   /** Optional hook called when a session auto-renews (e.g. ORR version snapshot) */
   onSessionRenew?(db: ReturnType<typeof getDb>, practiceId: string, practice: any): void;
+
+  /** Statuses that prevent new sessions and messages (e.g. ["TERMINATED", "ARCHIVED"]) */
+  terminalStatuses?: string[];
+
+  /** Optional welcome message inserted as the first assistant message when a session starts */
+  welcomeMessage?: string;
 }
 
 export function createSessionRoutes(opts: SessionRouteOptions): Hono {
@@ -227,6 +233,10 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
     const practice = opts.verifyOwnership(db, practiceId, user.teamId);
     if (!practice) {
       return c.json({ error: "not_found", message: `${opts.practiceLabel} not found` }, 404);
+    }
+
+    if (opts.terminalStatuses?.includes(practice.status)) {
+      return c.json({ error: "forbidden", message: `Cannot start a session on a ${practice.status.toLowerCase()} ${opts.practiceLabel}` }, 403);
     }
 
     // End any existing active sessions for this practice+user
@@ -262,7 +272,20 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
 
     opts.markInProgress(db, practiceId, practice.status);
 
-    return c.json({ session: { id: sessionId, status: "ACTIVE", startedAt: now } }, 201);
+    // Insert welcome message if configured
+    let welcomeMsg: string | null = null;
+    if (opts.welcomeMessage) {
+      welcomeMsg = opts.welcomeMessage;
+      db.insert(schema.sessionMessages).values({
+        id: nanoid(),
+        sessionId,
+        role: "assistant",
+        content: welcomeMsg,
+        createdAt: now,
+      }).run();
+    }
+
+    return c.json({ session: { id: sessionId, status: "ACTIVE", startedAt: now, welcomeMessage: welcomeMsg } }, 201);
   });
 
   // GET / — List sessions
@@ -383,6 +406,10 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
     const practice = opts.verifyOwnership(db, practiceId, user.teamId);
     if (!practice) {
       return c.json({ error: "not_found", message: `${opts.practiceLabel} not found` }, 404);
+    }
+
+    if (opts.terminalStatuses?.includes(practice.status)) {
+      return c.json({ error: "forbidden", message: `Cannot send messages to a ${practice.status.toLowerCase()} ${opts.practiceLabel}` }, 403);
     }
 
     const session = db.select().from(schema.sessions)

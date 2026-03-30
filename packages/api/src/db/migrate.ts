@@ -53,9 +53,14 @@ export function migrate(db: Db) {
     repository_token TEXT,
     repository_local_path TEXT,
     steering_tier TEXT NOT NULL DEFAULT 'thorough',
+    orr_type TEXT NOT NULL DEFAULT 'service',
+    parent_orr_id TEXT,
+    change_types TEXT NOT NULL DEFAULT '[]',
+    change_description TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    completed_at TEXT
+    completed_at TEXT,
+    termination_reason TEXT
   )`);
 
   db.run(sql`CREATE TABLE IF NOT EXISTS sections (
@@ -344,6 +349,11 @@ export function migrate(db: Db) {
     ["incidents", "service_id", "TEXT REFERENCES services(id)"],
     ["sessions", "discoveries", "TEXT NOT NULL DEFAULT '[]'"],
     ["discoveries", "source", "TEXT NOT NULL DEFAULT 'conversation'"],
+    ["orrs", "termination_reason", "TEXT"],
+    ["orrs", "orr_type", "TEXT NOT NULL DEFAULT 'service'"],
+    ["orrs", "parent_orr_id", "TEXT"],
+    ["orrs", "change_types", "TEXT NOT NULL DEFAULT '[]'"],
+    ["orrs", "change_description", "TEXT"],
   ];
   for (const [table, col, type] of migrations) {
     try {
@@ -353,8 +363,9 @@ export function migrate(db: Db) {
     }
   }
 
-  // These indexes depend on service_id which may have just been added via ALTER TABLE above
+  // These indexes depend on columns which may have just been added via ALTER TABLE above
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_orrs_service ON orrs(service_id)`);
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_orrs_parent ON orrs(parent_orr_id)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_incidents_service ON incidents(service_id)`);
 
   // Backfill: auto-create services from existing serviceName values and link them.

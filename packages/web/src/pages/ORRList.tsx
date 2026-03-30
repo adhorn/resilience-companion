@@ -44,6 +44,22 @@ export function ORRList() {
           newPath="/orrs/new"
           newLabel="New ORR"
           showCoverage={false}
+          extraColumns={[
+            {
+              header: "Type",
+              render: (item: any) => (
+                <span
+                  className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                    item.orrType === "feature"
+                      ? "bg-purple-100 text-purple-700"
+                      : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {item.orrType === "feature" ? "Feature" : "Service"}
+                </span>
+              ),
+            },
+          ]}
         />
       )}
     </div>

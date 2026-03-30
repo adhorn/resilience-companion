@@ -51,7 +51,7 @@ export const orrs = sqliteTable("orrs", {
     .notNull()
     .references(() => templates.id),
   status: text("status", {
-    enum: ["DRAFT", "IN_PROGRESS", "COMPLETE", "ARCHIVED"],
+    enum: ["DRAFT", "IN_PROGRESS", "COMPLETE", "TERMINATED", "ARCHIVED"],
   })
     .notNull()
     .default("DRAFT"),
@@ -61,6 +61,13 @@ export const orrs = sqliteTable("orrs", {
   steeringTier: text("steering_tier", { enum: ["standard", "thorough", "rigorous"] })
     .notNull()
     .default("thorough"),
+  orrType: text("orr_type", { enum: ["service", "feature"] })
+    .notNull()
+    .default("service"),
+  parentOrrId: text("parent_orr_id"), // FK to orrs.id for feature ORRs (self-ref, enforced at app level)
+  changeTypes: text("change_types", { mode: "json" }).notNull().default("[]"), // ChangeType[]
+  changeDescription: text("change_description"),
+  terminationReason: text("termination_reason"), // required when status is TERMINATED
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   completedAt: text("completed_at"),

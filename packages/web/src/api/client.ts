@@ -31,7 +31,17 @@ export const api = {
   orrs: {
     list: () => request<{ orrs: any[] }>("/orrs"),
     get: (id: string) => request<{ orr: any; sections: any[] }>(`/orrs/${id}`),
-    create: (data: { serviceName: string; templateId?: string; repositoryUrl?: string; repositoryToken?: string }) =>
+    create: (data: {
+      serviceName: string;
+      templateId?: string;
+      repositoryUrl?: string;
+      repositoryToken?: string;
+      orrType?: string;
+      parentOrrId?: string;
+      changeTypes?: string[];
+      changeDescription?: string;
+      selectedSections?: Array<{ title: string; prompts: string[] }>;
+    }) =>
       request<{ orr: any; sections: any[] }>("/orrs", {
         method: "POST",
         body: JSON.stringify(data),
@@ -43,6 +53,11 @@ export const api = {
       }),
     delete: (id: string) =>
       request<{ deleted: boolean }>(`/orrs/${id}`, { method: "DELETE" }),
+    terminate: (id: string, reason: string) =>
+      request<{ orr: any }>(`/orrs/${id}/terminate`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      }),
   },
 
   // Sections

@@ -22,6 +22,17 @@ import {
 // Re-export shared types so existing imports from this module still work
 export type { SectionSummary, ActiveSectionDetail, TeachingMomentSummary, CaseStudySummary };
 
+export interface ParentORRContext {
+  serviceName: string;
+  status: string;
+  sections: Array<{
+    title: string;
+    depth: string;
+    content: string;
+    flagCount: number;
+  }>;
+}
+
 export interface ORRContext {
   serviceName: string;
   teamName: string;
@@ -35,6 +46,11 @@ export interface ORRContext {
   isReturningSession: boolean;
   hasRepositoryPath: boolean;
   existingDependencies: Array<{ name: string; type: string; criticality: string }>;
+  // Feature ORR fields
+  orrType: string;
+  changeTypes: string[];
+  changeDescription: string | null;
+  parentContext: ParentORRContext | null;
 }
 
 const ORR_IDENTITY = `You are the Resilience Companion Review Facilitator — an AI that helps engineering teams learn about their own operational readiness through structured conversation.
@@ -107,7 +123,45 @@ export function buildSystemPrompt(ctx: ORRContext): string {
   parts.push(`\n## Current ORR
 - Service: ${ctx.serviceName}
 - Team: ${ctx.teamName}
-- Status: ${ctx.status}`);
+- Status: ${ctx.status}
+- Type: ${ctx.orrType === "feature" ? "Feature ORR (change-scoped)" : "Service ORR (full review)"}`);
+
+  // Feature ORR specific context
+  if (ctx.orrType === "feature") {
+    parts.push(`\n## Feature ORR Context
+This is a **Feature ORR** — a change-scoped review, not a full service review.
+
+**Change Description:** ${ctx.changeDescription || "Not provided"}
+**Change Types:** ${ctx.changeTypes.length > 0 ? ctx.changeTypes.join(", ") : "None specified"}
+
+Your focus is on:
+1. Whether the new change is operationally ready (monitoring, failure modes, rollback, testing)
+2. Whether this change invalidates assumptions from the parent service ORR
+3. Keeping the review focused — feature ORRs should complete in 15-30 minutes
+
+Be more focused than in a full service ORR. Probe the specific change deeply rather than exploring the whole service.`);
+
+    if (ctx.parentContext) {
+      parts.push(`\n## Parent Service ORR Context
+This feature belongs to service "${ctx.parentContext.serviceName}" which has a ${ctx.parentContext.status} Service ORR.
+
+### Parent ORR Section Summaries:`);
+      for (const ps of ctx.parentContext.sections) {
+        if (ps.content.trim()) {
+          const summary = ps.content.length > 500 ? ps.content.slice(0, 500) + "..." : ps.content;
+          parts.push(`\n**${ps.title}** (depth: ${ps.depth}, ${ps.flagCount} flags)\n${summary}`);
+        }
+      }
+      parts.push(`
+Use this context to:
+- Reference existing answers: "Your service ORR mentions X — does the new change affect this?"
+- Flag potential conflicts between parent assumptions and the new change
+- Identify inherited risks from the parent ORR`);
+    } else {
+      parts.push(`\n## No Parent ORR
+This feature's service has not been reviewed with a Service ORR. Note this gap when relevant — the team may have blind spots about the service's baseline operational readiness.`);
+    }
+  }
 
   parts.push(buildSectionOverview(ctx));
   parts.push(buildActiveSectionDetail(ctx));

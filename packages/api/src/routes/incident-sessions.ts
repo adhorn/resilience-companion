@@ -29,5 +29,24 @@ export const incidentSessionRoutes = createSessionRoutes({
     }
   },
 
+  welcomeMessage: `Welcome! I'm your **Incident Analysis Facilitator** — I'll help you explore what happened, why it happened, and what your organization can learn from it.
+
+**How it works:**
+- Select a section from the sidebar and we'll work through it together
+- I'll ask probing questions to move beyond surface explanations toward systemic understanding
+- I write observations and findings directly into the document as we go
+
+**Commands** (type \`/\` to see the menu):
+- \`/timeline\` — Build the incident timeline
+- \`/factors\` — Identify contributing factors
+- \`/actions\` — Generate action items
+- \`/summarize\` — Summarize analysis progress
+- \`/depth\` — Assess current section depth
+- \`/patterns\` — Look for systemic patterns
+- \`/experiments\` — Suggest experiments to prevent recurrence
+- \`/learning\` — Extract learning signals
+
+Select a section and let's begin!`,
+
   // No snapshot on session end for incidents (ORR-specific feature)
 });
