@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
+import { updateSectionSchema, updateFlagSchema, validateBody, safeJsonParse } from "../validation.js";
 
 export const sectionRoutes = new Hono();
 
@@ -104,15 +105,19 @@ sectionRoutes.patch("/:sectionId", async (c) => {
     return c.json({ error: "not_found", message: "Section not found" }, 404);
   }
 
+  const v = validateBody(updateSectionSchema, body);
+  if (!v.success) return c.json({ error: "validation", message: v.error }, 400);
+  const d = v.data;
+
   const now = new Date().toISOString();
   const updates: Record<string, unknown> = {
     updatedAt: now,
     updatedBy: user.sub,
   };
 
-  if (body.content !== undefined) updates.content = body.content;
-  if (body.prompts !== undefined) updates.prompts = JSON.stringify(body.prompts);
-  if (body.promptResponses !== undefined) updates.promptResponses = body.promptResponses;
+  if (d.content !== undefined) updates.content = d.content;
+  if (d.prompts !== undefined) updates.prompts = JSON.stringify(d.prompts);
+  if (d.promptResponses !== undefined) updates.promptResponses = d.promptResponses;
 
   db.update(schema.sections)
     .set(updates)
@@ -169,24 +174,22 @@ sectionRoutes.patch("/:sectionId/flags/:flagIndex", async (c) => {
     return c.json({ error: "not_found", message: "Section not found" }, 404);
   }
 
-  const flags: any[] = typeof section.flags === "string"
-    ? JSON.parse(section.flags)
-    : (section.flags as any[]) || [];
+  const fv = validateBody(updateFlagSchema, body);
+  if (!fv.success) return c.json({ error: "validation", message: fv.error }, 400);
+
+  const flags: any[] = safeJsonParse(section.flags, []);
 
   if (flagIndex < 0 || flagIndex >= flags.length) {
     return c.json({ error: "not_found", message: "Flag not found" }, 404);
   }
 
-  const newStatus = body.status;
-  if (newStatus !== "ACCEPTED" && newStatus !== "RESOLVED" && newStatus !== "OPEN") {
-    return c.json({ error: "invalid", message: "Status must be OPEN, ACCEPTED, or RESOLVED" }, 400);
-  }
+  const newStatus = fv.data.status;
 
   const now = new Date().toISOString();
   flags[flagIndex] = {
     ...flags[flagIndex],
     status: newStatus,
-    resolution: newStatus === "OPEN" ? undefined : (body.resolution || flags[flagIndex].resolution),
+    resolution: newStatus === "OPEN" ? undefined : (fv.data.resolution || flags[flagIndex].resolution),
     resolvedAt: newStatus === "OPEN" ? undefined : now,
     resolvedBy: newStatus === "OPEN" ? undefined : user.sub,
   };

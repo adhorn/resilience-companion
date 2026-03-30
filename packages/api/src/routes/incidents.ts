@@ -8,6 +8,7 @@ import { eq, and } from "drizzle-orm";
 import { INCIDENT_TEMPLATE_SECTIONS } from "@orr/shared";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
+import { createIncidentSchema, updateIncidentSchema, validateBody } from "../validation.js";
 
 export const incidentRoutes = new Hono();
 incidentRoutes.use("*", requireAuth);
@@ -34,11 +35,9 @@ incidentRoutes.get("/", (c) => {
 incidentRoutes.post("/", async (c) => {
   const user = c.get("user");
   const body = await c.req.json();
-  const { title, serviceName, incidentDate, severity, incidentType } = body;
-
-  if (!title) {
-    return c.json({ error: "validation", message: "title is required" }, 400);
-  }
+  const v = validateBody(createIncidentSchema, body);
+  if (!v.success) return c.json({ error: "validation", message: v.error }, 400);
+  const { title, serviceName, incidentDate, severity, incidentType } = v.data;
 
   const db = getDb();
   const now = new Date().toISOString();
@@ -49,10 +48,10 @@ incidentRoutes.post("/", async (c) => {
     id: incidentId,
     title,
     teamId: user.teamId,
-    serviceName: serviceName || null,
-    incidentDate: incidentDate || null,
-    severity: severity || null,
-    incidentType: incidentType || null,
+    serviceName: serviceName ?? null,
+    incidentDate: incidentDate ?? null,
+    severity: (severity as any) ?? null,
+    incidentType: (incidentType as any) ?? null,
     steeringTier: "thorough",
     status: "DRAFT",
     createdBy: user.sub as string,
@@ -147,6 +146,9 @@ incidentRoutes.patch("/:id", async (c) => {
   const user = c.get("user");
   const db = getDb();
   const body = await c.req.json();
+  const v = validateBody(updateIncidentSchema, body);
+  if (!v.success) return c.json({ error: "validation", message: v.error }, 400);
+  const d = v.data;
 
   const incident = db.select().from(schema.incidents)
     .where(and(
@@ -160,16 +162,16 @@ incidentRoutes.patch("/:id", async (c) => {
   }
 
   const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
-  if (body.title !== undefined) updates.title = body.title;
-  if (body.serviceName !== undefined) updates.serviceName = body.serviceName;
-  if (body.incidentDate !== undefined) updates.incidentDate = body.incidentDate;
-  if (body.severity !== undefined) updates.severity = body.severity;
-  if (body.incidentType !== undefined) updates.incidentType = body.incidentType;
-  if (body.status !== undefined) {
-    updates.status = body.status;
-    if (body.status === "PUBLISHED") updates.publishedAt = new Date().toISOString();
+  if (d.title !== undefined) updates.title = d.title;
+  if (d.serviceName !== undefined) updates.serviceName = d.serviceName;
+  if (d.incidentDate !== undefined) updates.incidentDate = d.incidentDate;
+  if (d.severity !== undefined) updates.severity = d.severity;
+  if (d.incidentType !== undefined) updates.incidentType = d.incidentType;
+  if (d.status !== undefined) {
+    updates.status = d.status;
+    if (d.status === "PUBLISHED") updates.publishedAt = new Date().toISOString();
   }
-  if (body.steeringTier !== undefined) updates.steeringTier = body.steeringTier;
+  if (d.steeringTier !== undefined) updates.steeringTier = d.steeringTier;
 
   db.update(schema.incidents)
     .set(updates)

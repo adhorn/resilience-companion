@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
+import { safeJsonParse } from "../validation.js";
 
 export const caseStudyRoutes = new Hono();
 
@@ -41,10 +42,8 @@ caseStudyRoutes.get("/", (c) => {
 
   if (sectionTag) {
     results = results.filter((cs) => {
-      const tags = typeof cs.sectionTags === "string"
-        ? JSON.parse(cs.sectionTags)
-        : cs.sectionTags;
-      return (tags as string[]).includes(sectionTag);
+      const tags: string[] = safeJsonParse(cs.sectionTags, []);
+      return tags.includes(sectionTag);
     });
   }
 

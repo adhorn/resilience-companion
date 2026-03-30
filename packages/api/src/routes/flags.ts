@@ -3,6 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 import type { SectionFlag, RiskSeverity, FlagWithContext, FlagsSummary, ORRStatus } from "@orr/shared";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
+import { safeJsonParse } from "../validation.js";
 
 export const flagsRoutes = new Hono();
 
@@ -52,9 +53,7 @@ flagsRoutes.get("/", (c) => {
   const allFlags: FlagWithContext[] = [];
 
   for (const section of sections) {
-    const flags: any[] = typeof section.flags === "string"
-      ? JSON.parse(section.flags)
-      : (section.flags as any[]) || [];
+    const flags: any[] = safeJsonParse(section.flags, []);
 
     const orr = orrMap.get(section.orrId)!;
 

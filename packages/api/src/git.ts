@@ -143,7 +143,10 @@ export function getLocalPath(gitUrl: string): string | null {
 // Not a substitute for a proper secrets manager, but prevents plaintext tokens in SQLite.
 
 function deriveKey(): Buffer {
-  const secret = process.env.JWT_SECRET || "change-me-in-production";
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret === "change-me-in-production") {
+    throw new Error("JWT_SECRET must be set to a unique value (not the default). Token encryption depends on it.");
+  }
   return createHash("sha256").update(secret).digest(); // 32 bytes = AES-256
 }
 

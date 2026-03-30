@@ -26,10 +26,24 @@ import { orrLearningRoutes, incidentLearningRoutes } from "./routes/learning.js"
 export const app = new Hono();
 
 app.use("*", logger());
+
+// Security headers
+app.use("*", async (c, next) => {
+  await next();
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Frame-Options", "DENY");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+});
+
+// CORS — configurable via CORS_ORIGINS env var (comma-separated)
+const defaultOrigins = ["http://localhost:5173", "http://localhost:3000"];
+const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
+  : defaultOrigins;
 app.use(
   "/api/*",
   cors({
-    origin: ["http://localhost:5173", "http://localhost:3000"],
+    origin: corsOrigins,
     credentials: true,
   }),
 );
