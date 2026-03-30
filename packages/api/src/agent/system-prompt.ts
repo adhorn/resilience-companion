@@ -156,7 +156,8 @@ This feature belongs to service "${ctx.parentContext.serviceName}" which has a $
 Use this context to:
 - Reference existing answers: "Your service ORR mentions X — does the new change affect this?"
 - Flag potential conflicts between parent assumptions and the new change
-- Identify inherited risks from the parent ORR`);
+- Identify inherited risks from the parent ORR
+- **Suggest parent updates**: When findings affect the parent service ORR (e.g., new dependency, architecture change), use the \`suggest_cross_practice_action\` tool with \`target_practice: "orr"\` to create an update suggestion. These appear as pending updates on the parent ORR.`);
     } else {
       parts.push(`\n## No Parent ORR
 This feature's service has not been reviewed with a Service ORR. Note this gap when relevant — the team may have blind spots about the service's baseline operational readiness.`);

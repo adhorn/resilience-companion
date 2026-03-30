@@ -541,6 +541,17 @@ export function executeSharedTool(
 
     case "suggest_cross_practice_action": {
       const suggId = nanoid();
+
+      // Auto-link to parent ORR when a feature ORR suggests updates to its parent
+      let linkedPracticeId: string | null = null;
+      if (practiceType === "orr" && args.target_practice === "orr") {
+        const sourceOrr = db.select({ parentOrrId: schema.orrs.parentOrrId })
+          .from(schema.orrs).where(eq(schema.orrs.id, practiceId)).get();
+        if (sourceOrr?.parentOrrId) {
+          linkedPracticeId = sourceOrr.parentOrrId;
+        }
+      }
+
       db.insert(schema.crossPracticeSuggestions).values({
         id: suggId,
         sourcePracticeType: practiceType,
@@ -548,9 +559,10 @@ export function executeSharedTool(
         targetPracticeType: args.target_practice as any,
         suggestion: args.suggestion as string,
         rationale: args.rationale as string,
+        linkedPracticeId,
         createdAt: now,
       }).run();
-      return JSON.stringify({ success: true, suggestionId: suggId, targetPractice: args.target_practice });
+      return JSON.stringify({ success: true, suggestionId: suggId, targetPractice: args.target_practice, linkedPracticeId });
     }
 
     case "record_action_item": {

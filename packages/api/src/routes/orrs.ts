@@ -228,7 +228,7 @@ orrRoutes.get("/:id", (c) => {
   // Strip sensitive fields
   const { repositoryToken, repositoryLocalPath, ...safeOrr } = orr;
 
-  // For feature ORRs, include parent ORR summary
+  // For feature ORRs, include parent ORR summary with section content
   let parentOrr = null;
   if (orr.parentOrrId) {
     const parent = db.select().from(schema.orrs).where(eq(schema.orrs.id, orr.parentOrrId)).get();
@@ -243,13 +243,56 @@ orrRoutes.get("/:id", (c) => {
           id: s.id,
           title: s.title,
           depth: s.depth,
+          content: s.content || "",
           hasContent: !!s.content?.trim(),
+          promptResponses: s.promptResponses,
+          prompts: s.prompts,
+          flags: s.flags,
         })),
       };
     }
   }
 
-  return c.json({ orr: { ...safeOrr, hasRepositoryToken: !!repositoryToken }, sections: secs, parentOrr });
+  // For service ORRs, include child feature ORRs and pending update suggestions
+  let childOrrs: any[] = [];
+  let pendingSuggestions: any[] = [];
+  if (!orr.parentOrrId) {
+    childOrrs = db.select({
+      id: schema.orrs.id,
+      serviceName: schema.orrs.serviceName,
+      status: schema.orrs.status,
+      orrType: schema.orrs.orrType,
+      changeTypes: schema.orrs.changeTypes,
+      changeDescription: schema.orrs.changeDescription,
+      createdAt: schema.orrs.createdAt,
+      updatedAt: schema.orrs.updatedAt,
+    }).from(schema.orrs)
+      .where(eq(schema.orrs.parentOrrId, orr.id))
+      .all();
+
+    // Pending suggestions from child feature ORRs targeting this parent
+    pendingSuggestions = db.select().from(schema.crossPracticeSuggestions)
+      .where(and(
+        eq(schema.crossPracticeSuggestions.targetPracticeType, "orr"),
+        eq(schema.crossPracticeSuggestions.linkedPracticeId, orr.id),
+        eq(schema.crossPracticeSuggestions.status, "suggested"),
+      ))
+      .all();
+  }
+
+  // For feature ORRs, include suggestions this feature made to parent
+  let featureSuggestions: any[] = [];
+  if (orr.parentOrrId) {
+    featureSuggestions = db.select().from(schema.crossPracticeSuggestions)
+      .where(and(
+        eq(schema.crossPracticeSuggestions.sourcePracticeType, "orr"),
+        eq(schema.crossPracticeSuggestions.sourcePracticeId, orr.id),
+        eq(schema.crossPracticeSuggestions.targetPracticeType, "orr"),
+      ))
+      .all();
+  }
+
+  return c.json({ orr: { ...safeOrr, hasRepositoryToken: !!repositoryToken }, sections: secs, parentOrr, childOrrs, pendingSuggestions, featureSuggestions });
 });
 
 /**
@@ -413,4 +456,41 @@ orrRoutes.delete("/:id", (c) => {
   db.delete(schema.orrs).where(eq(schema.orrs.id, orr.id)).run();
 
   return c.json({ deleted: true });
+});
+
+/**
+ * PATCH /api/v1/orrs/:id/suggestions/:suggestionId
+ * Accept or dismiss a parent update suggestion.
+ */
+orrRoutes.patch("/:id/suggestions/:suggestionId", async (c) => {
+  const user = c.get("user");
+  const db = getDb();
+
+  // Verify the ORR belongs to the user's team
+  const orr = db.select().from(schema.orrs)
+    .where(and(eq(schema.orrs.id, c.req.param("id")), eq(schema.orrs.teamId, user.teamId)))
+    .get();
+  if (!orr) return c.json({ error: "not_found", message: "ORR not found" }, 404);
+
+  const body = await c.req.json();
+  const status = body.status as string;
+  if (status !== "accepted" && status !== "dismissed") {
+    return c.json({ error: "validation", message: "Status must be 'accepted' or 'dismissed'" }, 400);
+  }
+
+  const suggestion = db.select().from(schema.crossPracticeSuggestions)
+    .where(and(
+      eq(schema.crossPracticeSuggestions.id, c.req.param("suggestionId")),
+      eq(schema.crossPracticeSuggestions.linkedPracticeId, orr.id),
+    ))
+    .get();
+
+  if (!suggestion) return c.json({ error: "not_found", message: "Suggestion not found" }, 404);
+
+  db.update(schema.crossPracticeSuggestions)
+    .set({ status })
+    .where(eq(schema.crossPracticeSuggestions.id, suggestion.id))
+    .run();
+
+  return c.json({ success: true, suggestionId: suggestion.id, status });
 });
