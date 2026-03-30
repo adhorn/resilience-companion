@@ -58,6 +58,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ reason }),
       }),
+    updateSuggestion: (orrId: string, suggestionId: string, status: "accepted" | "dismissed") =>
+      request<{ success: boolean }>(`/orrs/${orrId}/suggestions/${suggestionId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
   },
 
   // Sections
