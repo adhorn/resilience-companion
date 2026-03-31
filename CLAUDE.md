@@ -80,8 +80,9 @@ POST `/api/v1/orrs/:orrId/sessions/:sessionId/messages` → `runAgent()` in `age
 
 ## LLM Integration
 
-Pluggable adapter pattern in `src/llm/`. `getLLM()` singleton auto-detects provider from `LLM_API_KEY`:
-- `sk-ant-*` → `AnthropicAdapter` (native SDK, shortnames: `sonnet` → `claude-sonnet-4-20250514`)
+Pluggable adapter pattern in `src/llm/`. `getLLM()` singleton auto-detects provider:
+- `LLM_PROVIDER=bedrock` → `BedrockAdapter` (AWS credential chain, shortnames: `sonnet` → Bedrock model IDs)
+- `sk-ant-*` key → `AnthropicAdapter` (native SDK, shortnames: `sonnet` → `claude-sonnet-4-20250514`)
 - Other keys → `OpenAICompatibleAdapter` (OpenAI, Azure, Ollama via `LLM_BASE_URL`)
 - No key → `NoOpAdapter` (app works without LLM as a structured review tool)
 
@@ -90,8 +91,10 @@ Pluggable adapter pattern in `src/llm/`. `getLLM()` singleton auto-detects provi
 ```
 DB_PATH=./data/resilience-companion.db   # Relative to monorepo root
 JWT_SECRET=change-me-in-production
-LLM_API_KEY=                       # Anthropic (sk-ant-*) or OpenAI-compatible
-LLM_MODEL=                         # Default: claude-sonnet for Anthropic, gpt-4o for OpenAI
+LLM_PROVIDER=                      # Optional: bedrock (auto-detected from key if not set)
+LLM_API_KEY=                       # Anthropic (sk-ant-*) or OpenAI-compatible; not needed for Bedrock
+LLM_MODEL=                         # Shortnames: sonnet, opus, haiku; or full model ID
 LLM_BASE_URL=                      # Optional, for OpenAI-compatible endpoints
+AWS_REGION=                        # Optional, for Bedrock (defaults to us-east-1)
 PORT=3000
 ```
