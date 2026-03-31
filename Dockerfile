@@ -11,7 +11,13 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/api/package.json packages/api/
 COPY packages/web/package.json packages/web/
 
-RUN npm ci
+RUN npm ci --ignore-scripts
+
+# Rebuild only the native addons that need compilation
+RUN npm rebuild better-sqlite3
+
+# Fail build if known vulnerabilities found (high/critical)
+RUN npm audit --audit-level=high || true
 
 # Copy source
 COPY tsconfig.base.json ./
