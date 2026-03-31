@@ -852,6 +852,8 @@ export function ORRView() {
         emptyStateText="Start an AI session to get help reviewing this ORR."
         emptyStateSubtext="The AI will help you think through questions, share relevant lessons, and assess depth."
         renderMarkdown={renderMarkdown}
+        isReadOnly={isReadOnly}
+        readOnlyReason={orr.status === "TERMINATED" ? "terminated" : orr.status === "ARCHIVED" ? "archived" : undefined}
       />
     </div>
   );
