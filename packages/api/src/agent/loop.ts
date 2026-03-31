@@ -147,10 +147,18 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
         }
 
         switch (chunk.type) {
-          case "content":
-            fullContent += chunk.content!;
-            yield { type: "content_delta", content: chunk.content! };
+          case "content": {
+            // Filter out raw tool-call XML that the model sometimes emits as text
+            // instead of using proper tool_use content blocks
+            const text = chunk.content!;
+            if (text.match(/<invoke\s|<parameter\s|<\/invoke>|<\/parameter>/)) {
+              // Don't yield — this is leaked tool call syntax, not real content
+              break;
+            }
+            fullContent += text;
+            yield { type: "content_delta", content: text };
             break;
+          }
 
           case "tool_call_start":
             pendingToolCalls.push({
@@ -313,7 +321,10 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
     const finalStream = llm.chat(messages, []); // empty tools array = text only
     for await (const chunk of finalStream) {
       if (chunk.type === "content") {
-        yield { type: "content_delta", content: chunk.content! };
+        const text = chunk.content!;
+        if (!text.match(/<invoke\s|<parameter\s|<\/invoke>|<\/parameter>/)) {
+          yield { type: "content_delta", content: text };
+        }
       }
       if (chunk.type === "done" && chunk.usage) {
         totalUsage += chunk.usage.promptTokens + chunk.usage.completionTokens;

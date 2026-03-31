@@ -592,6 +592,8 @@ export function IncidentView() {
         emptyStateText="Start an AI session to get help analyzing this incident."
         emptyStateSubtext="The AI will help you explore contributing factors, build timelines, and extract systemic learning."
         renderMarkdown={renderMarkdown}
+        isReadOnly={incident?.status === "ARCHIVED"}
+        readOnlyReason="archived"
       />
     </div>
   );

@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { sendSSEMessage } from "../api/client";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { parseResponses } from "../lib/responses";
+import { getSpinnerVerb } from "../lib/spinnerVerbs";
 
 export interface SlashCommand {
   name: string;
@@ -77,6 +78,28 @@ export function useReviewSession({
     setInput((prev) => (prev ? prev + " " + text : text));
   });
 
+  // Rotate spinner verb every 3s while thinking (preserves tool-specific labels)
+  const spinnerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isToolLabelRef = useRef(false);
+  useEffect(() => {
+    if (thinkingStatus) {
+      spinnerIntervalRef.current = setInterval(() => {
+        if (!isToolLabelRef.current) {
+          setThinkingStatus(`${getSpinnerVerb()}...`);
+        }
+      }, 3000);
+    } else {
+      if (spinnerIntervalRef.current) {
+        clearInterval(spinnerIntervalRef.current);
+        spinnerIntervalRef.current = null;
+      }
+      isToolLabelRef.current = false;
+    }
+    return () => {
+      if (spinnerIntervalRef.current) clearInterval(spinnerIntervalRef.current);
+    };
+  }, [!!thinkingStatus]);
+
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -103,7 +126,7 @@ export function useReviewSession({
     setLastError(null);
     setStreaming(true);
     setStreamStatus(null);
-    setThinkingStatus("Thinking...");
+    setThinkingStatus(`${getSpinnerVerb()}...`);
 
     let assistantContent = "";
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
@@ -114,6 +137,7 @@ export function useReviewSession({
         if (event.type === "content_delta") {
           setStreamStatus(null);
           setThinkingStatus(null);
+          isToolLabelRef.current = false;
           assistantContent += event.content;
           setMessages((prev) => {
             const updated = [...prev];
@@ -151,7 +175,9 @@ export function useReviewSession({
             record_action_item: "Recording action item...",
             record_contributing_factor: "Recording factor...",
           };
-          setThinkingStatus(toolLabels[event.name as string] || "Working...");
+          const label = toolLabels[event.name as string];
+          isToolLabelRef.current = !!label;
+          setThinkingStatus(label || `${getSpinnerVerb()}...`);
         }
         if (event.type === "section_updated") {
           if (event.sectionId) setActiveSection(event.sectionId);

@@ -48,6 +48,10 @@ export interface ConversationPanelProps {
   emptyStateText: string;
   emptyStateSubtext: string;
   renderMarkdown: (text: string) => React.ReactNode;
+  /** When true, hides session controls and input — review is read-only */
+  isReadOnly?: boolean;
+  /** Label for the read-only state (e.g. "terminated", "archived") */
+  readOnlyReason?: string;
 }
 
 export function ConversationPanel({
@@ -81,13 +85,17 @@ export function ConversationPanel({
   emptyStateText,
   emptyStateSubtext,
   renderMarkdown,
+  isReadOnly = false,
+  readOnlyReason,
 }: ConversationPanelProps) {
   return (
     <div className="w-[40%] flex-shrink-0 flex flex-col bg-white border-l border-gray-200">
       {/* Session controls */}
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
         <h3 className="font-medium text-gray-900 text-sm">AI Assistant</h3>
-        {sessionId ? (
+        {isReadOnly ? (
+          <span className="text-xs text-gray-400">Read-only</span>
+        ) : sessionId ? (
           <div className="flex items-center gap-3">
             {sessionTokens > 0 && (
               <span className="text-[10px] text-gray-400">
@@ -148,7 +156,16 @@ export function ConversationPanel({
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {!sessionId && messages.length === 0 && (
+        {isReadOnly && messages.length === 0 && (
+          <div className="text-center text-gray-400 text-sm mt-8">
+            <p>This review has been {readOnlyReason || "closed"}.</p>
+            <p className="mt-2 text-xs">
+              The document and conversation history are preserved but no new sessions can be started.
+            </p>
+          </div>
+        )}
+
+        {!isReadOnly && !sessionId && messages.length === 0 && (
           <div className="text-center text-gray-400 text-sm mt-8">
             <p>{emptyStateText}</p>
             <p className="mt-2 text-xs">
@@ -195,7 +212,7 @@ export function ConversationPanel({
       </div>
 
       {/* Input */}
-      {sessionId && (
+      {sessionId && !isReadOnly && (
         <div className="p-4 border-t border-gray-200">
           <div className="flex gap-2 relative">
             {/* Slash command dropdown */}
