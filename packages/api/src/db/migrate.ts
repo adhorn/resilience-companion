@@ -88,6 +88,8 @@ export function migrate(db: Db) {
     discoveries TEXT NOT NULL DEFAULT '[]',
     sections_discussed TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'ACTIVE',
+    learning_quality TEXT,
+    engagement_pattern TEXT,
     token_usage INTEGER NOT NULL DEFAULT 0,
     started_at TEXT NOT NULL,
     ended_at TEXT
@@ -354,6 +356,8 @@ export function migrate(db: Db) {
     ["orrs", "parent_orr_id", "TEXT"],
     ["orrs", "change_types", "TEXT NOT NULL DEFAULT '[]'"],
     ["orrs", "change_description", "TEXT"],
+    ["sessions", "learning_quality", "TEXT"],
+    ["sessions", "engagement_pattern", "TEXT"],
   ];
   for (const [table, col, type] of migrations) {
     try {
@@ -452,10 +456,12 @@ export function migrate(db: Db) {
           agent_profile TEXT NOT NULL DEFAULT 'REVIEW_FACILITATOR',
           summary TEXT, discoveries TEXT NOT NULL DEFAULT '[]',
           sections_discussed TEXT NOT NULL DEFAULT '[]',
-          status TEXT NOT NULL DEFAULT 'ACTIVE', token_usage INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'ACTIVE',
+          learning_quality TEXT, engagement_pattern TEXT,
+          token_usage INTEGER NOT NULL DEFAULT 0,
           started_at TEXT NOT NULL, ended_at TEXT
         )`));
-        db.run(sql.raw(`INSERT INTO sessions SELECT * FROM _sess_bak`));
+        db.run(sql.raw(`INSERT INTO sessions (id, orr_id, user_id, agent_profile, summary, discoveries, sections_discussed, status, token_usage, started_at, ended_at) SELECT id, orr_id, user_id, agent_profile, summary, discoveries, sections_discussed, status, token_usage, started_at, ended_at FROM _sess_bak`));
         db.run(sql.raw(`DROP TABLE _sess_bak`));
       }
       if (hasBrokenFk) {

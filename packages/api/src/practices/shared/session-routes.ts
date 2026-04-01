@@ -94,7 +94,7 @@ const FLUSH_TOOL: LLMToolDef = {
   type: "function",
   function: {
     name: "write_session_summary",
-    description: "Write a summary of what was covered and discovered in this session.",
+    description: "Write a summary of what was covered and discovered in this session, including learning quality assessment.",
     parameters: {
       type: "object",
       properties: {
@@ -103,6 +103,16 @@ const FLUSH_TOOL: LLMToolDef = {
           type: "array",
           items: { type: "string" },
           description: "Things that surprised the team or contradicted their expectations.",
+        },
+        learning_quality: {
+          type: "string",
+          enum: ["high", "moderate", "low"],
+          description: "Rate this session's learning quality. HIGH: genuine discoveries, prediction errors corrected, mental models updated. MODERATE: some new understanding but mostly confirming existing knowledge. LOW: surface-level recitation, no surprises.",
+        },
+        engagement_pattern: {
+          type: "string",
+          enum: ["sustained_productive", "started_easy_deepened", "struggled_then_learned", "stayed_surface", "frustrated_throughout"],
+          description: "The engagement arc of this session.",
         },
       },
       required: ["summary"],
@@ -132,9 +142,11 @@ export async function flushSessionSummary(
   const flushMessages: LLMMessage[] = [
     {
       role: "system",
-      content: `You are a session summarizer. A review session is about to auto-renew because it reached its token budget. Your ONLY job is to call write_session_summary with a good summary and any discoveries before the session closes.
+      content: `You are a session summarizer. A review session is about to auto-renew because it reached its token budget. Your ONLY job is to call write_session_summary with a good summary, discoveries, and learning quality assessment before the session closes.
 
-Summarize: what sections were discussed, key observations and depth assessments, flags raised, and anything that surprised the team. Be concise but thorough — this summary will be the only record of this session's conversation.`,
+Summarize: what sections were discussed, key observations and depth assessments, flags raised, and anything that surprised the team. Be concise but thorough — this summary will be the only record of this session's conversation.
+
+Also rate the session's learning quality based on: discoveries made, prediction accuracy, depth achieved, and whether the team was genuinely challenged or just reciting known answers. And describe the engagement pattern — was the team productively challenged throughout, did they start easy and deepen, did they struggle then learn, did they stay at the surface, or were they frustrated throughout?`,
     },
     {
       role: "user",
