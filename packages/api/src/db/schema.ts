@@ -123,6 +123,8 @@ export const sessions = sqliteTable("sessions", {
   status: text("status", { enum: ["ACTIVE", "COMPLETED"] })
     .notNull()
     .default("ACTIVE"),
+  learningQuality: text("learning_quality"), // "high" | "moderate" | "low"
+  engagementPattern: text("engagement_pattern"), // "sustained_productive" | "started_easy_deepened" | "struggled_then_learned" | "stayed_surface" | "frustrated_throughout"
   tokenUsage: integer("token_usage").notNull().default(0),
   startedAt: text("started_at").notNull(),
   endedAt: text("ended_at"),

@@ -175,6 +175,37 @@ dashboardRoutes.get("/", (c) => {
     : null;
   const recentDiscoveries = discoveryResult?.count ?? 0;
 
+  // --- Session learning quality (last 30 days) ---
+
+  const learningQuality = { high: 0, moderate: 0, low: 0, unrated: 0 };
+  const engagementPatterns: Record<string, number> = {};
+
+  if (allPracticeIds.length > 0) {
+    const recentSessions = db
+      .select({
+        learningQuality: schema.sessions.learningQuality,
+        engagementPattern: schema.sessions.engagementPattern,
+      })
+      .from(schema.sessions)
+      .where(
+        sql`${schema.sessions.orrId} IN (${sql.join(allPracticeIds.map(id => sql`${id}`), sql`, `)}) AND ${schema.sessions.status} = 'COMPLETED' AND ${schema.sessions.startedAt} >= ${thirtyDaysAgo.toISOString()}`,
+      )
+      .all();
+
+    for (const s of recentSessions) {
+      const lq = s.learningQuality as string | null;
+      if (lq === "high" || lq === "moderate" || lq === "low") {
+        learningQuality[lq]++;
+      } else {
+        learningQuality.unrated++;
+      }
+      const ep = s.engagementPattern as string | null;
+      if (ep) {
+        engagementPatterns[ep] = (engagementPatterns[ep] || 0) + 1;
+      }
+    }
+  }
+
   // --- Assemble response ---
 
   const stats: DashboardStats = {
@@ -188,6 +219,8 @@ dashboardRoutes.get("/", (c) => {
     experimentSuggestions,
     crossPracticeLinks,
     recentDiscoveries,
+    learningQuality,
+    engagementPatterns,
   };
 
   return c.json({ dashboard: stats });

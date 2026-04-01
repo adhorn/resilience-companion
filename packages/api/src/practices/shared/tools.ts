@@ -164,7 +164,7 @@ export function createSharedToolDefs(practiceLabel: string): LLMToolDef[] {
       function: {
         name: "write_session_summary",
         description:
-          "Write a summary of what was covered and discovered in this session. Call this when wrapping up a session. Include discoveries — things that surprised the team, contradicted expectations, or revealed gaps between how they thought the system works and how it actually works.",
+          "Write a summary of what was covered and discovered in this session. Call this when wrapping up a session. Include discoveries — things that surprised the team, contradicted expectations, or revealed gaps between how they thought the system works and how it actually works. Also rate the session's learning quality and engagement pattern.",
         parameters: {
           type: "object",
           properties: {
@@ -173,6 +173,16 @@ export function createSharedToolDefs(practiceLabel: string): LLMToolDef[] {
               type: "array",
               items: { type: "string" },
               description: "List of things that surprised the team or contradicted their expectations during this session.",
+            },
+            learning_quality: {
+              type: "string",
+              enum: ["high", "moderate", "low"],
+              description: "Rate this session's learning quality. HIGH: genuine discoveries, prediction errors corrected, mental models updated. MODERATE: some new understanding but mostly confirming existing knowledge. LOW: surface-level recitation, no surprises, fluency illusion suspected.",
+            },
+            engagement_pattern: {
+              type: "string",
+              enum: ["sustained_productive", "started_easy_deepened", "struggled_then_learned", "stayed_surface", "frustrated_throughout"],
+              description: "The engagement arc of this session. sustained_productive: team was challenged throughout and made steady progress. started_easy_deepened: began fluently but got into real learning. struggled_then_learned: initial frustration gave way to breakthroughs. stayed_surface: conversation never got past recitation. frustrated_throughout: team hit walls and didn't break through.",
             },
           },
           required: ["summary"],
@@ -495,11 +505,22 @@ export function executeSharedTool(
       if (args.discoveries && Array.isArray(args.discoveries) && (args.discoveries as string[]).length > 0) {
         updates.discoveries = args.discoveries;
       }
+      if (args.learning_quality) {
+        updates.learningQuality = args.learning_quality as string;
+      }
+      if (args.engagement_pattern) {
+        updates.engagementPattern = args.engagement_pattern as string;
+      }
       db.update(schema.sessions)
         .set(updates)
         .where(eq(schema.sessions.id, sessionId))
         .run();
-      return JSON.stringify({ success: true, discoveryCount: (args.discoveries as string[] || []).length });
+      return JSON.stringify({
+        success: true,
+        discoveryCount: (args.discoveries as string[] || []).length,
+        learningQuality: args.learning_quality || null,
+        engagementPattern: args.engagement_pattern || null,
+      });
     }
 
     case "record_discovery": {

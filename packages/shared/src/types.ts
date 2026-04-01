@@ -246,6 +246,10 @@ export interface DashboardStats {
   experimentSuggestions: number;
   crossPracticeLinks: number;
   recentDiscoveries: number; // sessions with discoveries in last 30 days
+
+  // Session learning quality (last 30 days)
+  learningQuality: { high: number; moderate: number; low: number; unrated: number };
+  engagementPatterns: Record<string, number>; // pattern name → count
 }
 
 /** Shared summary shape for both ORRs and incidents on the dashboard. */
