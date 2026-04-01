@@ -41,6 +41,8 @@ export class TraceLogger {
   private iterationCount = 0;
   private error: string | null = null;
   private errorCategory: string | null = null;
+  private engagementZone: string | null = null;
+  private engagementSignals: string[] = [];
 
   private activeSpans = new Map<string, ActiveSpan>();
 
@@ -178,6 +180,12 @@ export class TraceLogger {
     this.errorCategory = category || null;
   }
 
+  /** Record engagement assessment for this turn. */
+  setEngagement(zone: string, signals: string[]): void {
+    this.engagementZone = zone;
+    this.engagementSignals = signals;
+  }
+
   /** Emit final summary span with totals for the entire agent turn. */
   finalize(): void {
     const totalTokens = this.totalPromptTokens + this.totalCompletionTokens;
@@ -196,6 +204,7 @@ export class TraceLogger {
       "agent.retry_count": this.retryCount,
       "agent.fallback_used": this.fallbackUsed,
       ...(this.error ? { "error.message": this.error, "error.category": this.errorCategory } : {}),
+      ...(this.engagementZone ? { "engagement.zone": this.engagementZone, "engagement.signals": this.engagementSignals.join("; ") } : {}),
     }, undefined, Date.now() - this.startTime);
   }
 }
