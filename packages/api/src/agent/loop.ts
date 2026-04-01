@@ -8,6 +8,8 @@ import { TraceLogger } from "./trace.js";
 import { log } from "../logger.js";
 import { runBeforeHooks, runAfterHooks } from "./steering.js";
 import type { ToolLedgerEntry } from "./steering.js";
+import { assessEngagement } from "./engagement.js";
+import type { SectionEngagementContext } from "./engagement.js";
 
 /** Translate raw LLM errors into user-friendly messages */
 function categorizeError(msg: string): string {
@@ -86,6 +88,43 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
     budgetAwarePrompt += `\n\n## Session Budget\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). Start wrapping up the current line of discussion. You should call write_session_summary soon to persist your observations and discoveries before the session auto-renews.`;
   }
 
+  // Adaptive learning: detect engagement zone and inject guidance
+  // Same pattern as token budget warnings — dynamic system prompt concatenation
+  let sectionCtx: SectionEngagementContext | null = null;
+  const ctxSections = (context as any).sections as Array<{ id: string; depth: string; codeSourced: number; questionsAnswered: number }> | undefined;
+  if (context.activeSectionId && ctxSections) {
+    const sec = ctxSections.find(s => s.id === context.activeSectionId);
+    if (sec) {
+      sectionCtx = { depth: sec.depth, codeSourced: sec.codeSourced, questionsAnswered: sec.questionsAnswered };
+    }
+  }
+  const engagement = assessEngagement(conversationHistory, sectionCtx);
+
+  if (engagement.zone === "FRUSTRATED") {
+    budgetAwarePrompt += `\n\n## Adaptive Guidance — Team Struggling
+The team appears to be hitting a wall in this area (signals: ${engagement.signals.join("; ")}).
+
+Adjust your approach:
+- LOWER the code exploration barrier. You may now proactively offer: "Want me to search the codebase for that?" You don't need to wait for the team to ask.
+- Reframe "I don't know" as useful data: "That's useful — the team's operational model doesn't cover this area. Let's look at the code together and see what we find."
+- Ask simpler, more focused questions. Break complex topics into smaller pieces.
+- Tag this area as a blind spot worth noting in the session summary.
+- Do NOT reduce depth expectations — change HOW you get there, not WHERE you're going.`;
+    log("info", "Engagement: FRUSTRATED zone", { sessionId, signals: engagement.signals, confidence: engagement.confidence });
+  } else if (engagement.zone === "TOO_EASY") {
+    budgetAwarePrompt += `\n\n## Adaptive Guidance — Push Deeper
+The conversation is flowing easily with few surprises (signals: ${engagement.signals.join("; ")}). This may indicate fluency illusion — the team sounds confident but may not have deep understanding.
+
+Adjust your approach:
+- RAISE the challenge. Ask harder prediction questions: "What happens if X AND Y fail simultaneously?" "What's the blast radius if this component is down for 30 minutes?"
+- TIGHTEN the code exploration ladder. Do NOT offer to check code — push the team to recall from memory first. Their recall gaps ARE the learning signal.
+- Probe for novel scenarios the docs don't cover. Find the boundary of their knowledge.
+- Try cross-section connection questions: "How does this interact with what you described in [other section]?"
+- Consider whether the current depth assessment is too generous — fluent recitation is SURFACE, not MODERATE.`;
+    log("info", "Engagement: TOO_EASY zone", { sessionId, signals: engagement.signals, confidence: engagement.confidence });
+  }
+  // PRODUCTIVE zone: no injection — existing prompt is tuned for this
+
   // Build messages array
   const messages: LLMMessage[] = [
     { role: "system", content: budgetAwarePrompt },
@@ -96,6 +135,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
   const messageId = nanoid();
   const model = process.env.LLM_MODEL || "sonnet";
   const trace = new TraceLogger(practiceConfig.practiceType, practiceId, sessionId, messageId, model);
+  trace.setEngagement(engagement.zone, engagement.signals);
 
   yield { type: "message_start", messageId };
 
