@@ -128,7 +128,7 @@ export function NewORR() {
           >
             <div className="font-semibold text-gray-900">Service ORR</div>
             <div className="text-sm text-gray-500 mt-1">
-              Full operational readiness review — 11 sections, 117 prompts covering architecture,
+              Full operational readiness review — 11 sections, 121 prompts covering architecture,
               failures, monitoring, deployment, and more.
             </div>
             <div className="text-xs text-gray-400 mt-2">

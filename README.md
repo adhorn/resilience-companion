@@ -4,6 +4,35 @@ A self-hosted web tool for facilitating resilience practices — Operational Rea
 
 Reviews are conversations, not checklists. This tool treats each practice as a learning experience: an AI facilitator guides your team through structured questions, probes for depth, surfaces relevant industry incidents, and flags risks — while the team retains full ownership of the document.
 
+## What this tool is an argument for
+
+The book argues that most resilience practices degrade into checklists, theater, and compliance exercises because the organizations running them optimize for **performance over learning**. The Resilience Companion is a working argument that it doesn't have to be that way: you can build a tool that deliberately resists turning into a checklist, that treats productive struggle as the point rather than an obstacle to smooth UX, and that measures itself on whether teams *learn*, not on whether forms get filled in.
+
+If you disagree with that framing, this is probably the wrong tool for you — and that's fine. The book makes the case in full; this repo is what the case looks like in code.
+
+Related reading in this repo: [`docs/HOW-LEARNING-WORKS.md`](docs/HOW-LEARNING-WORKS.md) walks through how a single user message becomes a persisted learning signal.
+
+## What this tool is *not*
+
+To set expectations correctly before you deploy it:
+
+- **Not a SaaS product.** There is no hosted version, no signup, no support contract. You run it on your own infrastructure for your own team.
+- **Not multi-tenant.** The auth model, rate limiting, and data isolation are designed for one trusted team, not a public service. Do not expose this on the public internet without additional hardening you will have to build yourself.
+- **Not a compliance tool.** It does not produce auditor-ready artifacts. It produces learning, and a by-product of that learning is a document you can export. These are not the same thing.
+- **Not a replacement for human facilitation.** The AI facilitator is a scaffolding for self-serve reviews when you can't get a senior SRE in the room. A skilled human facilitator will always be better. This tool is for when that isn't available.
+- **Not stable.** The architecture is in active flux. Breaking changes are likely. Pin a commit if you need stability.
+
+## Threat model & intended deployment
+
+This tool is designed to run **on a trusted internal network, for a single team, behind your existing authentication perimeter**. That shapes every security decision in the codebase.
+
+- **Trusted users**: Anyone who can reach the API can see the team's data. Auth is present but coarse.
+- **LLM data exposure**: Review content, section prompts, and code snippets are sent to whichever LLM provider you configure. Do not paste secrets into reviews. Do not connect git repositories containing credentials.
+- **Encrypted PATs**: Git personal access tokens are encrypted at rest, but the key lives on the same machine as the database. Treat the whole data directory as sensitive.
+- **Not hardened against**: public internet exposure, hostile insiders, multi-tenant isolation, DoS, prompt injection from ingested external content (e.g., public postmortems). If your threat model includes any of these, do not deploy this tool as-is.
+
+If you deploy this somewhere it wasn't designed for and something goes wrong, that's on you. File an issue if you want to discuss hardening for a specific environment.
+
 ## What It Does
 
 **AI-Facilitated Reviews** — An AI agent acts as a curious, Socratic facilitator. It asks questions from a structured template, follows up when answers are shallow, and connects your team's responses to real-world failure patterns. Think of it as a knowledgeable colleague who's read every post-mortem and knows exactly which follow-up question to ask.
@@ -56,7 +85,7 @@ npm start -w @orr/api    # serves everything on port 3000
 
 ### Operational Readiness Reviews (ORRs)
 
-The default ORR template is extracted from the book's appendix — **107 prompts across 11 sections**:
+The default ORR template is extracted from the book's appendix — **121 prompts across 11 sections**:
 
 1. **Service Definition and Goals** — What does this service do, who depends on it, what are the SLAs?
 2. **Architecture** — Components, scaling behavior, blast radius, single points of failure
@@ -74,7 +103,7 @@ The default ORR template is extracted from the book's appendix — **107 prompts
 
 Not every change needs a full 11-section review. Feature ORRs are lightweight, change-scoped reviews for teams that already have a Service ORR. When creating an ORR, choose between:
 
-- **Service ORR** — Full operational readiness review (11 sections, 107 prompts). Best for new services or periodic re-reviews.
+- **Service ORR** — Full operational readiness review (11 sections, 121 prompts). Best for new services or periodic re-reviews.
 - **Feature ORR** — Tailored to specific changes (typically 2-4 sections, 15-30 prompts). Best for adding dependencies, new endpoints, schema migrations, scaling changes, or security boundary shifts.
 
 Feature ORRs generate questions from three sources:
@@ -88,7 +117,7 @@ When linked to a parent ORR, the AI agent receives the parent's section summarie
 
 ### Incident Analysis
 
-A learning-focused post-incident analysis template — **~110 prompts across 14 sections**:
+A learning-focused post-incident analysis template — **99 prompts across 14 sections**:
 
 1. **Incident Details** — When, where, duration, who was involved
 2. **Owner & Review Committee** — Analysis ownership and review participants
@@ -157,6 +186,7 @@ Type `/` in the chat to access quick actions. Each practice has its own set:
 The tool auto-detects your provider from the API key:
 
 - **Anthropic** (`sk-ant-*`) — Native SDK. Shortnames: `sonnet`, `opus`, `haiku`
+- **Amazon Bedrock** (`LLM_PROVIDER=bedrock`) — Uses AWS credential chain, no API key needed. Same shortnames map to Bedrock model IDs.
 - **OpenAI-compatible** (any other key) — Works with OpenAI, Azure, Ollama, or any compatible endpoint via `LLM_BASE_URL`
 - **No key** — The tool works without AI as a structured review template. Dashboard, export, and flag tracking still function.
 
@@ -179,9 +209,10 @@ See [`.env.example`](.env.example) for all options. The key ones:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `LLM_API_KEY` | No | Anthropic (`sk-ant-*`) or OpenAI-compatible key. Without it, the tool works as a structured review without AI. |
-| `LLM_MODEL` | No | Model name. Defaults to `claude-sonnet-4-20250514` (Anthropic) or `gpt-4o` (OpenAI). |
+| `LLM_MODEL` | No | Model shortname (`sonnet`, `opus`, `haiku`) or full model ID. |
+| `LLM_PROVIDER` | No | Set to `bedrock` for Amazon Bedrock. Auto-detected from API key if not set. |
 | `LLM_BASE_URL` | No | Custom endpoint for OpenAI-compatible providers (Azure, Ollama, etc.) |
-| `JWT_SECRET` | Yes | Secret for JWT tokens. Change from default in production. |
+| `TRUST_PROXY_AUTH` | No | Set to `true` to trust `X-Forwarded-Email` headers from a reverse proxy. |
 | `DB_PATH` | No | SQLite database path. Defaults to `./data/resilience-companion.db`. |
 | `PORT` | No | Server port. Defaults to `3000`. |
 
@@ -271,6 +302,17 @@ User message → Practice Config → Agent Loop → LLM + Tools → SSE stream �
 | POST | `/api/v1/incidents/:incidentId/sessions/:id/end` | End session |
 | GET | `/api/v1/incidents/:incidentId/export/markdown` | Export as Markdown |
 
+### Cross-Practice
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/services` | List services with linked ORRs, incidents, experiments |
+| GET | `/api/v1/experiments` | List experiment suggestions (filter by practice) |
+| PATCH | `/api/v1/experiments/:id` | Update experiment status (accepted, completed, dismissed) |
+| GET | `/api/v1/insights` | Discoveries, action items, cross-practice suggestions |
+| GET | `/api/v1/orrs/:id/learning` | Per-section learning signals for an ORR |
+| GET | `/api/v1/incidents/:id/learning` | Per-section learning signals for an incident |
+
 ### Shared
 
 | Method | Path | Description |
@@ -281,6 +323,7 @@ User message → Practice Config → Agent Loop → LLM + Tools → SSE stream �
 | GET | `/api/v1/templates` | List templates |
 | GET | `/api/v1/teaching-moments` | Browse teaching moments |
 | GET | `/api/v1/case-studies` | Browse case studies |
+| POST/GET/DELETE | `/api/v1/tokens` | PAT management (create, list, revoke) |
 
 ## Key Concepts
 
@@ -307,9 +350,9 @@ User message → Practice Config → Agent Loop → LLM + Tools → SSE stream �
 This is a Phase 1 MVP designed for local, single-team use.
 
 **What works today:**
-- ORR reviews with AI facilitation (11 sections, 107 prompts)
+- ORR reviews with AI facilitation (11 sections, 121 prompts)
 - Feature ORRs — lightweight change-scoped reviews with tailored question generation
-- Incident analysis with AI facilitation (14 sections, ~110 prompts)
+- Incident analysis with AI facilitation (14 sections, 99 prompts)
 - Incident timeline, contributing factors, and action item tracking
 - Cross-practice experiment suggestions
 - Depth assessment and flag management
@@ -373,6 +416,10 @@ lsof -iTCP:3000 -sTCP:LISTEN
 
 If this happens frequently, the dev script already includes mitigations (direct `tsx` invocation instead of `npm run`, `--kill-others --kill-signal SIGTERM` in concurrently, and graceful shutdown handlers in the API server). If ghost processes persist, you can also try `kill -9` instead of `kill`.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: this is a companion to a book, maintained by one person, with a specific philosophical framing. Issues welcome, PRs on a case-by-case basis, no SLA. Read the book before proposing feature work — a surprising amount of what looks like a missing feature is deliberate.
+
 ## License
 
-Part of the companion materials for *Why We Still Suck at Resilience*. See book for terms.
+[AGPL-3.0](LICENSE). This means you can use, modify, and self-host freely, but if you modify the code and make it available as a network service, you must release your modifications under the same license.

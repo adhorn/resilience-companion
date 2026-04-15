@@ -2,7 +2,7 @@ import type { TemplateSection } from "../types.js";
 
 /**
  * Default Incident Analysis template — derived from "Why We Still Suck at Resilience"
- * by Adrian Hornsby. 14 sections, ~110 prompts.
+ * by Adrian Hornsby. 14 sections, 99 prompts.
  *
  * Learning-focused incident analysis: not a postmortem template filler,
  * but a conversation guide that helps teams extract deep understanding.
