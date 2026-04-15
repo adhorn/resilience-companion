@@ -404,6 +404,22 @@ export const experimentSuggestions = sqliteTable("experiment_suggestions", {
   updatedAt: text("updated_at").notNull(),
 });
 
+// --- API Tokens (PATs for programmatic clients) ---
+
+export const apiTokens = sqliteTable("api_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), // human label, e.g. "Slack bot", "MCP server"
+  tokenHash: text("token_hash").notNull(), // bcrypt hash of the token
+  tokenPrefix: text("token_prefix").notNull(), // first 8 chars, for identification in UI
+  expiresAt: text("expires_at"), // nullable = no expiry
+  lastUsedAt: text("last_used_at"),
+  revokedAt: text("revoked_at"),
+  createdAt: text("created_at").notNull(),
+});
+
 // --- ORR Versions (snapshots) ---
 
 export const orrVersions = sqliteTable("orr_versions", {

@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { path: "/insights", label: "Insights" },
   { path: "/flags", label: "Flags" },
   { path: "/learn", label: "Learn" },
+  { path: "/settings", label: "Settings" },
 ];
 
 export function Layout() {

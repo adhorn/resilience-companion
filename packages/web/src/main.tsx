@@ -12,6 +12,7 @@ import { IncidentList } from "./pages/IncidentList";
 import { NewIncident } from "./pages/NewIncident";
 import { IncidentView } from "./pages/IncidentView";
 import { Insights } from "./pages/Insights";
+import { Settings } from "./pages/Settings";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -27,6 +28,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/insights" element={<Insights />} />
           <Route path="/flags" element={<Flags />} />
           <Route path="/learn" element={<Learn />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
         {/* Full-screen views — no app sidebar */}
         <Route path="/orrs/:id" element={<ORRView />} />

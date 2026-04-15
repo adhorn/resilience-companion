@@ -224,6 +224,18 @@ export const api = {
       ),
   },
 
+  // API Tokens (PATs)
+  tokens: {
+    list: () => request<any[]>("/tokens"),
+    create: (data: { name: string; expiryDays?: number }) =>
+      request<any>("/tokens", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    revoke: (id: string) =>
+      request<{ ok: boolean }>(`/tokens/${id}`, { method: "DELETE" }),
+  },
+
   // Insights (learning signals)
   insights: {
     get: () =>
