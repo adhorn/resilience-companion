@@ -2,7 +2,7 @@ import type { TemplateSection } from "../types.js";
 
 /**
  * Default ORR template — extracted verbatim from "Why We Still Suck at Resilience"
- * by Adrian Hornsby. 11 sections, 107 open-ended prompts.
+ * by Adrian Hornsby. 11 sections, 121 open-ended prompts.
  *
  * This is not THE template. It is A template. Teams should make it theirs.
  */
