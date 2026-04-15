@@ -42,6 +42,18 @@ export function migrate(db: Db) {
     updated_at TEXT NOT NULL
   )`);
 
+  db.run(sql`CREATE TABLE IF NOT EXISTS api_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    token_prefix TEXT NOT NULL,
+    expires_at TEXT,
+    last_used_at TEXT,
+    revoked_at TEXT,
+    created_at TEXT NOT NULL
+  )`);
+
   db.run(sql`CREATE TABLE IF NOT EXISTS orrs (
     id TEXT PRIMARY KEY,
     service_name TEXT NOT NULL,
@@ -326,6 +338,7 @@ export function migrate(db: Db) {
   )`);
 
   // --- Indexes ---
+  db.run(sql`CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_dependencies_orr ON dependencies(orr_id)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_incidents_team ON incidents(team_id)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_incident_sections_incident ON incident_sections(incident_id)`);

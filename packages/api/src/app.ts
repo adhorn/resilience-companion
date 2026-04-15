@@ -22,6 +22,7 @@ import { serviceRoutes } from "./routes/services.js";
 import { experimentRoutes } from "./routes/experiments.js";
 import { insightsRoutes } from "./routes/insights.js";
 import { orrLearningRoutes, incidentLearningRoutes } from "./routes/learning.js";
+import { tokenRoutes } from "./routes/tokens.js";
 
 export const app = new Hono();
 
@@ -71,6 +72,7 @@ app.route("/api/v1/experiments", experimentRoutes);
 app.route("/api/v1/insights", insightsRoutes);
 app.route("/api/v1/orrs/:orrId/learning", orrLearningRoutes);
 app.route("/api/v1/incidents/:incidentId/learning", incidentLearningRoutes);
+app.route("/api/v1/tokens", tokenRoutes);
 
 // Serve frontend — either built static files or proxy to Vite dev server
 const __dirname = dirname(fileURLToPath(import.meta.url));
