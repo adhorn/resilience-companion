@@ -37,6 +37,16 @@ let _adapter: LLMAdapter | null = null;
  * All real adapters are wrapped in RetryAdapter (exponential backoff + optional
  * fallback model via LLM_FALLBACK_MODEL).
  */
+/** Override the singleton adapter (for evals and tests). */
+export function setLLM(adapter: LLMAdapter): void {
+  _adapter = adapter;
+}
+
+/** Reset the singleton so it will be re-initialized from env vars on next getLLM() call. */
+export function resetLLM(): void {
+  _adapter = null;
+}
+
 export function getLLM(): LLMAdapter {
   if (!_adapter) {
     const provider = process.env.LLM_PROVIDER;
