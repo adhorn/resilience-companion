@@ -5,14 +5,17 @@
   "workspaces": [
     "packages/shared",
     "packages/api",
-    "packages/web"
+    "packages/web",
+    "packages/eval"
   ],
   "scripts": {
     "dev": "concurrently --kill-others --kill-signal SIGTERM -n api,web -c blue,green \"cd packages/api && npx tsx watch --env-file=../../.env src/index.ts\" \"cd packages/web && npx vite\"",
     "build": "npm run build -w @orr/shared && npm run build -w @orr/api && npm run build -w @orr/web",
     "test": "vitest run",
     "test:mutate": "stryker run",
-    "lint": "tsc --noEmit -p packages/api/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json"
+    "lint": "tsc --noEmit -p packages/api/tsconfig.json && tsc --noEmit -p packages/web/tsconfig.json && tsc --noEmit -p packages/eval/tsconfig.json",
+    "eval": "tsx --env-file=.env packages/eval/src/run.ts",
+    "eval:verbose": "tsx --env-file=.env packages/eval/src/run.ts --verbose"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^9.6.0",
