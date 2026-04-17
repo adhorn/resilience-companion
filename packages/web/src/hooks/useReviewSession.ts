@@ -191,6 +191,9 @@ export function useReviewSession({
         }
         if (event.type === "section_updated") {
           if (event.sectionId) setActiveSection(event.sectionId);
+          // Cancel any pending auto-save — server data wins over stale client edits
+          if (saveTimeoutRef.current) { clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = null; }
+          pendingEditsRef.current = {};
           debouncedReload();
         }
         if (event.type === "data_updated") debouncedReload();
@@ -223,6 +226,9 @@ export function useReviewSession({
       });
     }
 
+    // Cancel any pending auto-save before final reload — server data is authoritative
+    if (saveTimeoutRef.current) { clearTimeout(saveTimeoutRef.current); saveTimeoutRef.current = null; }
+    pendingEditsRef.current = {};
     await reloadData();
     setEditingResponses({});
     setStreaming(false);
