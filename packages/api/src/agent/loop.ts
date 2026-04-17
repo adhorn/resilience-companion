@@ -142,6 +142,7 @@ Adjust your approach:
   yield { type: "message_start", messageId };
 
   let totalUsage = 0;
+  let previousIterationHadContent = false;
   const cumulativeTokens = () => sessionTokenUsage + totalUsage;
 
   for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration++) {
@@ -149,6 +150,13 @@ Adjust your approach:
     if (iteration > 0 && cumulativeTokens() >= MAX_SESSION_TOKENS) {
       log("info", "Session hit token budget mid-turn", { sessionId, tokens: cumulativeTokens(), max: MAX_SESSION_TOKENS });
       break; // falls through to the graceful wrap-up below
+    }
+
+    // If a previous iteration produced text content AND tool calls,
+    // the LLM will see that text in history and may repeat it.
+    // Tell the client to clear accumulated content — this iteration's text replaces it.
+    if (iteration > 0 && previousIterationHadContent) {
+      yield { type: "content_reset" } as SSEEvent;
     }
 
     let fullContent = "";
@@ -251,6 +259,9 @@ Adjust your approach:
       yield { type: "message_end", tokenUsage: totalUsage };
       return;
     }
+
+    // Track whether this iteration had text (so next iteration can reset client)
+    previousIterationHadContent = fullContent.length > 0;
 
     // Execute tool calls and build response messages
     const assistantMessage: LLMMessage = {
