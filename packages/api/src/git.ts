@@ -74,7 +74,11 @@ function authUrl(gitUrl: string, token?: string): string {
  * Clone a repo (or pull if already cloned). Returns the local path.
  * Shallow clone (depth 1) — we only need current state, not history.
  */
-export function ensureRepo(gitUrl: string, token?: string): { localPath: string } | { error: string } {
+export type RepoResult =
+  | { localPath: string; pullWarning?: string }
+  | { error: string; authFailed?: boolean };
+
+export function ensureRepo(gitUrl: string, token?: string): RepoResult {
   const validation = validateGitUrl(gitUrl);
   if (!validation.valid) return { error: validation.error! };
 
@@ -85,16 +89,22 @@ export function ensureRepo(gitUrl: string, token?: string): { localPath: string 
   const cloneUrl = authUrl(gitUrl, token);
 
   if (existsSync(resolve(localPath, ".git"))) {
-    // Already cloned — pull latest (best effort)
+    // Already cloned — pull latest
     try {
       execFileSync("git", ["pull", "--ff-only"], {
         cwd: localPath,
         timeout: 30_000,
         stdio: "pipe",
-        env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, // never prompt for credentials
+        env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
       });
-    } catch {
-      console.warn(`git pull failed for ${gitUrl}, using existing clone`);
+    } catch (err: any) {
+      const msg = err.stderr?.toString() || err.message || "";
+      const safeMsg = token ? msg.replace(new RegExp(token, "g"), "***") : msg;
+      if (safeMsg.includes("Authentication failed") || safeMsg.includes("could not read Username")) {
+        return { localPath, pullWarning: "Could not update repository — the access token may have expired. Code exploration will use a stale copy. Update the token in ORR settings." };
+      }
+      // Non-auth failures (network, merge conflict) — use stale clone with warning
+      return { localPath, pullWarning: "Could not update repository. Code exploration will use a possibly stale copy." };
     }
     return { localPath };
   }
@@ -114,7 +124,7 @@ export function ensureRepo(gitUrl: string, token?: string): { localPath: string 
     console.error(`git clone failed for ${gitUrl}:`, safeMsg);
 
     if (safeMsg.includes("Authentication failed") || safeMsg.includes("could not read Username")) {
-      return { error: "Authentication failed. Check that the token is valid and has repo access." };
+      return { error: "Authentication failed — the token may have expired or been revoked. Update the repository token in ORR settings.", authFailed: true };
     }
     if (safeMsg.includes("not found") || safeMsg.includes("does not exist")) {
       return { error: "Repository not found. Check the URL and token permissions." };
