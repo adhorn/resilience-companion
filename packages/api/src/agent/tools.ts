@@ -265,7 +265,7 @@ export function executeTool(
         return JSON.stringify({ matches, truncated: output.trim().split("\n").length > 20, ...(result.warning ? { warning: result.warning } : {}) });
       } catch (err: any) {
         if (err.status === 1) return JSON.stringify({ matches: [], truncated: false, ...(result.warning ? { warning: result.warning } : {}) });
-        return JSON.stringify({ error: `Search failed: ${err.message?.slice(0, 200)}` });
+        return JSON.stringify({ error: "Code search failed. The repository may be in an unexpected state." });
       }
     }
 
@@ -296,7 +296,7 @@ export function executeTool(
           ...(result.warning ? { warning: result.warning } : {}),
         });
       } catch (err: any) {
-        return JSON.stringify({ error: `Could not read file: ${err.message?.slice(0, 200)}` });
+        return JSON.stringify({ error: "Could not read the file. It may be binary or inaccessible." });
       }
     }
 
@@ -318,7 +318,7 @@ export function executeTool(
 
         return JSON.stringify({ path: dirPath, entries: items, truncated: entries.length > 100, ...(result.warning ? { warning: result.warning } : {}) });
       } catch (err: any) {
-        return JSON.stringify({ error: `Could not list directory: ${err.message?.slice(0, 200)}` });
+        return JSON.stringify({ error: "Could not list the directory. It may not exist or be inaccessible." });
       }
     }
 
