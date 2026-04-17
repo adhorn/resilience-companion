@@ -11,3 +11,9 @@ logs/
 reports/
 .stryker-tmp/
 stryker-incremental.json
+
+# Internal plans — not for public repo
+docs/plans/
+
+# Build artifacts
+*.tsbuildinfo
