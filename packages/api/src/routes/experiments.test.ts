@@ -21,7 +21,7 @@ describe("experiment routes", () => {
     db.insert(schema.experimentSuggestions).values([
       {
         id: "exp-1", serviceId: "svc-1", sourcePracticeType: "orr",
-        sourcePracticeId: ids.orrId, type: "chaos", title: "Kill DB primary",
+        sourcePracticeId: ids.orrId, type: "chaos_experiment", title: "Kill DB primary",
         hypothesis: "Service fails over to replica within 30s",
         rationale: "DB is single point of failure identified in ORR",
         priority: "high", priorityReasoning: "Critical path",
@@ -29,7 +29,7 @@ describe("experiment routes", () => {
       },
       {
         id: "exp-2", serviceId: "svc-1", sourcePracticeType: "orr",
-        sourcePracticeId: ids.orrId, type: "load", title: "Sustained load at 2x peak",
+        sourcePracticeId: ids.orrId, type: "load_test", title: "Sustained load at 2x peak",
         hypothesis: "Service handles 2x without degradation",
         rationale: "No load testing documented",
         priority: "medium", priorityReasoning: "Nice to have",
