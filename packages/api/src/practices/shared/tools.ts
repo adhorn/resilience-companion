@@ -370,7 +370,7 @@ export function executeSharedTool(
           conversationSnippet: (args.content as string).slice(0, 200),
           updatedAt: now,
         })
-        .where(eq(ref.idCol, args.section_id as string))
+        .where(and(eq(ref.idCol, args.section_id as string), eq(ref.parentIdCol, practiceId)))
         .run();
 
       db.update(ref.parentTable)
@@ -485,7 +485,7 @@ export function executeSharedTool(
 
       db.update(ref.table)
         .set({ promptResponses: existing, updatedAt: now })
-        .where(eq(ref.idCol, args.section_id as string))
+        .where(and(eq(ref.idCol, args.section_id as string), eq(ref.parentIdCol, practiceId)))
         .run();
 
       db.update(ref.parentTable)
