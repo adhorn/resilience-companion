@@ -9,6 +9,7 @@ import type { LLMToolDef } from "../llm/index.js";
 import { existsSync, readFileSync, readdirSync, statSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { ensureRepo, decryptToken } from "../git.js";
 import {
   createSharedToolDefs,
   CROSS_PRACTICE_TOOL_DEFS,
@@ -110,18 +111,43 @@ export const AGENT_TOOLS: LLMToolDef[] = [
 
 /**
  * Resolve and validate a file path within the ORR's repository.
+ * If the local clone is missing, attempts to re-clone using the stored URL and token.
  */
-function resolveRepoPath(orrId: string, relativePath: string): { absPath: string; repoRoot: string } | { error: string } {
+function resolveRepoPath(orrId: string, relativePath: string): { absPath: string; repoRoot: string; warning?: string } | { error: string } {
   const db = getDb();
   const orr = db.select().from(schema.orrs).where(eq(schema.orrs.id, orrId)).get();
 
-  if (!orr?.repositoryLocalPath) {
-    return { error: "No repository path configured for this ORR. Ask the team to set one." };
+  if (!orr?.repositoryLocalPath && !orr?.repositoryPath) {
+    return { error: "No repository configured for this ORR. Add a repository URL in the ORR settings to enable code exploration." };
   }
 
-  const logicalRoot = resolve(orr.repositoryLocalPath);
-  if (!existsSync(logicalRoot) || !statSync(logicalRoot).isDirectory()) {
-    return { error: `Repository path does not exist or is not a directory: ${logicalRoot}` };
+  let logicalRoot = orr.repositoryLocalPath ? resolve(orr.repositoryLocalPath) : "";
+  let warning: string | undefined;
+
+  // If local clone is missing, attempt to re-clone
+  if (!logicalRoot || !existsSync(logicalRoot) || !existsSync(resolve(logicalRoot, ".git"))) {
+    if (!orr.repositoryPath) {
+      return { error: "The local repository clone is missing and no repository URL is stored. Re-add the repository in ORR settings." };
+    }
+
+    // Decrypt stored token
+    const token = orr.repositoryToken ? decryptToken(orr.repositoryToken) ?? undefined : undefined;
+    const result = ensureRepo(orr.repositoryPath, token);
+
+    if ("error" in result) {
+      return { error: result.error };
+    }
+
+    // Update the stored local path
+    logicalRoot = resolve(result.localPath);
+    db.update(schema.orrs)
+      .set({ repositoryLocalPath: result.localPath })
+      .where(eq(schema.orrs.id, orrId))
+      .run();
+
+    if (result.pullWarning) {
+      warning = result.pullWarning;
+    }
   }
 
   let realRoot: string;
@@ -134,14 +160,14 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
 
   let realPath: string;
   try { realPath = realpathSync(logicalPath); } catch {
-    return { absPath: logicalPath, repoRoot: logicalRoot };
+    return { absPath: logicalPath, repoRoot: logicalRoot, warning };
   }
 
   if (!realPath.startsWith(realRoot + "/") && realPath !== realRoot) {
     return { error: "Path escapes the repository root via symlink. Access denied." };
   }
 
-  return { absPath: realPath, repoRoot: realRoot };
+  return { absPath: realPath, repoRoot: realRoot, warning };
 }
 
 /**
@@ -236,9 +262,9 @@ export function executeTool(
           };
         });
 
-        return JSON.stringify({ matches, truncated: output.trim().split("\n").length > 20 });
+        return JSON.stringify({ matches, truncated: output.trim().split("\n").length > 20, ...(result.warning ? { warning: result.warning } : {}) });
       } catch (err: any) {
-        if (err.status === 1) return JSON.stringify({ matches: [], truncated: false });
+        if (err.status === 1) return JSON.stringify({ matches: [], truncated: false, ...(result.warning ? { warning: result.warning } : {}) });
         return JSON.stringify({ error: `Search failed: ${err.message?.slice(0, 200)}` });
       }
     }
@@ -267,6 +293,7 @@ export function executeTool(
           endLine: start + slice.length - 1,
           totalLines: lines.length,
           content: numbered,
+          ...(result.warning ? { warning: result.warning } : {}),
         });
       } catch (err: any) {
         return JSON.stringify({ error: `Could not read file: ${err.message?.slice(0, 200)}` });
@@ -289,7 +316,7 @@ export function executeTool(
           .slice(0, 100)
           .map((e) => ({ name: e.name, type: e.isDirectory() ? "directory" : "file" }));
 
-        return JSON.stringify({ path: dirPath, entries: items, truncated: entries.length > 100 });
+        return JSON.stringify({ path: dirPath, entries: items, truncated: entries.length > 100, ...(result.warning ? { warning: result.warning } : {}) });
       } catch (err: any) {
         return JSON.stringify({ error: `Could not list directory: ${err.message?.slice(0, 200)}` });
       }
