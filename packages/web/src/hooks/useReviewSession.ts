@@ -134,6 +134,16 @@ export function useReviewSession({
     try {
       const url = buildMessageUrl(practiceId, sessionId);
       await sendSSEMessage(url, userMessage, activeSection, (event) => {
+        if (event.type === "content_reset") {
+          // New iteration after tool execution — LLM may repeat previous text.
+          // Clear accumulated content so only the latest iteration's text is shown.
+          assistantContent = "";
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: "assistant", content: "" };
+            return updated;
+          });
+        }
         if (event.type === "content_delta") {
           setStreamStatus(null);
           setThinkingStatus(null);

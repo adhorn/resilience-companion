@@ -219,6 +219,7 @@ export interface SendMessageInput {
 export type SSEEvent =
   | { type: "message_start"; messageId: string }
   | { type: "content_delta"; content: string }
+  | { type: "content_reset" }
   | { type: "tool_call"; tool: string; args: Record<string, unknown> }
   | { type: "tool_result"; tool: string; result: Record<string, unknown> }
   | { type: "section_updated"; sectionId: string; field: string }
