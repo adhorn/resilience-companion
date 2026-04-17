@@ -12,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import { ensureRepo, decryptToken } from "../git.js";
 import {
   createSharedToolDefs,
+  createConverseToolDefs,
   CROSS_PRACTICE_TOOL_DEFS,
   executeSharedTool,
 } from "../practices/shared/tools.js";
@@ -103,6 +104,14 @@ const ORR_SPECIFIC_TOOLS: LLMToolDef[] = [
   },
 ];
 
+/** Read-only tools for ORR CONVERSE phase: shared read + code exploration. */
+export const ORR_CONVERSE_TOOLS: LLMToolDef[] = [
+  ...createConverseToolDefs("ORR"),
+  // Code exploration tools (read-only, require repositoryPath)
+  ...ORR_SPECIFIC_TOOLS.filter((t) => ["search_code", "read_file", "list_directory"].includes(t.function.name)),
+];
+
+/** All ORR tools (backwards compat for eval harness). */
 export const AGENT_TOOLS: LLMToolDef[] = [
   ...createSharedToolDefs("ORR"),
   ...CROSS_PRACTICE_TOOL_DEFS,

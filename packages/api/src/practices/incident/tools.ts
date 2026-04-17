@@ -8,6 +8,7 @@ import { getDb, schema } from "../../db/index.js";
 import type { LLMToolDef } from "../../llm/index.js";
 import {
   createSharedToolDefs,
+  createConverseToolDefs,
   CROSS_PRACTICE_TOOL_DEFS,
   executeSharedTool,
 } from "../shared/tools.js";
@@ -67,6 +68,12 @@ const INCIDENT_SPECIFIC_TOOLS: LLMToolDef[] = [
   },
 ];
 
+/** Read-only tools for incident CONVERSE phase: shared read only (no code exploration). */
+export const INCIDENT_CONVERSE_TOOLS: LLMToolDef[] = [
+  ...createConverseToolDefs("incident analysis"),
+];
+
+/** All incident tools (backwards compat for eval harness). */
 export const INCIDENT_AGENT_TOOLS: LLMToolDef[] = [
   ...createSharedToolDefs("incident analysis"),
   ...CROSS_PRACTICE_TOOL_DEFS,

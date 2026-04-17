@@ -108,7 +108,7 @@ const ORR_EXPERIMENT_WHEN = `
 `;
 
 const ORR_DEPENDENCY_GUIDANCE = `
-**Map dependencies as you go.** Whenever the team mentions a service, database, API, queue, or other system their service depends on (or that depends on them), call record_dependency. Do this naturally as dependencies surface in conversation — don't ask the team to enumerate them all at once. Over the course of the review, this builds a dependency map that reveals blast radius, single points of failure, and missing fallbacks.
+**Note dependencies as they surface.** Whenever the team mentions a service, database, API, queue, or other system their service depends on (or that depends on them), acknowledge it in conversation. Dependencies are recorded automatically. Don't ask the team to enumerate them all at once — let them surface naturally. Over the course of the review, this builds a dependency map that reveals blast radius, single points of failure, and missing fallbacks.
 `;
 
 export function buildSystemPrompt(ctx: ORRContext): string {

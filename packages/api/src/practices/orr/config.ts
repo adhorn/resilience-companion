@@ -7,7 +7,7 @@ import type { PracticeConfig, PracticeContext } from "../../agent/practice.js";
 import type { SteeringTier } from "../../agent/steering.js";
 import { buildORRContext } from "../../agent/context.js";
 import { buildSystemPrompt } from "../../agent/system-prompt.js";
-import { AGENT_TOOLS, executeTool } from "../../agent/tools.js";
+import { AGENT_TOOLS, ORR_CONVERSE_TOOLS, executeTool } from "../../agent/tools.js";
 import { getHooksForTier } from "../../agent/hooks/index.js";
 import { getDb, schema } from "../../db/index.js";
 import { eq } from "drizzle-orm";
@@ -31,6 +31,7 @@ export const orrPracticeConfig: PracticeConfig = {
     return buildSystemPrompt(orrContext as any);
   },
 
+  converseTools: ORR_CONVERSE_TOOLS,
   tools: AGENT_TOOLS,
 
   executeTool(name: string, args: Record<string, unknown>, practiceId: string, sessionId: string): string {

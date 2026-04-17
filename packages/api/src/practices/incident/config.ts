@@ -6,7 +6,7 @@ import type { PracticeConfig, PracticeContext } from "../../agent/practice.js";
 import type { SteeringTier } from "../../agent/steering.js";
 import { buildIncidentContext } from "./context.js";
 import { buildIncidentSystemPrompt } from "./system-prompt.js";
-import { INCIDENT_AGENT_TOOLS, executeIncidentTool } from "./tools.js";
+import { INCIDENT_AGENT_TOOLS, INCIDENT_CONVERSE_TOOLS, executeIncidentTool } from "./tools.js";
 import { getIncidentHooksForTier } from "./hooks.js";
 import { getDb, schema } from "../../db/index.js";
 import { eq } from "drizzle-orm";
@@ -29,6 +29,7 @@ export const incidentPracticeConfig: PracticeConfig = {
     return buildIncidentSystemPrompt(incidentContext as any);
   },
 
+  converseTools: INCIDENT_CONVERSE_TOOLS,
   tools: INCIDENT_AGENT_TOOLS,
 
   executeTool(name: string, args: Record<string, unknown>, practiceId: string, sessionId: string): string {
