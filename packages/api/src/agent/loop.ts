@@ -35,7 +35,9 @@ function categorizeError(msg: string): string {
   if (lower.includes("500") || lower.includes("502") || lower.includes("503") || lower.includes("internal server error") || lower.includes("api_error")) {
     return "The AI provider had a server error. This is on their end — try again shortly.";
   }
-  return `AI error: ${msg}`;
+  // Never leak raw error details to the user
+  log("error", "Uncategorized LLM error", { rawError: msg });
+  return "Something went wrong with the AI provider. Try sending your message again. If the problem persists, check the server logs.";
 }
 
 /** Finalize trace — emits summary log with totals for the agent turn. */
@@ -301,12 +303,13 @@ Adjust your approach:
         } catch (err) {
           const errMsg = (err as Error).message || "Unknown tool error";
           log("error", "Tool execution failed", { tool: tc.name, error: errMsg, traceId: trace.id });
-          result = JSON.stringify({ error: `Tool failed: ${errMsg}` });
-          parsedResult = { error: `Tool failed: ${errMsg}` };
+          const safeMsg = `Tool "${tc.name}" encountered an error. The operation could not be completed.`;
+          result = JSON.stringify({ error: safeMsg });
+          parsedResult = { error: safeMsg };
           trace.endToolCall(toolSpanId, result, errMsg);
           yield {
             type: "error",
-            message: `Tool "${tc.name}" failed: ${errMsg}`,
+            message: safeMsg,
           } as SSEEvent;
         }
       }

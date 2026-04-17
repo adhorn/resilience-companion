@@ -640,10 +640,11 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
           }
         }
       } catch (err) {
+        log("error", "Agent stream error", { error: (err as Error).message, practiceId, sessionId: activeSessionId });
         try {
           await stream.writeSSE({
             event: "error",
-            data: JSON.stringify({ type: "error", message: (err as Error).message }),
+            data: JSON.stringify({ type: "error", message: "Something went wrong processing your message. Try sending it again." }),
           });
         } catch {
           // Client may have disconnected
