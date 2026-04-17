@@ -107,7 +107,7 @@ describe("learning routes", () => {
         id: nanoid(),
         sourcePracticeType: "orr",
         sourcePracticeId: orrIds.orrId,
-        targetPracticeType: "incident",
+        targetPracticeType: "incident_analysis",
         suggestion: "Review Q3 incident for this service",
         rationale: "Similar failure mode identified",
         status: "suggested",
@@ -128,7 +128,7 @@ describe("learning routes", () => {
         practiceId: orrIds.orrId,
         title: "Add circuit breakers to payment path",
         priority: "high",
-        type: "resilience",
+        type: "technical",
         status: "open",
         createdAt: now,
       }).run();

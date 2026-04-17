@@ -49,7 +49,7 @@ describe("insights routes", () => {
         practiceId: ids.orrId,
         title: "Write rollback runbook",
         priority: "high",
-        type: "documentation",
+        type: "process",
         status: "open",
         createdAt: now,
       }).run();
@@ -68,7 +68,7 @@ describe("insights routes", () => {
         practiceId: ids.orrId,
         title: "Done item",
         priority: "low",
-        type: "task",
+        type: "technical",
         status: "done",
         createdAt: now,
       }).run();
@@ -84,7 +84,7 @@ describe("insights routes", () => {
         id: nanoid(),
         sourcePracticeType: "orr",
         sourcePracticeId: ids.orrId,
-        targetPracticeType: "incident",
+        targetPracticeType: "incident_analysis",
         suggestion: "Review recent incidents for this service",
         rationale: "Service has no incident analyses linked",
         status: "suggested",

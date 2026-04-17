@@ -214,7 +214,7 @@ describe("session lifecycle routes", () => {
       expect(versions).toHaveLength(1);
       expect(versions[0].reason).toContain("Session ended");
 
-      const snapshot = JSON.parse(versions[0].snapshot);
+      const snapshot = JSON.parse(versions[0].snapshot as string);
       expect(snapshot.orr.id).toBe(ids.orrId);
       expect(snapshot.sections).toHaveLength(3);
     });

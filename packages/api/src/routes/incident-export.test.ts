@@ -52,7 +52,7 @@ describe("incident export routes", () => {
       db.insert(schema.contributingFactors).values({
         id: nanoid(),
         incidentId: ids.incidentId,
-        category: "Architecture",
+        category: "technical",
         description: "No connection pooling limits",
         context: "Service uses unbounded connection pool, common across 3 services",
         isSystemic: true,
@@ -75,7 +75,7 @@ describe("incident export routes", () => {
         title: "Add connection pool limits",
         owner: "Platform Team",
         priority: "high",
-        type: "fix",
+        type: "technical",
         status: "open",
         successCriteria: "Pool size capped at 50",
         createdAt: now,

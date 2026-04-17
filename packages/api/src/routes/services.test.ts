@@ -148,7 +148,7 @@ describe("service routes", () => {
         serviceId: "svc-1",
         sourcePracticeType: "orr",
         sourcePracticeId: ids.orrId,
-        type: "chaos",
+        type: "chaos_experiment",
         title: "Kill payment DB",
         hypothesis: "Service degrades gracefully",
         rationale: "DB is single point of failure",
@@ -180,7 +180,7 @@ describe("service routes", () => {
         .run();
       db.insert(schema.experimentSuggestions).values({
         id: "exp-1", serviceId: "svc-1", sourcePracticeType: "orr",
-        sourcePracticeId: ids.orrId, type: "chaos", title: "Kill DB",
+        sourcePracticeId: ids.orrId, type: "chaos_experiment", title: "Kill DB",
         hypothesis: "Graceful", rationale: "SPOF", priority: "high",
         priorityReasoning: "Critical", status: "suggested",
         createdAt: now, updatedAt: now,
