@@ -197,8 +197,12 @@ export function useReviewSession({
           debouncedReload();
         }
         if (event.type === "data_updated") debouncedReload();
-        if (event.type === "message_end" && event.tokenUsage) {
-          setSessionTokens((prev) => prev + event.tokenUsage);
+        if (event.type === "message_end") {
+          if (event.tokenUsage) setSessionTokens((prev) => prev + event.tokenUsage);
+          // Unblock input immediately — PERSIST runs in the background after this
+          setStreamStatus(null);
+          setThinkingStatus(null);
+          setStreaming(false);
         }
         if (event.type === "session_renewed") {
           setSessionId(event.newSessionId);

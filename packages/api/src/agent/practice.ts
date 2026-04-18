@@ -31,7 +31,10 @@ export interface PracticeConfig {
   /** Build the system prompt from practice context. */
   buildSystemPrompt(context: PracticeContext): string;
 
-  /** LLM tool definitions available to the agent. */
+  /** Read-only tools for the CONVERSE phase. */
+  converseTools: LLMToolDef[];
+
+  /** All LLM tool definitions (backwards compat for eval harness). */
   tools: LLMToolDef[];
 
   /** Execute a tool call. Returns JSON string result. */

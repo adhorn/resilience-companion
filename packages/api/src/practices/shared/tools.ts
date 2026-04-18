@@ -15,7 +15,61 @@ import { safeJsonParse } from "../../validation.js";
 
 // --- Tool definitions ---
 // These are the same for every practice; only descriptions vary slightly.
+// Read-only tools go in converseToolDefs (CONVERSE phase).
+// Write tools are used by the PERSIST phase via structured JSON, not tool calls.
 
+/** Read-only tools for the CONVERSE phase. */
+export function createConverseToolDefs(practiceLabel: string): LLMToolDef[] {
+  return [
+    {
+      type: "function",
+      function: {
+        name: "read_section",
+        description: `Read the full content and prompts of a specific ${practiceLabel} section`,
+        parameters: {
+          type: "object",
+          properties: {
+            section_id: { type: "string", description: "The section ID to read" },
+          },
+          required: ["section_id"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "query_teaching_moments",
+        description:
+          "Search the teaching moment library for relevant industry lessons. Use when the conversation touches on a topic where there might be relevant patterns or failure modes to share.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search query" },
+            section_tag: { type: "string", description: "Optional: filter by section title" },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "query_case_studies",
+        description:
+          "Search the case study library for relevant real-world incidents to reference in conversation.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search query" },
+          },
+          required: ["query"],
+        },
+      },
+    },
+  ];
+}
+
+/** All tools (read + write) — used for backwards compatibility with eval harness. */
 export function createSharedToolDefs(practiceLabel: string): LLMToolDef[] {
   return [
     {

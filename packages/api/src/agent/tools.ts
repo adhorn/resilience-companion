@@ -12,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import { ensureRepo, decryptToken } from "../git.js";
 import {
   createSharedToolDefs,
+  createConverseToolDefs,
   CROSS_PRACTICE_TOOL_DEFS,
   executeSharedTool,
 } from "../practices/shared/tools.js";
@@ -103,15 +104,28 @@ const ORR_SPECIFIC_TOOLS: LLMToolDef[] = [
   },
 ];
 
+/** Read-only tools for ORR CONVERSE phase: shared read + code exploration. */
+export const ORR_CONVERSE_TOOLS: LLMToolDef[] = [
+  ...createConverseToolDefs("ORR"),
+  // Code exploration tools (read-only, require repositoryPath)
+  ...ORR_SPECIFIC_TOOLS.filter((t) => ["search_code", "read_file", "list_directory"].includes(t.function.name)),
+];
+
+/** All ORR tools (backwards compat for eval harness). */
 export const AGENT_TOOLS: LLMToolDef[] = [
   ...createSharedToolDefs("ORR"),
   ...CROSS_PRACTICE_TOOL_DEFS,
   ...ORR_SPECIFIC_TOOLS,
 ];
 
+// Track which repos have been pulled this process lifetime, keyed by local path.
+// Ensures we pull once per session (first code access), not on every tool call.
+const pulledThisSession = new Set<string>();
+
 /**
  * Resolve and validate a file path within the ORR's repository.
- * If the local clone is missing, attempts to re-clone using the stored URL and token.
+ * If the local clone is missing, attempts to re-clone.
+ * On first access per session, pulls latest from remote.
  */
 function resolveRepoPath(orrId: string, relativePath: string): { absPath: string; repoRoot: string; warning?: string } | { error: string } {
   const db = getDb();
@@ -130,7 +144,6 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
       return { error: "The local repository clone is missing and no repository URL is stored. Re-add the repository in ORR settings." };
     }
 
-    // Decrypt stored token
     const token = orr.repositoryToken ? decryptToken(orr.repositoryToken) ?? undefined : undefined;
     const result = ensureRepo(orr.repositoryPath, token);
 
@@ -138,7 +151,6 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
       return { error: result.error };
     }
 
-    // Update the stored local path
     logicalRoot = resolve(result.localPath);
     db.update(schema.orrs)
       .set({ repositoryLocalPath: result.localPath })
@@ -148,6 +160,18 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
     if (result.pullWarning) {
       warning = result.pullWarning;
     }
+
+    pulledThisSession.add(logicalRoot);
+  } else if (!pulledThisSession.has(logicalRoot) && orr.repositoryPath) {
+    // Clone exists but hasn't been pulled this session — pull latest
+    const token = orr.repositoryToken ? decryptToken(orr.repositoryToken) ?? undefined : undefined;
+    const result = ensureRepo(orr.repositoryPath, token);
+
+    if (!("error" in result) && result.pullWarning) {
+      warning = result.pullWarning;
+    }
+
+    pulledThisSession.add(logicalRoot);
   }
 
   let realRoot: string;
