@@ -118,9 +118,14 @@ export const AGENT_TOOLS: LLMToolDef[] = [
   ...ORR_SPECIFIC_TOOLS,
 ];
 
+// Track which repos have been pulled this process lifetime, keyed by local path.
+// Ensures we pull once per session (first code access), not on every tool call.
+const pulledThisSession = new Set<string>();
+
 /**
  * Resolve and validate a file path within the ORR's repository.
- * If the local clone is missing, attempts to re-clone using the stored URL and token.
+ * If the local clone is missing, attempts to re-clone.
+ * On first access per session, pulls latest from remote.
  */
 function resolveRepoPath(orrId: string, relativePath: string): { absPath: string; repoRoot: string; warning?: string } | { error: string } {
   const db = getDb();
@@ -139,7 +144,6 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
       return { error: "The local repository clone is missing and no repository URL is stored. Re-add the repository in ORR settings." };
     }
 
-    // Decrypt stored token
     const token = orr.repositoryToken ? decryptToken(orr.repositoryToken) ?? undefined : undefined;
     const result = ensureRepo(orr.repositoryPath, token);
 
@@ -147,7 +151,6 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
       return { error: result.error };
     }
 
-    // Update the stored local path
     logicalRoot = resolve(result.localPath);
     db.update(schema.orrs)
       .set({ repositoryLocalPath: result.localPath })
@@ -157,6 +160,18 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
     if (result.pullWarning) {
       warning = result.pullWarning;
     }
+
+    pulledThisSession.add(logicalRoot);
+  } else if (!pulledThisSession.has(logicalRoot) && orr.repositoryPath) {
+    // Clone exists but hasn't been pulled this session — pull latest
+    const token = orr.repositoryToken ? decryptToken(orr.repositoryToken) ?? undefined : undefined;
+    const result = ensureRepo(orr.repositoryPath, token);
+
+    if (!("error" in result) && result.pullWarning) {
+      warning = result.pullWarning;
+    }
+
+    pulledThisSession.add(logicalRoot);
   }
 
   let realRoot: string;
