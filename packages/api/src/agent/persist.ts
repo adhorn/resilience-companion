@@ -324,12 +324,21 @@ export function executePersist(
 
   // --- Dependencies (ORR only) ---
   if (practiceType === "orr") {
+    // Load all existing deps once for fuzzy dedup
+    const existingDeps = db.select().from(schema.dependencies)
+      .where(eq(schema.dependencies.orrId, practiceId))
+      .all();
+
     for (const dep of output.dependencies) {
-      // Dedup by name
-      const existing = db.select().from(schema.dependencies)
-        .where(and(eq(schema.dependencies.orrId, practiceId), eq(schema.dependencies.name, dep.name)))
-        .get();
-      if (existing) continue;
+      // Fuzzy dedup: normalize names, check substring match
+      const normNew = dep.name.toLowerCase().replace(/\s*\([^)]*\)/g, "").trim();
+      const isDuplicate = existingDeps.some((e) => {
+        const normExisting = e.name.toLowerCase().replace(/\s*\([^)]*\)/g, "").trim();
+        return normExisting === normNew
+          || normExisting.includes(normNew)
+          || normNew.includes(normExisting);
+      });
+      if (isDuplicate) continue;
 
       db.insert(schema.dependencies).values({
         id: nanoid(),
@@ -541,14 +550,20 @@ function executeExperimentFromPersist(
 
   if (!serviceId) return { success: false, error: "No service associated" };
 
-  // Dedup
-  const existing = db.select().from(schema.experimentSuggestions)
+  // Fuzzy dedup — check if a similar experiment already exists
+  const existingExps = db.select().from(schema.experimentSuggestions)
     .where(and(
       eq(schema.experimentSuggestions.sourcePracticeType, practiceType),
       eq(schema.experimentSuggestions.sourcePracticeId, practiceId),
-      eq(schema.experimentSuggestions.title, exp.title),
-    )).get();
-  if (existing) return { success: true }; // Already exists
+    )).all();
+  const normNewTitle = exp.title.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+  const isDuplicateExp = existingExps.some((e) => {
+    const normExisting = e.title.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+    return normExisting === normNewTitle
+      || normExisting.includes(normNewTitle)
+      || normNewTitle.includes(normExisting);
+  });
+  if (isDuplicateExp) return { success: true };
 
   db.insert(schema.experimentSuggestions).values({
     id: nanoid(),
