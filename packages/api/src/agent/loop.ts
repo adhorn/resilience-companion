@@ -315,9 +315,17 @@ Adjust your approach:
     }
   }
 
+  finalizeTrace(trace);
+  yield { type: "message_end", tokenUsage: totalUsage };
+
   // ═══════════════════════════════════════════════════════════
-  // PHASE 2: PERSIST — structured JSON → deterministic writes
+  // PHASE 2: PERSIST — runs AFTER message_end so the user isn't blocked.
+  // Structured JSON → deterministic writes. Happens in the background
+  // from the user's perspective (the SSE stream is still open but
+  // the client treats message_end as "done streaming text").
   // ═══════════════════════════════════════════════════════════
+
+  log("info", "PERSIST phase starting", { practiceId, sessionId, traceId: trace.id, messageCount: messages.length });
 
   try {
     for await (const event of runPersistPhase(
@@ -330,16 +338,11 @@ Adjust your approach:
       if (event.persistTokens) {
         totalUsage += event.persistTokens;
       }
-      // Forward SSE events (section_updated, data_updated, status)
       yield event as SSEEvent;
     }
   } catch (err) {
     log("error", "PERSIST phase error", { error: (err as Error).message, traceId: trace.id });
-    // Persist failure doesn't crash the turn — conversation already happened
   }
-
-  finalizeTrace(trace);
-  yield { type: "message_end", tokenUsage: totalUsage };
 }
 
 function finalizeTrace(trace: TraceLogger): void {

@@ -583,6 +583,7 @@ export async function* runPersistPhase(
   sessionId: string,
   activeSectionId: string | null,
 ): AsyncGenerator<SSEEvent & { persistTokens?: number }> {
+  log("info", "runPersistPhase entered", { practiceType, practiceId, sessionId, activeSectionId });
   const llm = getLLM();
   const sectionContext = buildSectionContext(practiceType, practiceId, activeSectionId);
   const systemPrompt = buildPersistPrompt(practiceType, sectionContext);
@@ -626,6 +627,12 @@ export async function* runPersistPhase(
     cleanJson = cleanJson.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
   }
 
+  log("info", "Persist phase LLM response", {
+    practiceId,
+    rawLength: jsonContent.length,
+    rawPreview: cleanJson.slice(0, 1000),
+  });
+
   // Parse and validate
   let parsed: PersistOutput;
   try {
@@ -640,6 +647,17 @@ export async function* runPersistPhase(
     });
     return;
   }
+
+  log("info", "Persist phase parsed output", {
+    practiceId,
+    questionResponses: parsed.question_responses.length,
+    sectionContent: parsed.section_content.length,
+    depthAssessments: parsed.depth_assessments.length,
+    flags: parsed.flags.length,
+    dependencies: parsed.dependencies.length,
+    discoveries: parsed.discoveries.length,
+    experiments: parsed.experiments.length,
+  });
 
   // Execute deterministic writes
   const result = executePersist(parsed, practiceType, practiceId, sessionId);
