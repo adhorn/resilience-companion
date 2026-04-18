@@ -17,7 +17,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "dependencies",
     description: "Map all dependencies from what we've discussed",
-    prompt: "Review everything we've discussed so far across all sections. Identify every service, database, API, queue, cache, or infrastructure component that was mentioned as a dependency — and call record_dependency for each one you haven't already recorded. Give me a summary of what you found.",
+    prompt: "Review everything we've discussed so far across all sections. Identify every service, database, API, queue, cache, or infrastructure component that was mentioned as a dependency. List each one with its type, criticality, and whether it has a fallback. Dependencies are recorded automatically — just describe what you find.",
   },
   {
     name: "summarize",
@@ -47,12 +47,12 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "experiments",
     description: "Suggest chaos experiments, load tests, or gamedays",
-    prompt: "Review all sections we've discussed so far. For the highest-ROI experiments, IMMEDIATELY call suggest_experiment for each one — do not just describe them in text. Each needs a type (chaos_experiment, load_test, or gameday), a clear hypothesis, rationale, and priority. Prioritize by blast radius and confidence gaps. Aim for 2-3 experiments.",
+    prompt: "Review all sections we've discussed so far. Identify the 2-3 highest-ROI experiments — chaos experiments, load tests, or gamedays. For each, describe: what type it is, a clear hypothesis ('When X happens, we expect Y'), the rationale, and priority based on blast radius and confidence gaps. Experiments are recorded automatically — just describe them clearly.",
   },
   {
     name: "learning",
     description: "Extract learning signals from all sections",
-    prompt: "Review all sections for learning signals using the section summaries already in your context — DO NOT call read_section, you already have depth rationales, flags, code-sourced answer counts, and question stats for every section. For each surprise, mental model change, WAI-WAD gap, or blind spot you find, IMMEDIATELY call record_discovery with source='learning_command' — do not just describe them in text. Batch as many record_discovery calls as possible into each response. Include the section_id when the discovery relates to a specific section, omit it when it spans sections. IMPORTANT: Always pass source='learning_command' in every record_discovery call. Aim for specificity: not 'learned about architecture' but 'discovered retry logic has no jitter, risking thundering herd at scale'. After recording all discoveries, summarize what you found.",
+    prompt: "Review all sections for learning signals using the section summaries already in your context — you already have depth rationales, flags, code-sourced answer counts, and question stats for every section. For each surprise, mental model change, WAI-WAD gap, or blind spot you find, describe it clearly with the section it relates to. Be specific: not 'learned about architecture' but 'discovered retry logic has no jitter, risking thundering herd at scale'. Discoveries are recorded automatically — just describe what you find. Summarize the overall learning quality of this review.",
   },
 ];
 

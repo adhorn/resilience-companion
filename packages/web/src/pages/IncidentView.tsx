@@ -15,17 +15,17 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "timeline",
     description: "Build out the incident timeline",
-    prompt: "Based on what we've discussed so far, help me build the incident timeline. IMMEDIATELY call record_timeline_event for each event — do not just describe them in text. Include timestamps, descriptions, and who was involved. Then ask me about any gaps.",
+    prompt: "Based on what we've discussed so far, help me build the incident timeline. List each event with its timestamp, description, and who was involved. Timeline events are recorded automatically — just describe them clearly. Then ask me about any gaps.",
   },
   {
     name: "factors",
     description: "Identify contributing factors",
-    prompt: "Let's identify the contributing factors for this incident. Based on our discussion, IMMEDIATELY call record_contributing_factor for each factor — do not just describe them in text. Consider technical, process, organizational, human, and communication categories. For each, assess whether it's systemic.",
+    prompt: "Let's identify the contributing factors for this incident. Based on our discussion, describe each factor with its category (technical, process, organizational, human, communication, knowledge) and whether it's systemic. Contributing factors are recorded automatically — just describe them clearly.",
   },
   {
     name: "actions",
     description: "Generate action items from our analysis",
-    prompt: "Based on the contributing factors and our discussion, IMMEDIATELY call record_action_item for each action item — do not just describe them in text. Focus on systemic improvements, not individual blame. Each action must link to a contributing_factor_id and have clear success criteria, a priority, and a type (technical, process, organizational, or learning).",
+    prompt: "Based on the contributing factors and our discussion, identify concrete action items. For each, describe: the title, type (technical, process, organizational, or learning), priority, owner if known, and clear success criteria. Focus on systemic improvements, not individual blame. Action items are recorded automatically — just describe them clearly.",
   },
   {
     name: "summarize",
@@ -45,12 +45,12 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "experiments",
     description: "Suggest experiments to validate fixes or prevent recurrence",
-    prompt: "Review the contributing factors and fixes we've discussed. For your top 2-3 recommendations, IMMEDIATELY call the suggest_experiment tool for each one — do not just describe them in text. Each experiment needs a type (chaos_experiment, load_test, or gameday), a clear hypothesis, rationale, and priority. Weight recurrence likelihood heavily.",
+    prompt: "Review the contributing factors and fixes we've discussed. Describe your top 2-3 experiment recommendations — chaos experiments, load tests, or gamedays. For each: the type, a clear hypothesis ('When X happens, we expect Y'), rationale, and priority. Weight recurrence likelihood heavily. Experiments are recorded automatically — just describe them clearly.",
   },
   {
     name: "learning",
     description: "Extract learning signals from all sections",
-    prompt: "Review all sections for learning signals using the section summaries already in your context — DO NOT call read_section, you already have depth rationales, flags, code-sourced answer counts, and question stats for every section. For each surprise, mental model change, WAI-WAD gap, or blind spot you find, IMMEDIATELY call record_discovery with source='learning_command' — do not just describe them in text. Batch as many record_discovery calls as possible into each response. Include the section_id when the discovery relates to a specific section, omit it when it spans sections. IMPORTANT: Always pass source='learning_command' in every record_discovery call. Also consider contributing factors and escalation paths. Aim for specificity: not 'learned about incident response' but 'discovered that the escalation path had a 45-minute gap because the on-call rotation had no backup for the database team'. After recording all discoveries, summarize what you found.",
+    prompt: "Review all sections for learning signals using the section summaries already in your context — you already have depth rationales, flags, code-sourced answer counts, and question stats for every section. For each surprise, mental model change, WAI-WAD gap, or blind spot you find, describe it clearly with the section it relates to. Also consider contributing factors and escalation paths. Be specific: not 'learned about incident response' but 'discovered that the escalation path had a 45-minute gap because the on-call rotation had no backup for the database team'. Discoveries are recorded automatically — just describe what you find. Summarize the overall learning quality.",
   },
 ];
 
