@@ -17,7 +17,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "dependencies",
     description: "Map all dependencies from what we've discussed",
-    prompt: "Review everything we've discussed so far across all sections. Identify every service, database, API, queue, cache, or infrastructure component that was mentioned as a dependency. List each one with its type, criticality, and whether it has a fallback. Dependencies are recorded automatically — just describe what you find.",
+    prompt: "Check the Already Recorded Dependencies list in your context. Then review our conversation for any dependencies that are NOT already recorded — genuinely new ones we discussed but haven't captured yet. Only describe new dependencies. If everything is already captured, say so. Do not re-list existing dependencies with different names.",
   },
   {
     name: "summarize",
