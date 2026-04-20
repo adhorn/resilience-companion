@@ -174,7 +174,7 @@ This feature's service has not been reviewed with a Service ORR. Note this gap w
   // Already-recorded dependencies
   if (ctx.existingDependencies.length > 0) {
     parts.push("\n## Already Recorded Dependencies");
-    parts.push("These dependencies have already been recorded for this ORR. Do not mention these again — only discuss NEW dependencies not in this list.");
+    parts.push("These dependencies have already been recorded. Do NOT describe, list, or re-mention any of these — even with different names or phrasing. For example, if 'SQLite' is recorded, do not mention 'SQLite database' or 'better-sqlite3' as a dependency. Only discuss dependencies that are genuinely NEW and not already covered below.");
     for (const dep of ctx.existingDependencies) {
       parts.push(`- ${dep.name} (${dep.type}, ${dep.criticality})`);
     }
