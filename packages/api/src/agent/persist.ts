@@ -638,11 +638,13 @@ export async function* runPersistPhase(
   const messages: LLMMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: `Here is the conversation from this turn. Extract everything that should be persisted.\n\n${conversationText}` },
+    // Prefill assistant response with '{' to force JSON output without preamble
+    { role: "assistant", content: "{" },
   ];
 
   yield { type: "status", message: "Recording observations..." } as SSEEvent & { persistTokens?: number };
 
-  let jsonContent = "";
+  let jsonContent = "{"; // Matches the prefilled assistant message
   let persistTokens = 0;
 
   try {
@@ -662,10 +664,21 @@ export async function* runPersistPhase(
     return;
   }
 
-  // Extract JSON from response (strip markdown fences if present)
+  // Extract JSON from response — the LLM often adds preamble text before the JSON.
+  // Find the first '{' and last '}' to extract the JSON object.
   let cleanJson = jsonContent.trim();
-  if (cleanJson.startsWith("```")) {
-    cleanJson = cleanJson.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+
+  // Strip markdown fences if present
+  if (cleanJson.includes("```")) {
+    const fenceMatch = cleanJson.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (fenceMatch) cleanJson = fenceMatch[1];
+  }
+
+  // Find the JSON object boundaries
+  const firstBrace = cleanJson.indexOf("{");
+  const lastBrace = cleanJson.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    cleanJson = cleanJson.slice(firstBrace, lastBrace + 1);
   }
 
   log("info", "Persist phase LLM response", {
