@@ -84,7 +84,7 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
   let budgetAwarePrompt = systemPrompt;
   if (tokenFraction >= SESSION_TOKEN_URGENT) {
     const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
-    budgetAwarePrompt += `\n\n## SESSION BUDGET — URGENT\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). The session will auto-renew soon. Wrap up the current topic and ensure your final observations are clear in your response — they will be captured automatically.`;
+    budgetAwarePrompt += `\n\n## SESSION BUDGET — URGENT\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). The session will auto-renew soon. Wrap up the current topic. Make sure your final observations are clear in your response — they are captured automatically.`;
   } else if (tokenFraction >= SESSION_TOKEN_WARNING) {
     const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
     budgetAwarePrompt += `\n\n## Session Budget\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). Start wrapping up the current line of discussion.`;
