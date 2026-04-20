@@ -129,6 +129,7 @@ export function useReviewSession({
     setThinkingStatus(`${getSpinnerVerb()}...`);
 
     let assistantContent = "";
+    let messageEnded = false;
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
@@ -155,7 +156,7 @@ export function useReviewSession({
             return updated;
           });
         }
-        if (event.type === "status") {
+        if (event.type === "status" && !messageEnded) {
           setStreamStatus(event.message);
           // On retry/fallback, reset accumulated content — LLM starts fresh
           if (event.message?.includes("Retrying") || event.message?.includes("Response quality")) {
@@ -198,6 +199,7 @@ export function useReviewSession({
         }
         if (event.type === "data_updated") debouncedReload();
         if (event.type === "message_end") {
+          messageEnded = true;
           if (event.tokenUsage) setSessionTokens((prev) => prev + event.tokenUsage);
           // Unblock input immediately — PERSIST runs in the background after this
           setStreamStatus(null);
