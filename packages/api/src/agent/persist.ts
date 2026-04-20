@@ -16,7 +16,7 @@ import type { LLMMessage, StreamChunk } from "../llm/index.js";
 import type { SSEEvent } from "@orr/shared";
 import type { PracticeType } from "./practice.js";
 import { safeJsonParse } from "../validation.js";
-import { log } from "../logger.js";
+import { log, traceLog } from "../logger.js";
 
 // --- Zod schema for PERSIST output ---
 
@@ -120,6 +120,51 @@ export const PersistOutputSchema = z.object({
 });
 
 export type PersistOutput = z.infer<typeof PersistOutputSchema>;
+
+// --- Defensive JSON extraction ---
+
+/**
+ * Extract a JSON object from LLM output that may include preamble text,
+ * markdown fences, or trailing commentary. Tries progressively from each
+ * '{' found until one produces valid JSON.
+ *
+ * Reusable — not specific to the persist phase.
+ */
+export function extractJson(raw: string): string {
+  let text = raw.trim();
+
+  // Strip markdown fences if present
+  if (text.includes("```")) {
+    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (fenceMatch) text = fenceMatch[1].trim();
+  }
+
+  // Try parsing from each '{' found in the string
+  const lastBrace = text.lastIndexOf("}");
+  if (lastBrace === -1) return text; // No closing brace — return as-is, will fail at parse
+
+  let searchFrom = 0;
+  while (searchFrom < text.length) {
+    const openBrace = text.indexOf("{", searchFrom);
+    if (openBrace === -1 || openBrace >= lastBrace) break;
+
+    const candidate = text.slice(openBrace, lastBrace + 1);
+    try {
+      JSON.parse(candidate);
+      return candidate; // Valid JSON found
+    } catch {
+      searchFrom = openBrace + 1; // Try next '{'
+    }
+  }
+
+  // Fallback: return first '{' to last '}' even if invalid — let caller handle the error
+  const firstBrace = text.indexOf("{");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    return text.slice(firstBrace, lastBrace + 1);
+  }
+
+  return text;
+}
 
 // --- PERSIST prompt ---
 
@@ -517,7 +562,7 @@ export function executePersist(
     }
   }
 
-  log("info", "Persist phase completed", {
+  traceLog("info", "Persist phase completed", {
     practiceType, practiceId, sessionId,
     writtenItems: result.writtenItems,
     sectionUpdates: result.sectionUpdates.length,
@@ -624,7 +669,7 @@ export async function* runPersistPhase(
   sessionId: string,
   activeSectionId: string | null,
 ): AsyncGenerator<SSEEvent & { persistTokens?: number }> {
-  log("info", "runPersistPhase entered", { practiceType, practiceId, sessionId, activeSectionId });
+  traceLog("info", "runPersistPhase entered", { practiceType, practiceId, sessionId, activeSectionId });
   const llm = getLLM();
   const sectionContext = buildSectionContext(practiceType, practiceId, activeSectionId);
   const systemPrompt = buildPersistPrompt(practiceType, sectionContext);
@@ -659,29 +704,15 @@ export async function* runPersistPhase(
     }
   } catch (err) {
     const errMsg = (err as Error).message || "Unknown error";
-    log("error", "Persist phase LLM call failed", { practiceId, error: errMsg });
+    traceLog("error", "Persist phase LLM call failed", { practiceId, error: errMsg });
     // Don't crash the turn — persist failure is logged but the conversation still happened
     return;
   }
 
   // Extract JSON from response — the LLM often adds preamble text before the JSON.
-  // Find the first '{' and last '}' to extract the JSON object.
-  let cleanJson = jsonContent.trim();
+  let cleanJson = extractJson(jsonContent);
 
-  // Strip markdown fences if present
-  if (cleanJson.includes("```")) {
-    const fenceMatch = cleanJson.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (fenceMatch) cleanJson = fenceMatch[1];
-  }
-
-  // Find the JSON object boundaries
-  const firstBrace = cleanJson.indexOf("{");
-  const lastBrace = cleanJson.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    cleanJson = cleanJson.slice(firstBrace, lastBrace + 1);
-  }
-
-  log("info", "Persist phase LLM response", {
+  traceLog("info", "Persist phase LLM response", {
     practiceId,
     rawLength: jsonContent.length,
     rawPreview: cleanJson.slice(0, 1000),
@@ -693,7 +724,7 @@ export async function* runPersistPhase(
     const raw = JSON.parse(cleanJson);
     parsed = PersistOutputSchema.parse(raw);
   } catch (err) {
-    log("error", "Persist phase JSON parse/validation failed", {
+    traceLog("error", "Persist phase JSON parse/validation failed", {
       practiceId,
       error: (err as Error).message,
       rawLength: jsonContent.length,
@@ -702,7 +733,7 @@ export async function* runPersistPhase(
     return;
   }
 
-  log("info", "Persist phase parsed output", {
+  traceLog("info", "Persist phase parsed output", {
     practiceId,
     questionResponses: parsed.question_responses.length,
     sectionContent: parsed.section_content.length,

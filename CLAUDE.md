@@ -6,11 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Resilience Companion is a web application for facilitating resilience practices (ORRs, incident analysis, and more), built as a companion tool to the book "Why We Still Suck at Resilience." An AI agent guides teams through structured reviews via Socratic conversation, persisting observations into a document-first data model.
 
-**Current state**: Phase 1 MVP — Review Facilitator + Incident Learning Facilitator agents, teaching moment library, portal, dashboard, markdown export. See `docs/SPEC.md` for full roadmap.
+**Current state**: Phase 1 MVP — Review Facilitator + Incident Learning Facilitator agents, teaching moment library, portal, dashboard, markdown export.
 
-**Key design principle**: Document-first. The ORR/incident document is the durable artifact; conversations are ephemeral. The agent writes observations back to sections via tools.
+**Key design principle**: Document-first. The ORR/incident document is the durable artifact; conversations are ephemeral. The agent system uses a CONVERSE → PERSIST state machine: the conversational LLM has read-only tools, then a separate PERSIST phase extracts observations as structured JSON and writes deterministically to the DB.
 
 ## Commands
+
+```bash
+npm run eval            # Run agent quality evals (requires LLM_API_KEY)
+npm run eval:verbose    # Run evals with detailed output
+```
+
+## Testing Practices
+
+- **After any PR that touches agent code, prompts, or the persist phase**: run at least one eval scenario (`npm run eval -- --scenario persist-basic-qa`) and include the result in the PR.
+- **Never trust LLM output format**: any time we ask an LLM for structured data, extract it defensively (use `extractJson()` from `persist.ts`). LLMs add preamble, markdown fences, and commentary despite instructions.
+- **Integration tests over unit tests for LLM pipelines**: test the full chain (LLM response → extraction → validation → DB write), not just the writer in isolation. Mock the LLM with realistic messy output.
 
 ```bash
 npm run dev          # Start API (port 3000) + Web (port 5173) concurrently
@@ -75,17 +86,25 @@ In production, built web assets are copied to `packages/api/public/` and served 
 
 ## Agent System
 
-POST `/api/v1/orrs/:orrId/sessions/:sessionId/messages` → `runAgent()` in `agent/loop.ts`:
-1. Build context (`agent/context.ts`) — active section in full, others as summaries, session history, relevant teaching moments
-2. Build system prompt (`agent/system-prompt.ts`) — persona-specific (Review Facilitator or Incident Learning Facilitator)
-3. Inject dynamic guidance: token budget warnings (at 75%/90%), adaptive engagement zone (FRUSTRATED/TOO_EASY/PRODUCTIVE)
-4. Call LLM with conversation + tools, max 5 iterations per turn
-5. Execute tool calls with steering hooks (security, ordering, content scanning), yield SSE events
-6. If max iterations hit, give LLM one final text-only turn to wrap up coherently
+POST `/api/v1/orrs/:orrId/sessions/:sessionId/messages` → `runAgent()` in `agent/loop.ts`. Two-phase state machine:
 
-**ORR tools** (15): `read_section`, `update_section_content`, `update_depth_assessment`, `set_flags`, `query_teaching_moments`, `query_case_studies`, `update_question_response`, `write_session_summary`, `record_dependency`, `suggest_experiment`, `suggest_cross_practice_action`, `record_action_item`, `search_code`, `read_file`, `list_directory`
+**CONVERSE phase** — LLM with read-only tools, streams text to the user:
+1. Build context (`agent/context.ts`) — active section in full, others as summaries, session history, teaching moments
+2. Build system prompt (`agent/system-prompt.ts`) — persona-specific, with engagement zone and token budget guidance
+3. LLM converses with read-only tools (max 5 iterations), yields SSE content_delta events
 
-**Incident tools** (13): The first 8 shared tools above, plus `record_timeline_event`, `record_contributing_factor`, `record_action_item`, `suggest_experiment`, `suggest_cross_practice_action`
+**PERSIST phase** — mandatory, runs after every CONVERSE:
+1. Separate LLM call with focused prompt (`agent/persist.ts`) → outputs structured JSON
+2. `extractJson()` defensively extracts JSON from potentially messy LLM output
+3. Zod schema validates the output
+4. Deterministic code writes to DB — the LLM decides WHAT, code decides HOW
+5. Yields section_updated/data_updated SSE events for UI refresh
+
+**CONVERSE tools** (read-only): `read_section`, `query_teaching_moments`, `query_case_studies` + ORR-only: `search_code`, `read_file`, `list_directory`
+
+**PERSIST writes** (via structured JSON, not tool calls): question_responses, section_content, depth_assessments, flags, dependencies, discoveries, experiments, action_items, cross_practice, timeline_events, contributing_factors
+
+**Legacy fallback**: Set `AGENT_LOOP_VERSION=v1` in `.env` to use the old unstructured loop with all tools.
 
 **Steering hooks** (`agent/hooks/`): Security hooks block sensitive file access (`.env`, `.pem`, SSH keys) and redact credentials from tool results. Content scan hooks enforce size limits (10KB per result, 20 search matches).
 
