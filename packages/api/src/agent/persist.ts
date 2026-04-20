@@ -152,7 +152,8 @@ export function buildPersistPrompt(
   - MEDIUM: meaningful operational gap. Deadline within 1-2 months.
   - LOW: worth addressing but not urgent. Deadline within a quarter.
 - If code was the source of an answer (not the team's memory), set source: "code" and include code_ref.
-- For experiments, always include a hypothesis: "When X happens, we expect Y."
+- For experiments, always include a hypothesis: "When X happens, we expect Y." Check the "Already Suggested Experiments" list — do NOT suggest experiments that test the same thing even if worded differently.
+- For dependencies, check the "Already Recorded Dependencies" list — do NOT record dependencies that are the same system even if named differently (e.g., "SQLite" and "SQLite database" are the same).
 - For discoveries, be specific: not "learned about architecture" but "team discovered their retry logic has no jitter."
 ${practiceSpecific}
 
@@ -200,7 +201,7 @@ export function buildSectionContext(
     .where(eq(parentCol, practiceId))
     .all();
 
-  return sections.map((s: any) => {
+  let context = sections.map((s: any) => {
     const prompts: string[] = safeJsonParse(s.prompts, []);
     const responses: Record<string, unknown> = safeJsonParse(s.promptResponses, {});
     const flags: unknown[] = safeJsonParse(s.flags, []);
@@ -216,6 +217,31 @@ export function buildSectionContext(
 Depth: ${s.depth} | Flags: ${flags.length}
 ${qStatus}`;
   }).join("\n\n");
+
+  // Include existing experiments and dependencies so the LLM doesn't re-suggest them
+  const existingExps = db.select().from(schema.experimentSuggestions)
+    .where(and(
+      eq(schema.experimentSuggestions.sourcePracticeType, practiceType),
+      eq(schema.experimentSuggestions.sourcePracticeId, practiceId),
+    )).all();
+
+  if (existingExps.length > 0) {
+    context += "\n\n### Already Suggested Experiments (do NOT re-suggest these or similar variants)\n";
+    context += existingExps.map((e) => `- **${e.title}** (${e.type}, ${e.status}): ${e.hypothesis}`).join("\n");
+  }
+
+  if (practiceType === "orr") {
+    const existingDeps = db.select().from(schema.dependencies)
+      .where(eq(schema.dependencies.orrId, practiceId))
+      .all();
+
+    if (existingDeps.length > 0) {
+      context += "\n\n### Already Recorded Dependencies (do NOT re-record these)\n";
+      context += existingDeps.map((d) => `- ${d.name} (${d.type})`).join("\n");
+    }
+  }
+
+  return context;
 }
 
 // --- Deterministic writer ---
