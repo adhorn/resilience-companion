@@ -15,17 +15,17 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "timeline",
     description: "Build out the incident timeline",
-    prompt: "Based on what we've discussed so far, help me build the incident timeline. List each event with its timestamp, description, and who was involved. Timeline events are recorded automatically — just describe them clearly. Then ask me about any gaps.",
+    prompt: 'Based on what we\'ve discussed so far, build the incident timeline. Respond with a JSON object: { "command": "timeline", "summary": "brief summary of timeline so far", "items": [{ "timestamp": "ISO 8601", "description": "what happened", "event_type": "detection|escalation|action|communication|resolution|other", "actor": "who/what" }] }. Then ask about any gaps.',
   },
   {
     name: "factors",
     description: "Identify contributing factors",
-    prompt: "Let's identify the contributing factors for this incident. Based on our discussion, describe each factor with its category (technical, process, organizational, human, communication, knowledge) and whether it's systemic. Contributing factors are recorded automatically — just describe them clearly.",
+    prompt: 'Identify contributing factors for this incident. Respond with a JSON object: { "command": "factors", "summary": "brief summary", "items": [{ "category": "technical|process|organizational|human_factors|communication|knowledge", "description": "...", "is_systemic": true/false }] }.',
   },
   {
     name: "actions",
     description: "Generate action items from our analysis",
-    prompt: "Based on the contributing factors and our discussion, identify concrete action items. For each, describe: the title, type (technical, process, organizational, or learning), priority, owner if known, and clear success criteria. Focus on systemic improvements, not individual blame. Action items are recorded automatically — just describe them clearly.",
+    prompt: 'Based on contributing factors and discussion, identify action items. Respond with a JSON object: { "command": "actions", "summary": "brief summary", "items": [{ "title": "...", "type": "technical|process|organizational|learning", "priority": "high|medium|low", "owner": "optional" }] }. Focus on systemic improvements.',
   },
   {
     name: "summarize",
@@ -45,12 +45,12 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "experiments",
     description: "Suggest experiments to validate fixes or prevent recurrence",
-    prompt: "Review the contributing factors and fixes we've discussed. Describe your top 2-3 experiment recommendations — chaos experiments, load tests, or gamedays. For each: the type, a clear hypothesis ('When X happens, we expect Y'), rationale, and priority. Weight recurrence likelihood heavily. Experiments are recorded automatically — just describe them clearly.",
+    prompt: 'Review contributing factors and fixes. Respond with a JSON object: { "command": "experiments", "summary": "brief summary", "items": [{ "type": "chaos_experiment|load_test|gameday", "title": "...", "hypothesis": "When X happens, we expect Y", "rationale": "...", "priority": "critical|high|medium|low" }] }. Weight recurrence likelihood heavily.',
   },
   {
     name: "learning",
     description: "Extract learning signals from all sections",
-    prompt: "Review all sections for learning signals using the section summaries already in your context — you already have depth rationales, flags, code-sourced answer counts, and question stats for every section. For each surprise, mental model change, WAI-WAD gap, or blind spot you find, describe it clearly with the section it relates to. Also consider contributing factors and escalation paths. Be specific: not 'learned about incident response' but 'discovered that the escalation path had a 45-minute gap because the on-call rotation had no backup for the database team'. Discoveries are recorded automatically — just describe what you find. Summarize the overall learning quality.",
+    prompt: 'Review all sections for learning signals. Consider contributing factors and escalation paths. Respond with a JSON object: { "command": "learning", "summary": "overall learning quality", "items": [{ "text": "specific discovery", "section_id": "optional" }] }. Be specific: not "learned about incident response" but "discovered escalation path had 45-minute gap".',
   },
 ];
 

@@ -13,6 +13,7 @@ export interface SlashCommand {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  slashResult?: import("@orr/shared").SlashCommandResult;
 }
 
 interface UseReviewSessionOptions {
@@ -198,6 +199,21 @@ export function useReviewSession({
           debouncedReload();
         }
         if (event.type === "data_updated") debouncedReload();
+        if (event.type === "slash_result" && event.result) {
+          // Replace raw JSON text with summary + structured data for UI rendering
+          const sr = event.result;
+          assistantContent = sr.summary || assistantContent;
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = {
+              role: "assistant",
+              content: assistantContent,
+              slashResult: sr,
+            };
+            return updated;
+          });
+          debouncedReload();
+        }
         if (event.type === "message_end") {
           messageEnded = true;
           if (event.tokenUsage) setSessionTokens((prev) => prev + event.tokenUsage);

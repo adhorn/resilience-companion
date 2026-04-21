@@ -17,7 +17,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "dependencies",
     description: "Map all dependencies from what we've discussed",
-    prompt: "Check the Already Recorded Dependencies list in your context. Then review our conversation for any dependencies that are NOT already recorded — genuinely new ones we discussed but haven't captured yet. Only describe new dependencies. If everything is already captured, say so. Do not re-list existing dependencies with different names.",
+    prompt: 'Check the Already Recorded Dependencies list in your context. Review our conversation for any dependencies that are NOT already recorded. Respond with a JSON object: { "command": "dependencies", "summary": "brief summary", "items": [{ "name": "...", "type": "database|cache|api|service|infrastructure|other", "criticality": "critical|important|optional", "notes": "..." }] }. Only include genuinely new dependencies. If everything is already captured, return empty items array with a summary saying so.',
   },
   {
     name: "summarize",
@@ -47,12 +47,12 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "experiments",
     description: "Suggest chaos experiments, load tests, or gamedays",
-    prompt: "Review all sections we've discussed so far. Identify the 2-3 highest-ROI experiments — chaos experiments, load tests, or gamedays. For each, describe: what type it is, a clear hypothesis ('When X happens, we expect Y'), the rationale, and priority based on blast radius and confidence gaps. Experiments are recorded automatically — just describe them clearly.",
+    prompt: 'Review all sections we\'ve discussed so far. Check the Already Suggested Experiments list to avoid duplicates. Identify the 2-3 highest-ROI NEW experiments. Respond with a JSON object: { "command": "experiments", "summary": "brief summary", "items": [{ "type": "chaos_experiment|load_test|gameday", "title": "...", "hypothesis": "When X happens, we expect Y", "rationale": "...", "priority": "critical|high|medium|low" }] }. If no new experiments to suggest, return empty items array.',
   },
   {
     name: "learning",
     description: "Extract learning signals from all sections",
-    prompt: "Review all sections for learning signals using the section summaries already in your context — you already have depth rationales, flags, code-sourced answer counts, and question stats for every section. For each surprise, mental model change, WAI-WAD gap, or blind spot you find, describe it clearly with the section it relates to. Be specific: not 'learned about architecture' but 'discovered retry logic has no jitter, risking thundering herd at scale'. Discoveries are recorded automatically — just describe what you find. Summarize the overall learning quality of this review.",
+    prompt: 'Review all sections for learning signals using the section summaries already in your context. For each surprise, mental model change, WAI-WAD gap, or blind spot, be specific. Respond with a JSON object: { "command": "learning", "summary": "overall learning quality assessment", "items": [{ "text": "specific discovery description", "section_id": "optional section id" }] }. If nothing substantive to report yet, return empty items with a summary explaining why.',
   },
 ];
 

@@ -1,4 +1,5 @@
 import React from "react";
+import { SlashResultCard } from "./SlashResultCard";
 
 interface SlashCommand {
   name: string;
@@ -9,6 +10,7 @@ interface SlashCommand {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  slashResult?: import("@orr/shared").SlashCommandResult;
 }
 
 interface SpeechControls {
@@ -191,18 +193,20 @@ export function ConversationPanel({
             </div>
             <div className="leading-relaxed">
               {msg.role === "assistant"
-                ? (msg.content
-                    ? renderMarkdown(msg.content)
-                    : streaming && i === messages.length - 1 && thinkingStatus
-                      ? <span className="flex items-center gap-2 text-gray-400 text-xs italic">
-                          <span className="inline-flex gap-0.5">
-                            <span className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                            <span className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                            <span className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                ? (msg.slashResult
+                    ? <SlashResultCard result={msg.slashResult} />
+                    : msg.content
+                      ? renderMarkdown(msg.content)
+                      : streaming && i === messages.length - 1 && thinkingStatus
+                        ? <span className="flex items-center gap-2 text-gray-400 text-xs italic">
+                            <span className="inline-flex gap-0.5">
+                              <span className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                              <span className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                              <span className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                            </span>
+                            {thinkingStatus}
                           </span>
-                          {thinkingStatus}
-                        </span>
-                      : "..."
+                        : "..."
                   )
                 : msg.content}
             </div>

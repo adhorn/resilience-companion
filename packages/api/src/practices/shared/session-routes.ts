@@ -599,6 +599,7 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
           conversationHistory: history,
           userMessage: content,
           sessionTokenUsage: activeTokenUsage,
+          displayContent: displayContent || undefined,
         });
 
         let pendingToolCall: { tool: string; args: unknown } | null = null;

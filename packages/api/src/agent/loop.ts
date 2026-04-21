@@ -11,6 +11,7 @@ import type { ToolLedgerEntry } from "./steering.js";
 import { assessEngagement } from "./engagement.js";
 import type { SectionEngagementContext } from "./engagement.js";
 import { runPersistPhase } from "./persist.js";
+import { isWriteSlashCommand, parseSlashResponse, persistSlashResult } from "./slash-commands.js";
 
 /** Translate raw LLM errors into user-friendly messages */
 function categorizeError(msg: string): string {
@@ -48,6 +49,8 @@ export interface AgentInput {
   conversationHistory: LLMMessage[];
   userMessage: string;
   sessionTokenUsage: number;
+  /** Original display content (e.g. "/experiments") — used to detect slash commands */
+  displayContent?: string;
 }
 
 /**
@@ -141,6 +144,7 @@ Adjust your approach:
   let totalUsage = 0;
   let previousIterationHadContent = false;
   let converseHadContent = false;
+  let converseFullText = ""; // Accumulated agent text across all iterations (for slash command parsing)
   const cumulativeTokens = () => sessionTokenUsage + totalUsage;
 
   // ═══════════════════════════════════════════════════════════
@@ -186,6 +190,7 @@ Adjust your approach:
             const text = chunk.content!;
             if (text.match(/<invoke\s|<parameter\s|<\/invoke>|<\/parameter>/)) break;
             fullContent += text;
+            converseFullText += text;
             yield { type: "content_delta", content: text };
             break;
           }
@@ -300,6 +305,7 @@ Adjust your approach:
         if (chunk.type === "content") {
           const text = chunk.content!;
           if (!text.match(/<invoke\s|<parameter\s|<\/invoke>|<\/parameter>/)) {
+            converseFullText += text;
             yield { type: "content_delta", content: text };
           }
         }
@@ -325,23 +331,38 @@ Adjust your approach:
   // the client treats message_end as "done streaming text").
   // ═══════════════════════════════════════════════════════════
 
-  log("info", "PERSIST phase starting", { practiceId, sessionId, traceId: trace.id, messageCount: messages.length });
-
-  try {
-    for await (const event of runPersistPhase(
-      messages,
-      practiceConfig.practiceType,
-      practiceId,
-      sessionId,
-      activeSectionId,
-    )) {
-      if (event.persistTokens) {
-        totalUsage += event.persistTokens;
+  // For write slash commands, parse the agent's structured response directly.
+  // No second LLM call needed — the CONVERSE agent already produced the data.
+  if (input.displayContent && isWriteSlashCommand(input.displayContent)) {
+    log("info", "Slash command persistence (direct parse)", { command: input.displayContent, practiceId, textLength: converseFullText.length });
+    const slashResult = parseSlashResponse(input.displayContent, converseFullText);
+    if (slashResult) {
+      const written = persistSlashResult(slashResult, practiceConfig.practiceType, practiceId, sessionId);
+      yield { type: "slash_result", result: slashResult } as SSEEvent;
+      if (written > 0) {
+        yield { type: "data_updated", tool: slashResult.command } as SSEEvent;
       }
-      yield event as SSEEvent;
     }
-  } catch (err) {
-    log("error", "PERSIST phase error", { error: (err as Error).message, traceId: trace.id });
+  } else {
+    // Normal conversation — run the PERSIST LLM to extract what to write
+    log("info", "PERSIST phase starting", { practiceId, sessionId, traceId: trace.id, messageCount: messages.length });
+
+    try {
+      for await (const event of runPersistPhase(
+        messages,
+        practiceConfig.practiceType,
+        practiceId,
+        sessionId,
+        activeSectionId,
+      )) {
+        if (event.persistTokens) {
+          totalUsage += event.persistTokens;
+        }
+        yield event as SSEEvent;
+      }
+    } catch (err) {
+      log("error", "PERSIST phase error", { error: (err as Error).message, traceId: trace.id });
+    }
   }
 }
 
