@@ -46,6 +46,7 @@ export interface ORRContext {
   isReturningSession: boolean;
   hasRepositoryPath: boolean;
   existingDependencies: Array<{ name: string; type: string; criticality: string }>;
+  existingExperiments: Array<{ title: string; type: string; status: string; hypothesis: string }>;
   // Feature ORR fields
   orrType: string;
   changeTypes: string[];
@@ -177,6 +178,15 @@ This feature's service has not been reviewed with a Service ORR. Note this gap w
     parts.push("These dependencies have already been recorded. Do NOT describe, list, or re-mention any of these — even with different names or phrasing. For example, if 'SQLite' is recorded, do not mention 'SQLite database' or 'better-sqlite3' as a dependency. Only discuss dependencies that are genuinely NEW and not already covered below.");
     for (const dep of ctx.existingDependencies) {
       parts.push(`- ${dep.name} (${dep.type}, ${dep.criticality})`);
+    }
+  }
+
+  // Already-suggested experiments
+  if (ctx.existingExperiments.length > 0) {
+    parts.push("\n## Already Suggested Experiments");
+    parts.push("These experiments have already been suggested. Do NOT re-suggest them or similar variants — even with different titles or phrasing. Only suggest genuinely NEW experiments not covered below.");
+    for (const exp of ctx.existingExperiments) {
+      parts.push(`- **${exp.title}** (${exp.type}, ${exp.status}): ${exp.hypothesis}`);
     }
   }
 

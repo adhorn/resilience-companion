@@ -13,6 +13,7 @@ export interface SlashCommand {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  slashResult?: import("@orr/shared").SlashCommandResult;
 }
 
 interface UseReviewSessionOptions {
@@ -130,6 +131,8 @@ export function useReviewSession({
 
     let assistantContent = "";
     let messageEnded = false;
+    // For write slash commands, suppress raw JSON streaming — show spinner until slash_result arrives
+    const isSlashWrite = !!displayContent && ["experiments", "dependencies", "learning", "actions", "timeline", "factors"].includes(displayContent.replace("/", ""));
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
@@ -146,15 +149,18 @@ export function useReviewSession({
           });
         }
         if (event.type === "content_delta") {
-          setStreamStatus(null);
-          setThinkingStatus(null);
-          isToolLabelRef.current = false;
           assistantContent += event.content;
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[updated.length - 1] = { role: "assistant", content: assistantContent };
-            return updated;
-          });
+          // For write slash commands, don't render raw JSON — wait for slash_result
+          if (!isSlashWrite) {
+            setStreamStatus(null);
+            setThinkingStatus(null);
+            isToolLabelRef.current = false;
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = { role: "assistant", content: assistantContent };
+              return updated;
+            });
+          }
         }
         if (event.type === "status" && !messageEnded) {
           setStreamStatus(event.message);
@@ -198,6 +204,21 @@ export function useReviewSession({
           debouncedReload();
         }
         if (event.type === "data_updated") debouncedReload();
+        if (event.type === "slash_result" && event.result) {
+          // Replace raw JSON text with summary + structured data for UI rendering
+          const sr = event.result;
+          assistantContent = sr.summary || assistantContent;
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = {
+              role: "assistant",
+              content: assistantContent,
+              slashResult: sr,
+            };
+            return updated;
+          });
+          debouncedReload();
+        }
         if (event.type === "message_end") {
           messageEnded = true;
           if (event.tokenUsage) setSessionTokens((prev) => prev + event.tokenUsage);

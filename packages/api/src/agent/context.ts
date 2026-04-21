@@ -2,7 +2,7 @@
  * ORR context builder.
  * Uses shared base context, adds ORR-specific fields (repository, dependencies).
  */
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getDb, schema } from "../db/index.js";
 import { buildBaseContext } from "../practices/shared/context.js";
 import type { ORRContext, ParentORRContext } from "./system-prompt.js";
@@ -54,6 +54,18 @@ export function buildORRContext(
     }
   }
 
+  // Load existing experiments
+  const existingExps = db.select({
+    title: schema.experimentSuggestions.title,
+    type: schema.experimentSuggestions.type,
+    status: schema.experimentSuggestions.status,
+    hypothesis: schema.experimentSuggestions.hypothesis,
+  }).from(schema.experimentSuggestions)
+    .where(and(
+      eq(schema.experimentSuggestions.sourcePracticeType, "orr"),
+      eq(schema.experimentSuggestions.sourcePracticeId, orrId),
+    )).all();
+
   return {
     ...base,
     serviceName: orr.serviceName,
@@ -61,6 +73,7 @@ export function buildORRContext(
     status: orr.status,
     hasRepositoryPath: !!orr.repositoryPath,
     existingDependencies: existingDeps,
+    existingExperiments: existingExps,
     orrType: orr.orrType || "service",
     changeTypes: safeJsonParse<string[]>(orr.changeTypes, []),
     changeDescription: orr.changeDescription || null,
