@@ -682,14 +682,12 @@ export async function* runPersistPhase(
 
   const messages: LLMMessage[] = [
     { role: "system", content: systemPrompt },
-    { role: "user", content: `Here is the conversation from this turn. Extract everything that should be persisted.\n\n${conversationText}` },
-    // Prefill assistant response with '{' to force JSON output without preamble
-    { role: "assistant", content: "{" },
+    { role: "user", content: `Here is the conversation from this turn. Extract everything that should be persisted. Respond with ONLY a JSON object — no preamble, no explanation.\n\n${conversationText}` },
   ];
 
   yield { type: "status", message: "Recording observations..." } as SSEEvent & { persistTokens?: number };
 
-  let jsonContent = "{"; // Matches the prefilled assistant message
+  let jsonContent = "";
   let persistTokens = 0;
 
   try {
