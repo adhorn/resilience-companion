@@ -689,10 +689,28 @@ export async function* runPersistPhase(
   const systemPrompt = buildPersistPrompt(practiceType, sectionContext);
 
   // Build messages: system prompt + the conversation to extract from
-  const conversationText = conversationMessages
+  // Include the full conversation — the persist LLM needs to see everything
+  // that was discussed to extract it. Truncating loses experiment details,
+  // question answers, and other substantive content.
+  // Cap total context at 30k chars (~7.5k tokens) to stay within budget.
+  const MAX_CONVERSE_CONTEXT = 30_000;
+  const allMessages = conversationMessages
     .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => `${m.role}: ${m.content?.slice(0, 1000) || ""}`)
-    .join("\n\n");
+    .map((m) => `${m.role}: ${m.content || ""}`);
+
+  // If total exceeds budget, keep the most recent messages
+  let conversationText = allMessages.join("\n\n");
+  if (conversationText.length > MAX_CONVERSE_CONTEXT) {
+    // Walk backwards from most recent, keeping messages that fit
+    let kept: string[] = [];
+    let totalLen = 0;
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      if (totalLen + allMessages[i].length + 2 > MAX_CONVERSE_CONTEXT) break;
+      kept.unshift(allMessages[i]);
+      totalLen += allMessages[i].length + 2;
+    }
+    conversationText = kept.join("\n\n");
+  }
 
   const messages: LLMMessage[] = [
     { role: "system", content: systemPrompt },
