@@ -131,6 +131,8 @@ export function useReviewSession({
 
     let assistantContent = "";
     let messageEnded = false;
+    // For write slash commands, suppress raw JSON streaming — show spinner until slash_result arrives
+    const isSlashWrite = !!displayContent && ["experiments", "dependencies", "learning", "actions", "timeline", "factors"].includes(displayContent.replace("/", ""));
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
@@ -147,15 +149,18 @@ export function useReviewSession({
           });
         }
         if (event.type === "content_delta") {
-          setStreamStatus(null);
-          setThinkingStatus(null);
-          isToolLabelRef.current = false;
           assistantContent += event.content;
-          setMessages((prev) => {
-            const updated = [...prev];
-            updated[updated.length - 1] = { role: "assistant", content: assistantContent };
-            return updated;
-          });
+          // For write slash commands, don't render raw JSON — wait for slash_result
+          if (!isSlashWrite) {
+            setStreamStatus(null);
+            setThinkingStatus(null);
+            isToolLabelRef.current = false;
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = { role: "assistant", content: assistantContent };
+              return updated;
+            });
+          }
         }
         if (event.type === "status" && !messageEnded) {
           setStreamStatus(event.message);
