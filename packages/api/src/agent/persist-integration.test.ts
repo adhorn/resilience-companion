@@ -54,7 +54,7 @@ describe("PERSIST integration — LLM response to DB writes", () => {
   }
 
   it("handles clean JSON response", async () => {
-    const events = await runPersist(`
+    const events = await runPersist(`{
       "question_responses": [
         {"section_id": "${sectionIds[0]}", "question_index": 0, "response": "Node.js Hono API"}
       ],
@@ -132,7 +132,7 @@ Here's the extraction:
   });
 
   it("writes multiple items in one persist call", async () => {
-    const events = await runPersist(`
+    const events = await runPersist(`{
       "question_responses": [
         {"section_id": "${sectionIds[0]}", "question_index": 0, "response": "Three-tier architecture"},
         {"section_id": "${sectionIds[0]}", "question_index": 1, "response": "Hono API, React, SQLite"}
@@ -184,7 +184,7 @@ Here's the extraction:
   });
 
   it("handles empty output gracefully", async () => {
-    const events = await runPersist(`
+    const events = await runPersist(`{
       "question_responses": [],
       "depth_assessments": [],
       "flags": [],
@@ -204,7 +204,7 @@ Here's the extraction:
   });
 
   it("rejects invalid section_id without crashing", async () => {
-    const events = await runPersist(`
+    const events = await runPersist(`{
       "question_responses": [
         {"section_id": "nonexistent", "question_index": 0, "response": "Should fail"}
       ],
