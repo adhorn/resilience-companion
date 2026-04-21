@@ -214,12 +214,69 @@ export interface SendMessageInput {
   sectionId?: string; // which section the conversation is about
 }
 
+// --- Slash command structured results ---
+
+export interface SlashExperiment {
+  type: "chaos_experiment" | "load_test" | "gameday";
+  title: string;
+  hypothesis: string;
+  rationale: string;
+  priority: "critical" | "high" | "medium" | "low";
+}
+
+export interface SlashDependency {
+  name: string;
+  type: string;
+  criticality: string;
+  direction?: string;
+  has_fallback?: boolean;
+  notes?: string;
+}
+
+export interface SlashDiscovery {
+  text: string;
+  section_id?: string;
+}
+
+export interface SlashActionItem {
+  title: string;
+  type: "technical" | "process" | "organizational" | "learning";
+  priority?: "high" | "medium" | "low";
+  owner?: string;
+}
+
+export interface SlashTimelineEvent {
+  timestamp: string;
+  description: string;
+  event_type?: string;
+  actor?: string;
+}
+
+export interface SlashContributingFactor {
+  category: string;
+  description: string;
+  is_systemic?: boolean;
+}
+
+export type SlashCommandResult =
+  | { command: "experiments"; items: SlashExperiment[]; summary: string }
+  | { command: "dependencies"; items: SlashDependency[]; summary: string }
+  | { command: "learning"; items: SlashDiscovery[]; summary: string }
+  | { command: "actions"; items: SlashActionItem[]; summary: string }
+  | { command: "timeline"; items: SlashTimelineEvent[]; summary: string }
+  | { command: "factors"; items: SlashContributingFactor[]; summary: string };
+
+/** Slash commands that produce structured data for persistence */
+export const WRITE_SLASH_COMMANDS = ["experiments", "dependencies", "learning", "actions", "timeline", "factors"] as const;
+export type WriteSlashCommand = typeof WRITE_SLASH_COMMANDS[number];
+
 // --- SSE event types ---
 
 export type SSEEvent =
   | { type: "message_start"; messageId: string }
   | { type: "content_delta"; content: string }
   | { type: "content_reset" }
+  | { type: "slash_result"; result: SlashCommandResult }
   | { type: "tool_call"; tool: string; args: Record<string, unknown> }
   | { type: "tool_result"; tool: string; result: Record<string, unknown> }
   | { type: "section_updated"; sectionId: string; field: string }
