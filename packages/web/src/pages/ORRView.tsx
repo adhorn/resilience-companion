@@ -370,10 +370,17 @@ export function ORRView() {
           </select>
 
           {/* Repo connection */}
-          {orr.repositoryPath ? (
+          {orr.repositoryPath && !showRepoForm ? (
             <div className="mt-1.5 flex items-center gap-1 text-[10px] text-green-600" title={orr.repositoryPath}>
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
               <span className="truncate">{orr.repositoryPath.replace(/^https?:\/\/[^/]+\//, "")}</span>
+              <button
+                onClick={() => { setShowRepoForm(true); setRepoUrl(orr.repositoryPath || ""); }}
+                className="ml-1 text-[10px] text-gray-400 hover:text-blue-600"
+                title="Update repository URL or token"
+              >
+                edit
+              </button>
             </div>
           ) : (
             <div className="mt-1.5">
