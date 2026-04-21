@@ -1,9 +1,10 @@
 /**
  * Persistence scenarios — the "discussed but not persisted" test suite.
  *
- * These are the most critical evals: they verify that when a team member
- * answers a question during the ORR, the agent actually writes the answer
- * back to the document via update_question_response or related tools.
+ * These verify that when a team member answers a question during the ORR,
+ * the PERSIST phase writes the answer to the DB. Checks DB state (via
+ * question_persisted), not tool calls — the state machine uses structured
+ * JSON output, not tool calls for writes.
  *
  * The default seedTestOrr() sections are:
  *   index 0: "Architecture" — prompts: ["What is the architecture?", "What are the dependencies?"]
@@ -16,7 +17,7 @@ import type { EvalScenario } from "../types.js";
 export const persistenceScenarios: EvalScenario[] = [
   {
     id: "persist-basic-qa",
-    name: "Basic Q&A: 2 architecture answers are persisted",
+    name: "Basic Q&A: architecture answer is persisted to DB",
     category: "persistence",
     type: "capability",
     practiceType: "orr",
@@ -39,21 +40,17 @@ Don't over-explain — answer what's asked.
     },
     expectedOutcomes: [
       {
-        type: "tool_called",
-        tool: "update_question_response",
-        description: "Agent persists at least one architecture answer",
-      },
-      {
-        type: "min_tool_calls",
-        minCalls: 2,
-        description: "At least 2 tool calls in a 5-turn conversation",
+        type: "question_persisted",
+        sectionIndex: 0,
+        questionIndex: 0,
+        description: "Architecture Q0 ('What is the architecture?') has a response in DB",
       },
     ],
   },
 
   {
     id: "persist-multi-question",
-    name: "Multi-question section: all 3 monitoring prompts persisted",
+    name: "Multi-question section: monitoring prompt persisted",
     category: "persistence",
     type: "capability",
     practiceType: "orr",
@@ -79,19 +76,14 @@ If asked about gaps or missing runbooks, be honest about what doesn't exist yet.
         type: "question_persisted",
         sectionIndex: 1,
         questionIndex: 0,
-        description: "Monitoring question (index 0) is persisted to section 1",
-      },
-      {
-        type: "tool_called",
-        tool: "update_question_response",
-        description: "update_question_response called at least once for monitoring section",
+        description: "Monitoring Q0 ('How do you monitor?') has a response in DB",
       },
     ],
   },
 
   {
     id: "persist-dependency-mention",
-    name: "Dependency mention triggers record_dependency",
+    name: "Dependency mentioned in conversation is recorded in DB",
     category: "persistence",
     type: "capability",
     practiceType: "orr",
@@ -112,9 +104,10 @@ Be direct and technical.
     },
     expectedOutcomes: [
       {
-        type: "tool_called",
-        tool: "record_dependency",
-        description: "Agent records at least one external dependency mentioned",
+        type: "question_persisted",
+        sectionIndex: 0,
+        questionIndex: 1,
+        description: "Architecture Q1 ('What are the dependencies?') has a response in DB",
       },
     ],
   },
@@ -143,9 +136,10 @@ walk through the full process with specifics. Don't cut your answer short.
     },
     expectedOutcomes: [
       {
-        type: "tool_called",
-        tool: "update_question_response",
-        description: "Agent persists the detailed answer (not dropped due to length)",
+        type: "question_persisted",
+        sectionIndex: 0,
+        questionIndex: 0,
+        description: "Architecture Q0 has a response in DB (detailed answer not dropped)",
       },
     ],
   },
@@ -173,14 +167,10 @@ If pressed, give a bit more detail but stay brief.
     },
     expectedOutcomes: [
       {
-        type: "tool_called",
-        tool: "update_question_response",
-        description: "Agent persists answers even when they are very brief",
-      },
-      {
-        type: "min_tool_calls",
-        minCalls: 1,
-        description: "At least 1 persistence tool call in the conversation",
+        type: "question_persisted",
+        sectionIndex: 2,
+        questionIndex: 0,
+        description: "Testing Q0 ('How do you test?') has a response in DB",
       },
     ],
   },

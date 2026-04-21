@@ -32,8 +32,8 @@ Answer questions directly with technical specifics.
     expectedOutcomes: [
       {
         type: "min_tool_calls",
-        minCalls: 3,
-        description: "At least 3 tool calls in a 4-turn conversation",
+        minCalls: 1,
+        description: "At least 1 read tool call in a 4-turn conversation (read_section, query_*)",
       },
     ],
   },
@@ -63,9 +63,10 @@ which isn't much. Be honest about gaps.
     },
     expectedOutcomes: [
       {
-        type: "tool_called",
-        tool: "update_depth_assessment",
-        description: "Agent assesses section depth after the conversation",
+        type: "depth_set",
+        sectionIndex: 0,
+        depth: "SURFACE",
+        description: "Section depth is assessed after substantive conversation (SURFACE expected for minimal setup)",
       },
     ],
   },
