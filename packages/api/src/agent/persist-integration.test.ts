@@ -54,7 +54,7 @@ describe("PERSIST integration — LLM response to DB writes", () => {
   }
 
   it("handles clean JSON response", async () => {
-    const events = await runPersist(`
+    const events = await runPersist(`{
       "question_responses": [
         {"section_id": "${sectionIds[0]}", "question_index": 0, "response": "Node.js Hono API"}
       ],
@@ -132,7 +132,7 @@ Here's the extraction:
   });
 
   it("writes multiple items in one persist call", async () => {
-    const events = await runPersist(`
+    const events = await runPersist(`{
       "question_responses": [
         {"section_id": "${sectionIds[0]}", "question_index": 0, "response": "Three-tier architecture"},
         {"section_id": "${sectionIds[0]}", "question_index": 1, "response": "Hono API, React, SQLite"}
@@ -184,7 +184,7 @@ Here's the extraction:
   });
 
   it("handles empty output gracefully", async () => {
-    const events = await runPersist(`
+    const events = await runPersist(`{
       "question_responses": [],
       "depth_assessments": [],
       "flags": [],
@@ -204,7 +204,7 @@ Here's the extraction:
   });
 
   it("rejects invalid section_id without crashing", async () => {
-    const events = await runPersist(`
+    const events = await runPersist(`{
       "question_responses": [
         {"section_id": "nonexistent", "question_index": 0, "response": "Should fail"}
       ],
@@ -230,5 +230,38 @@ Here's the extraction:
     const events = await runPersist("I can't produce JSON right now, sorry!");
     // Should not crash — just no writes
     expect(events.some((e) => e.type === "section_updated")).toBe(false);
+  });
+
+  it("keeps valid items when one item has an invalid enum value", async () => {
+    // This is the exact bug: LLM returns action_item with type: "documentation"
+    // which is not in the enum. Previously this rejected the ENTIRE output.
+    const events = await runPersist(`{
+      "question_responses": [
+        {"section_id": "${sectionIds[0]}", "question_index": 0, "response": "Three-tier architecture"}
+      ],
+      "depth_assessments": [],
+      "flags": [],
+      "dependencies": [],
+      "discoveries": [],
+      "experiments": [],
+      "action_items": [
+        {"title": "Valid item", "type": "technical", "priority": "medium"},
+        {"title": "Bad item", "type": "documentation", "priority": "medium"}
+      ],
+      "cross_practice": [],
+      "section_content": [],
+      "timeline_events": [],
+      "contributing_factors": []
+    }`);
+
+    // Question response should still be written despite the bad action_item
+    const section = db.select().from(schema.sections).where(eq(schema.sections.id, sectionIds[0])).get()!;
+    const responses = section.promptResponses as Record<string, string>;
+    expect(responses["0"]).toBe("Three-tier architecture");
+
+    // Valid action item should be written, invalid one dropped
+    const actions = db.select().from(schema.actionItems).all();
+    expect(actions.some((a) => a.title === "Valid item")).toBe(true);
+    expect(actions.some((a) => a.title === "Bad item")).toBe(false);
   });
 });

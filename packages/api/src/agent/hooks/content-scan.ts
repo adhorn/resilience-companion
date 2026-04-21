@@ -44,25 +44,40 @@ export const codeResultScanHook: SteeringHook = {
   name: "content-scan-code",
   tools: ["read_file", "search_code"],
   afterToolResult(_name: string, _args: Record<string, unknown>, result: string): string {
-    let processed = redactCredentials(result);
+    // Parse JSON first, then redact on parsed content, then re-serialize.
+    // Redacting on raw JSON strings can break escape sequences.
+    try {
+      const parsed = JSON.parse(result);
 
-    // Cap result size to prevent context window bloat
-    if (processed.length > MAX_RESULT_SIZE) {
-      try {
-        const parsed = JSON.parse(processed);
-        // For read_file, truncate the content field
-        if (parsed.content && typeof parsed.content === "string") {
-          const truncated = parsed.content.slice(0, MAX_RESULT_SIZE - 200);
-          parsed.content = truncated + "\n... [truncated — file too large, use line_start/line_end to read specific ranges]";
-          processed = JSON.stringify(parsed);
+      // Redact credentials in content fields
+      if (parsed.content && typeof parsed.content === "string") {
+        parsed.content = redactCredentials(parsed.content);
+      }
+      if (Array.isArray(parsed.matches)) {
+        for (const match of parsed.matches) {
+          if (match.snippet && typeof match.snippet === "string") {
+            match.snippet = redactCredentials(match.snippet);
+          }
         }
-        // For search_code, already limited to 20 matches — just truncate raw if needed
-      } catch {
+      }
+
+      // Cap result size
+      let processed = JSON.stringify(parsed);
+      if (processed.length > MAX_RESULT_SIZE && parsed.content && typeof parsed.content === "string") {
+        const truncated = parsed.content.slice(0, MAX_RESULT_SIZE - 200);
+        parsed.content = truncated + "\n... [truncated — file too large, use line_start/line_end to read specific ranges]";
+        processed = JSON.stringify(parsed);
+      }
+
+      return processed;
+    } catch {
+      // If JSON parse fails, fall back to raw string processing
+      let processed = redactCredentials(result);
+      if (processed.length > MAX_RESULT_SIZE) {
         processed = processed.slice(0, MAX_RESULT_SIZE) + "... [truncated]";
       }
+      return processed;
     }
-
-    return processed;
   },
 };
 

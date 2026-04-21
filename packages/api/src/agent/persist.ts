@@ -166,6 +166,20 @@ export function extractJson(raw: string): string {
   return text;
 }
 
+/** Parse an array leniently — keep valid items, discard invalid ones. */
+function filterValid<T>(arr: unknown, schema: z.ZodType<T>): T[] {
+  if (!Array.isArray(arr)) return [];
+  const results: T[] = [];
+  for (const item of arr) {
+    try {
+      results.push(schema.parse(item)); // .parse() applies defaults
+    } catch {
+      // Invalid item — skip it
+    }
+  }
+  return results;
+}
+
 // --- PERSIST prompt ---
 
 export function buildPersistPrompt(
@@ -675,21 +689,37 @@ export async function* runPersistPhase(
   const systemPrompt = buildPersistPrompt(practiceType, sectionContext);
 
   // Build messages: system prompt + the conversation to extract from
-  const conversationText = conversationMessages
+  // Include the full conversation — the persist LLM needs to see everything
+  // that was discussed to extract it. Truncating loses experiment details,
+  // question answers, and other substantive content.
+  // Cap total context at 30k chars (~7.5k tokens) to stay within budget.
+  const MAX_CONVERSE_CONTEXT = 30_000;
+  const allMessages = conversationMessages
     .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => `${m.role}: ${m.content?.slice(0, 1000) || ""}`)
-    .join("\n\n");
+    .map((m) => `${m.role}: ${m.content || ""}`);
+
+  // If total exceeds budget, keep the most recent messages
+  let conversationText = allMessages.join("\n\n");
+  if (conversationText.length > MAX_CONVERSE_CONTEXT) {
+    // Walk backwards from most recent, keeping messages that fit
+    let kept: string[] = [];
+    let totalLen = 0;
+    for (let i = allMessages.length - 1; i >= 0; i--) {
+      if (totalLen + allMessages[i].length + 2 > MAX_CONVERSE_CONTEXT) break;
+      kept.unshift(allMessages[i]);
+      totalLen += allMessages[i].length + 2;
+    }
+    conversationText = kept.join("\n\n");
+  }
 
   const messages: LLMMessage[] = [
     { role: "system", content: systemPrompt },
-    { role: "user", content: `Here is the conversation from this turn. Extract everything that should be persisted.\n\n${conversationText}` },
-    // Prefill assistant response with '{' to force JSON output without preamble
-    { role: "assistant", content: "{" },
+    { role: "user", content: `Here is the conversation from this turn. Extract everything that should be persisted. Respond with ONLY a JSON object — no preamble, no explanation.\n\n${conversationText}` },
   ];
 
   yield { type: "status", message: "Recording observations..." } as SSEEvent & { persistTokens?: number };
 
-  let jsonContent = "{"; // Matches the prefilled assistant message
+  let jsonContent = "";
   let persistTokens = 0;
 
   try {
@@ -718,13 +748,38 @@ export async function* runPersistPhase(
     rawPreview: cleanJson.slice(0, 1000),
   });
 
-  // Parse and validate
+  // Parse and validate — leniently. Filter out invalid items instead of rejecting everything.
   let parsed: PersistOutput;
   try {
     const raw = JSON.parse(cleanJson);
-    parsed = PersistOutputSchema.parse(raw);
+
+    // Try strict parse first
+    const strictResult = PersistOutputSchema.safeParse(raw);
+    if (strictResult.success) {
+      parsed = strictResult.data;
+    } else {
+      // Lenient: parse each array field individually, filtering out invalid items
+      traceLog("warn", "Persist phase strict validation failed, falling back to lenient parsing", {
+        practiceId,
+        error: strictResult.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+      });
+
+      parsed = {
+        question_responses: filterValid(raw.question_responses, QuestionResponseSchema),
+        section_content: filterValid(raw.section_content, SectionContentSchema),
+        depth_assessments: filterValid(raw.depth_assessments, DepthAssessmentSchema),
+        flags: filterValid(raw.flags, FlagSchema),
+        dependencies: filterValid(raw.dependencies, DependencySchema),
+        discoveries: filterValid(raw.discoveries, DiscoverySchema),
+        experiments: filterValid(raw.experiments, ExperimentSchema),
+        action_items: filterValid(raw.action_items, ActionItemSchema),
+        cross_practice: filterValid(raw.cross_practice, CrossPracticeSchema),
+        timeline_events: filterValid(raw.timeline_events, TimelineEventSchema),
+        contributing_factors: filterValid(raw.contributing_factors, ContributingFactorSchema),
+      } as PersistOutput; // .parse() applies defaults, but TS infers input types
+    }
   } catch (err) {
-    traceLog("error", "Persist phase JSON parse/validation failed", {
+    traceLog("error", "Persist phase JSON parse failed", {
       practiceId,
       error: (err as Error).message,
       rawLength: jsonContent.length,
