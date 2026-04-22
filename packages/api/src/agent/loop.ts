@@ -296,11 +296,15 @@ Adjust your approach:
   // Skip for write slash commands — they already produced JSON output, wrap-up would duplicate it.
   const isSlashWrite = input.displayContent && isWriteSlashCommand(input.displayContent);
   if (!isSlashWrite && (!converseHadContent || (messages.at(-1)?.role === "tool"))) {
+    // Reset client content before wrap-up — prevents previous iteration text from being concatenated
+    if (converseHadContent) {
+      yield { type: "content_reset" } as SSEEvent;
+    }
     const wrapUpSpanId = trace.startLLMCall(MAX_AGENT_ITERATIONS, model);
     try {
       messages.push({
         role: "user",
-        content: "[System: Wrap up your response to the team now — no more tool calls are available.]",
+        content: "[System: Wrap up your response to the team now — no more tool calls are available. Do not repeat what you already said.]",
       });
       const finalStream = llm.chat(messages, []);
       for await (const chunk of finalStream) {
