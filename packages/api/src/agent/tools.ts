@@ -259,7 +259,7 @@ export function executeTool(
       const query = args.query as string;
       const filePattern = args.file_pattern as string | undefined;
 
-      const grepArgs = ["-rn", "--color=never"];
+      const grepArgs = ["-rn", "--color=never", "--exclude-dir=.git"];
       if (filePattern) {
         if (/^[a-zA-Z0-9.*?\/\-_{}]+$/.test(filePattern)) {
           grepArgs.push(`--include=${filePattern}`);

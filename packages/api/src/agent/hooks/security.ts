@@ -21,6 +21,8 @@ const SENSITIVE_PATTERNS = [
   /id_ed25519/,           // SSH keys
   /id_ecdsa/,             // SSH keys
   /\.gnupg\//,            // GPG keys
+  /\.git\//,              // Git internals — remote URLs contain PAT tokens
+  /\.git$/,               // The .git directory itself
 ];
 
 // Patterns that match tokens/secrets in file paths — broader but more likely false positives

@@ -19,6 +19,10 @@ describe("isSensitivePath", () => {
     "id_ed25519",
     "id_ecdsa",
     ".gnupg/secring",
+    ".git/config",
+    ".git/HEAD",
+    ".git/objects/pack/foo",
+    "subdir/.git/config",
   ])("blocks %s", (path) => {
     expect(isSensitivePath(path)).toBe(true);
   });

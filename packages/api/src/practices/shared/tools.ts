@@ -12,6 +12,7 @@ import { getDb, schema } from "../../db/index.js";
 import type { LLMToolDef } from "../../llm/index.js";
 import type { PracticeType } from "../../agent/practice.js";
 import { safeJsonParse } from "../../validation.js";
+import { sanitizeSummary, sanitizeDiscoveries, validateLearningQuality, validateEngagementPattern } from "../../agent/summary-security.js";
 
 // --- Tool definitions ---
 // These are the same for every practice; only descriptions vary slightly.
@@ -555,16 +556,15 @@ export function executeSharedTool(
     }
 
     case "write_session_summary": {
-      const updates: Record<string, unknown> = { summary: args.summary as string };
+      const sanitizedSummary = sanitizeSummary(args.summary as string);
+      const updates: Record<string, unknown> = { summary: sanitizedSummary };
       if (args.discoveries && Array.isArray(args.discoveries) && (args.discoveries as string[]).length > 0) {
-        updates.discoveries = args.discoveries;
+        updates.discoveries = sanitizeDiscoveries(args.discoveries as string[]);
       }
-      if (args.learning_quality) {
-        updates.learningQuality = args.learning_quality as string;
-      }
-      if (args.engagement_pattern) {
-        updates.engagementPattern = args.engagement_pattern as string;
-      }
+      const lq = validateLearningQuality(args.learning_quality);
+      if (lq) updates.learningQuality = lq;
+      const ep = validateEngagementPattern(args.engagement_pattern);
+      if (ep) updates.engagementPattern = ep;
       db.update(schema.sessions)
         .set(updates)
         .where(eq(schema.sessions.id, sessionId))
