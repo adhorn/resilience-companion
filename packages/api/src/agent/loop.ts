@@ -294,7 +294,36 @@ Adjust your approach:
     }
   }
 
-  // Emit message_end before any post-loop processing
+  // If the loop ended mid-tool-exploration (last message is a tool result),
+  // give the LLM one final text-only turn to wrap up coherently.
+  // Skip if the agent already produced a text response (no tool calls in final iteration).
+  if (messages.at(-1)?.role === "tool") {
+    try {
+      messages.push({
+        role: "user",
+        content: "[System: Wrap up your response to the team now. Do not repeat what you already said.]",
+      });
+      const wrapUpSpanId = trace.startLLMCall(MAX_AGENT_ITERATIONS, model);
+      const finalStream = llm.chat(messages, []);
+      for await (const chunk of finalStream) {
+        if (chunk.type === "content") {
+          const text = chunk.content!;
+          if (!text.match(/<invoke\s|<parameter\s|<\/invoke>|<\/parameter>/)) {
+            converseFullText += text;
+            yield { type: "content_delta", content: text };
+          }
+        }
+        if (chunk.type === "done" && chunk.usage) {
+          totalUsage += chunk.usage.promptTokens + chunk.usage.completionTokens;
+          trace.endLLMCall(wrapUpSpanId, chunk.usage);
+        }
+      }
+    } catch (err) {
+      const errMsg = (err as Error).message || "Unknown error";
+      log("error", "Agent wrap-up error", { error: errMsg, traceId: trace.id });
+    }
+  }
+
   finalizeTrace(trace);
   yield { type: "message_end", tokenUsage: totalUsage };
 
