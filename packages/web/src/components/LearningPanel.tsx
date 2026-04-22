@@ -6,6 +6,7 @@ import { PRIORITY_COLORS } from "../lib/style-constants";
 interface Props {
   practiceType: "orr" | "incident";
   practiceId: string;
+  refreshKey?: number;
 }
 
 const TARGET_PRACTICE_LABELS: Record<string, string> = {
@@ -22,7 +23,7 @@ const DEPTH_BORDER = ["border-gray-200", "border-red-200", "border-yellow-200", 
 const DEPTH_TEXT = ["text-gray-400", "text-red-600", "text-yellow-600", "text-green-600"];
 const DEPTH_BAR = ["bg-gray-300", "bg-red-400", "bg-yellow-400", "bg-green-500"];
 
-export function LearningPanel({ practiceType, practiceId }: Props) {
+export function LearningPanel({ practiceType, practiceId, refreshKey }: Props) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +40,7 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   if (loading) {
     return <div className="p-6 text-gray-500 text-sm">Loading learning signals...</div>;
@@ -49,7 +50,7 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
   }
 
   const { sections, discoveries, crossPracticeLinks, actionItems, totals } = data;
-  const hasSignals = totals.discoveries > 0 || totals.strengths > 0 || totals.crossPracticeLinks > 0 || actionItems.length > 0 || totals.experiments > 0;
+  const hasSignals = totals.totalInsights > 0 || totals.totalRisks > 0 || totals.crossPracticeLinks > 0 || actionItems.length > 0 || totals.experiments > 0 || sections.some((s: any) => s.depth > 0);
 
   // Group discoveries by section
   const discoveriesBySection = new Map<string | null, any[]>();
@@ -63,11 +64,11 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
     <div className="flex-1 overflow-y-auto">
       {/* Header: summary counts + refresh */}
       <div className="px-4 py-2 border-b border-gray-200 bg-white flex items-center gap-4 text-xs">
-        <span className="text-green-600">{totals.strengths} strength{totals.strengths !== 1 ? "s" : ""}</span>
+        <span className="text-green-600">{totals.depthCoverage} sections at moderate+ depth</span>
         <span className="text-gray-300">|</span>
-        <span className="text-gray-500">{totals.discoveries} surprise{totals.discoveries !== 1 ? "s" : ""}</span>
+        <span className="text-red-500">{totals.totalRisks} open risk{totals.totalRisks !== 1 ? "s" : ""}</span>
         <span className="text-gray-300">|</span>
-        <span className="text-gray-500">{totals.gaps} gap{totals.gaps !== 1 ? "s" : ""}</span>
+        <span className="text-amber-500">{totals.totalInsights} insight{totals.totalInsights !== 1 ? "s" : ""}</span>
         <span className="text-gray-300">|</span>
         <span className="text-gray-500">{totals.crossPracticeLinks} connection{totals.crossPracticeLinks !== 1 ? "s" : ""}</span>
         <span className="text-gray-300">|</span>
@@ -96,28 +97,28 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
           {/* ── Signal radars: Strengths, Surprises, Gaps ── */}
           <div className="grid grid-cols-3 gap-2">
             <SignalRadar
-              title="Strengths"
-              axes={sections.map((s: any) => ({ label: s.title, value: s.strengths }))}
+              title="Depth"
+              axes={sections.map((s: any) => ({ label: s.title, value: s.depth }))}
               color={RADAR_COLORS.strengths}
             />
             <SignalRadar
-              title="Surprises"
-              axes={sections.map((s: any) => ({ label: s.title, value: s.discoveries }))}
-              color={RADAR_COLORS.surprises}
+              title="Risks"
+              axes={sections.map((s: any) => ({ label: s.title, value: s.riskScore }))}
+              color={RADAR_COLORS.gaps}
             />
             <SignalRadar
-              title="Gaps"
-              axes={sections.map((s: any) => ({ label: s.title, value: s.gaps }))}
-              color={RADAR_COLORS.gaps}
+              title="Insights"
+              axes={sections.map((s: any) => ({ label: s.title, value: s.insightCount }))}
+              color={RADAR_COLORS.surprises}
             />
           </div>
           <RadarLegend sections={sections.map((s: any) => ({ position: s.position, title: s.title }))} />
 
           {/* ── Stats + coverage ── */}
           <div className="grid grid-cols-4 gap-2">
-            <StatCard label="Strengths" value={totals.strengths} color="green" />
-            <StatCard label="Surprises" value={totals.discoveries} color="amber" />
-            <StatCard label="Gaps" value={totals.gaps} color="red" />
+            <StatCard label="Depth" value={totals.depthCoverage} color="green" />
+            <StatCard label="Risks" value={totals.totalRisks} color="red" />
+            <StatCard label="Insights" value={totals.totalInsights} color="amber" />
             <StatCard label="Connections" value={totals.crossPracticeLinks} color="indigo" />
           </div>
 
