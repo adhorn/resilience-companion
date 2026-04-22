@@ -24,8 +24,9 @@ describe("learning routes", () => {
 
       expect(learning.sections).toHaveLength(3);
       expect(learning.sections[0]).toHaveProperty("depth");
-      expect(learning.sections[0]).toHaveProperty("gaps");
-      expect(learning.sections[0]).toHaveProperty("strengths");
+      expect(learning.sections[0]).toHaveProperty("riskScore");
+      expect(learning.sections[0]).toHaveProperty("riskCount");
+      expect(learning.sections[0]).toHaveProperty("insightCount");
       expect(learning.sections[0]).toHaveProperty("codeSourced");
       expect(learning.sections[0]).toHaveProperty("questionsAnswered");
       expect(learning.sections[0]).toHaveProperty("questionsTotal");
@@ -150,8 +151,8 @@ describe("learning routes", () => {
       const learning = body.learning;
 
       expect(learning.sections).toHaveLength(3);
-      expect(learning.totals).toHaveProperty("discoveries");
-      expect(learning.totals).toHaveProperty("gaps");
+      expect(learning.totals).toHaveProperty("totalInsights");
+      expect(learning.totals).toHaveProperty("totalRisks");
       expect(learning.totals).toHaveProperty("experiments");
     });
   });
