@@ -157,9 +157,8 @@ Adjust your approach:
       break;
     }
 
-    if (iteration > 0 && previousIterationHadContent) {
-      yield { type: "content_reset" } as SSEEvent;
-    }
+    // content_reset was removed — it cleared unique content, not just duplicates.
+    // The wrap-up prompt says "do not repeat" to handle repetition at the LLM level.
 
     let fullContent = "";
     const pendingToolCalls: Array<{ id: string; name: string; args: string }> = [];
@@ -296,10 +295,7 @@ Adjust your approach:
   // Skip for write slash commands — they already produced JSON output, wrap-up would duplicate it.
   const isSlashWrite = input.displayContent && isWriteSlashCommand(input.displayContent);
   if (!isSlashWrite && (!converseHadContent || (messages.at(-1)?.role === "tool"))) {
-    // Reset client content before wrap-up — prevents previous iteration text from being concatenated
-    if (converseHadContent) {
-      yield { type: "content_reset" } as SSEEvent;
-    }
+    // No content_reset here — it caused real content loss (#49)
     const wrapUpSpanId = trace.startLLMCall(MAX_AGENT_ITERATIONS, model);
     try {
       messages.push({
@@ -430,7 +426,7 @@ async function* runAgentLegacy(input: AgentInput): AsyncGenerator<SSEEvent> {
 
   for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration++) {
     if (iteration > 0 && cumulativeTokens() >= MAX_SESSION_TOKENS) break;
-    if (iteration > 0 && previousIterationHadContent) yield { type: "content_reset" } as SSEEvent;
+    // content_reset removed — caused content loss (#49)
 
     let fullContent = "";
     const pendingToolCalls: Array<{ id: string; name: string; args: string }> = [];
