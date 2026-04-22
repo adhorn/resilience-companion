@@ -128,40 +128,43 @@ export function buildBaseContext(
     .filter((s) => s.status === "COMPLETED" && s.summary);
   const sessionSummaries = completedSessions.map((s) => s.summary!);
 
-  // Load relevant teaching moments and case studies (match by active section tags)
-  let teachingMoments: TeachingMomentSummary[] = [];
-  let caseStudies: CaseStudySummary[] = [];
-  if (activeSection) {
-    const matchesSection = (tags: unknown) => {
-      const parsed = safeJsonParse<string[]>(tags, []);
-      return parsed.some((tag: string) =>
-        activeSection!.title.toLowerCase().includes(tag.toLowerCase()) ||
-        tag.toLowerCase().includes(activeSection!.title.toLowerCase()),
-      );
-    };
+  // Load a few relevant teaching moments and case studies into context.
+  // Prefer section-matched, but always include some so the agent has incidents to reference.
+  // The agent can also search for more via query_case_studies / query_teaching_moments tools.
+  const matchesSection = activeSection ? (tags: unknown) => {
+    const parsed = safeJsonParse<string[]>(tags, []);
+    return parsed.some((tag: string) =>
+      activeSection.title.toLowerCase().includes(tag.toLowerCase()) ||
+      tag.toLowerCase().includes(activeSection.title.toLowerCase()),
+    );
+  } : () => true; // no active section → include all
 
-    teachingMoments = getPublishedTeachingMoments()
-      .filter((tm) => matchesSection(tm.sectionTags))
-      .slice(0, 5)
-      .map((tm) => ({
-        title: tm.title,
-        content: tm.content,
-        systemPattern: tm.systemPattern,
-        failureMode: tm.failureMode,
-      }));
+  const allTM = getPublishedTeachingMoments();
+  const matchedTM = allTM.filter((tm) => matchesSection(tm.sectionTags));
+  // Prefer matched, pad with unmatched if needed, cap at 3
+  const teachingMoments: TeachingMomentSummary[] = [
+    ...matchedTM.slice(0, 3),
+    ...(matchedTM.length < 3 ? allTM.filter((tm) => !matchedTM.includes(tm)).slice(0, 3 - matchedTM.length) : []),
+  ].map((tm) => ({
+    title: tm.title,
+    content: tm.content,
+    systemPattern: tm.systemPattern,
+    failureMode: tm.failureMode,
+  }));
 
-    caseStudies = getAllCaseStudies()
-      .filter((cs) => matchesSection(cs.sectionTags))
-      .slice(0, 3)
-      .map((cs) => ({
-        title: cs.title,
-        company: cs.company,
-        year: cs.year,
-        summary: cs.summary,
-        lessons: safeJsonParse(cs.lessons, []),
-        failureCategory: cs.failureCategory,
-      }));
-  }
+  const allCS = getAllCaseStudies();
+  const matchedCS = allCS.filter((cs) => matchesSection(cs.sectionTags));
+  const caseStudies: CaseStudySummary[] = [
+    ...matchedCS.slice(0, 2),
+    ...(matchedCS.length < 2 ? allCS.filter((cs) => !matchedCS.includes(cs)).slice(0, 2 - matchedCS.length) : []),
+  ].map((cs) => ({
+    title: cs.title,
+    company: cs.company,
+    year: cs.year,
+    summary: cs.summary,
+    lessons: safeJsonParse(cs.lessons, []),
+    failureCategory: cs.failureCategory,
+  }));
 
   return {
     sections,
