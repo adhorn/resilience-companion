@@ -105,18 +105,23 @@ const CrossPracticeSchema = z.object({
   rationale: z.string().min(1),
 });
 
+/**
+ * PERSIST phase only extracts the core document data on every turn:
+ * - question_responses: what the team answered
+ * - section_content: cross-cutting observations
+ * - depth_assessments: how deep the understanding is
+ * - flags: risks, gaps, strengths identified
+ *
+ * Everything else (experiments, action items, discoveries, dependencies,
+ * cross-practice suggestions, timeline events, contributing factors)
+ * comes from explicit slash commands only. This prevents the noise
+ * and duplication that occurs when every turn tries to extract 11 categories.
+ */
 export const PersistOutputSchema = z.object({
   question_responses: z.array(QuestionResponseSchema).default([]),
   section_content: z.array(SectionContentSchema).default([]),
   depth_assessments: z.array(DepthAssessmentSchema).default([]),
   flags: z.array(FlagSchema).default([]),
-  dependencies: z.array(DependencySchema).default([]),
-  discoveries: z.array(DiscoverySchema).default([]),
-  experiments: z.array(ExperimentSchema).default([]),
-  action_items: z.array(ActionItemSchema).default([]),
-  cross_practice: z.array(CrossPracticeSchema).default([]),
-  timeline_events: z.array(TimelineEventSchema).default([]),
-  contributing_factors: z.array(ContributingFactorSchema).default([]),
 });
 
 export type PersistOutput = z.infer<typeof PersistOutputSchema>;
@@ -186,35 +191,22 @@ export function buildPersistPrompt(
   practiceType: PracticeType,
   sectionContext: string,
 ): string {
-  const practiceSpecific = practiceType === "orr"
-    ? `
-- If dependencies were mentioned (databases, services, APIs, queues), include them in "dependencies".
-- Do NOT include "timeline_events" or "contributing_factors" — those are for incident analysis only.`
-    : `
-- If timeline events were discussed, include them in "timeline_events" with ISO timestamps.
-- If contributing factors were identified, include them in "contributing_factors" with category.
-- Do NOT include "dependencies" — those are for ORR only.`;
+  return `You are the persistence layer for a resilience review session. Extract ONLY the core document data from the conversation and output structured JSON.
 
-  return `You are the persistence layer for a resilience review session. Your ONLY job is to extract everything that should be saved from the conversation and output structured JSON.
+## What to extract
 
-## Rules
+- **question_responses**: For each question the team answered, include section_id, question_index (0-based), and the response text. If code was the source (not the team's memory), set source: "code" and include code_ref.
+- **section_content**: Cross-cutting observations that span multiple questions. Use sparingly.
+- **depth_assessments**: If the team answered enough questions to assess depth:
+  - SURFACE: recites what exists, can't explain why or predict failures.
+  - MODERATE: traces paths, explains design reasoning for known scenarios.
+  - DEEP: predicts novel failures, connects patterns across sections.
+  - If only 1-2 questions answered, omit — too early.
+- **flags**: Risks, gaps, or strengths identified. For RISK: include severity (HIGH/MEDIUM/LOW) and deadline.
 
-- For each question the team answered, include a "question_responses" entry with section_id, question_index (0-based), and the response text.
-- Use "section_content" ONLY for cross-cutting observations that span multiple questions.
-- If you can assess a section's depth based on the discussion, include a "depth_assessments" entry:
-  - SURFACE: team recites what exists but can't explain why or predict beyond documented failures.
-  - MODERATE: team retrieves specifics for known scenarios, traces paths, explains design reasoning.
-  - DEEP: team predicts novel failure modes, explains why designs work, connects patterns across sections.
-  - If only 1-2 questions answered in a section, it's too early to assess — omit.
-- For RISK flags, always include severity and deadline:
-  - HIGH: could cause significant customer impact. Deadline within 2 weeks.
-  - MEDIUM: meaningful operational gap. Deadline within 1-2 months.
-  - LOW: worth addressing but not urgent. Deadline within a quarter.
-- If code was the source of an answer (not the team's memory), set source: "code" and include code_ref.
-- For experiments, always include a hypothesis: "When X happens, we expect Y." Check the "Already Suggested Experiments" list — do NOT suggest experiments that test the same thing even if worded differently.
-- For dependencies, check the "Already Recorded Dependencies" list — do NOT record dependencies that are the same system even if named differently (e.g., "SQLite" and "SQLite database" are the same).
-- For discoveries, be specific: not "learned about architecture" but "team discovered their retry logic has no jitter."
-${practiceSpecific}
+## What NOT to extract
+
+Do NOT include experiments, action items, discoveries, dependencies, cross-practice suggestions, timeline events, or contributing factors. Those come from explicit slash commands only.
 
 ## Current Section State
 
@@ -222,20 +214,13 @@ ${sectionContext}
 
 ## Output Format
 
-Respond with ONLY a JSON object matching this structure. No markdown, no explanation, just JSON:
+Respond with ONLY a JSON object. No markdown, no explanation, just JSON:
 
 {
   "question_responses": [{ "section_id": "...", "question_index": 0, "response": "..." }],
   "section_content": [{ "section_id": "...", "content": "...", "append": true }],
   "depth_assessments": [{ "section_id": "...", "depth": "MODERATE", "rationale": "..." }],
-  "flags": [{ "section_id": "...", "type": "RISK", "note": "...", "severity": "HIGH", "deadline": "2026-05-01" }],
-  "dependencies": [{ "name": "...", "type": "database", "criticality": "critical" }],
-  "discoveries": [{ "text": "...", "section_id": "..." }],
-  "experiments": [{ "type": "chaos_experiment", "title": "...", "hypothesis": "...", "rationale": "...", "priority": "high" }],
-  "action_items": [{ "title": "...", "type": "technical", "priority": "medium" }],
-  "cross_practice": [{ "target_practice": "chaos_engineering", "suggestion": "...", "rationale": "..." }],
-  "timeline_events": [{ "timestamp": "...", "description": "...", "event_type": "detection" }],
-  "contributing_factors": [{ "category": "technical", "description": "...", "is_systemic": false }]
+  "flags": [{ "section_id": "...", "type": "RISK", "note": "...", "severity": "HIGH", "deadline": "2026-05-01" }]
 }
 
 Use empty arrays [] for categories with nothing to persist. If nothing substantive was discussed, return all empty arrays.`;
@@ -276,29 +261,6 @@ export function buildSectionContext(
 Depth: ${s.depth} | Flags: ${flags.length}
 ${qStatus}`;
   }).join("\n\n");
-
-  // Include existing experiments and dependencies so the LLM doesn't re-suggest them
-  const existingExps = db.select().from(schema.experimentSuggestions)
-    .where(and(
-      eq(schema.experimentSuggestions.sourcePracticeType, practiceType),
-      eq(schema.experimentSuggestions.sourcePracticeId, practiceId),
-    )).all();
-
-  if (existingExps.length > 0) {
-    context += "\n\n### Already Suggested Experiments (do NOT re-suggest these or similar variants)\n";
-    context += existingExps.map((e) => `- **${e.title}** (${e.type}, ${e.status}): ${e.hypothesis}`).join("\n");
-  }
-
-  if (practiceType === "orr") {
-    const existingDeps = db.select().from(schema.dependencies)
-      .where(eq(schema.dependencies.orrId, practiceId))
-      .all();
-
-    if (existingDeps.length > 0) {
-      context += "\n\n### Already Recorded Dependencies (do NOT re-record these)\n";
-      context += existingDeps.map((d) => `- ${d.name} (${d.type})`).join("\n");
-    }
-  }
 
   return context;
 }
@@ -407,174 +369,10 @@ export function executePersist(
     result.writtenItems++;
   }
 
-  // --- Dependencies (ORR only) ---
-  if (practiceType === "orr") {
-    // Load all existing deps once for fuzzy dedup
-    const existingDeps = db.select().from(schema.dependencies)
-      .where(eq(schema.dependencies.orrId, practiceId))
-      .all();
-
-    for (const dep of output.dependencies) {
-      // Fuzzy dedup: normalize names, check substring match
-      const normNew = dep.name.toLowerCase().replace(/\s*\([^)]*\)/g, "").trim();
-      const isDuplicate = existingDeps.some((e) => {
-        const normExisting = e.name.toLowerCase().replace(/\s*\([^)]*\)/g, "").trim();
-        return normExisting === normNew
-          || normExisting.includes(normNew)
-          || normNew.includes(normExisting);
-      });
-      if (isDuplicate) continue;
-
-      db.insert(schema.dependencies).values({
-        id: nanoid(),
-        orrId: practiceId,
-        sectionId: dep.section_id || null,
-        name: dep.name,
-        type: dep.type as any,
-        direction: (dep.direction as any) || "outbound",
-        criticality: (dep.criticality as any) || "important",
-        hasFallback: dep.has_fallback ? 1 : 0,
-        fallbackDescription: dep.fallback_description || null,
-        notes: dep.notes || null,
-        createdAt: now,
-      }).run();
-
-      result.dataUpdates.push("record_dependency");
-      result.writtenItems++;
-    }
-  }
-
-  // --- Discoveries ---
-  for (const disc of output.discoveries) {
-    // Dedup
-    const existing = db.select().from(schema.discoveries)
-      .where(and(
-        eq(schema.discoveries.practiceType, practiceType),
-        eq(schema.discoveries.practiceId, practiceId),
-        eq(schema.discoveries.text, disc.text),
-      )).get();
-    if (existing) continue;
-
-    db.insert(schema.discoveries).values({
-      id: nanoid(),
-      practiceType,
-      practiceId,
-      sectionId: disc.section_id || null,
-      sessionId,
-      text: disc.text,
-      source: disc.source || "conversation",
-      createdAt: now,
-    }).run();
-
-    result.dataUpdates.push("record_discovery");
-    result.writtenItems++;
-  }
-
-  // --- Action items ---
-  for (const ai of output.action_items) {
-    // Dedup by title
-    const existing = db.select().from(schema.actionItems)
-      .where(and(
-        eq(schema.actionItems.practiceType, practiceType),
-        eq(schema.actionItems.practiceId, practiceId),
-        eq(schema.actionItems.title, ai.title),
-      )).get();
-    if (existing) continue;
-
-    db.insert(schema.actionItems).values({
-      id: nanoid(),
-      practiceType,
-      practiceId,
-      title: ai.title,
-      owner: ai.owner || null,
-      dueDate: ai.due_date || null,
-      priority: ai.priority || "medium",
-      type: ai.type,
-      status: "open",
-      createdAt: now,
-    }).run();
-
-    result.dataUpdates.push("record_action_item");
-    result.writtenItems++;
-  }
-
-  // --- Experiments ---
-  for (const exp of output.experiments) {
-    // Need service — reuse the existing suggest_experiment logic
-    // For now, delegate to the existing tool executor
-    const expResult = executeExperimentFromPersist(exp, practiceType, practiceId, now);
-    if (expResult.success) {
-      result.dataUpdates.push("suggest_experiment");
-      result.writtenItems++;
-    } else if (expResult.error) {
-      result.errors.push(expResult.error);
-    }
-  }
-
-  // --- Cross-practice suggestions ---
-  for (const cp of output.cross_practice) {
-    const suggId = nanoid();
-    let linkedPracticeId: string | null = null;
-    if (practiceType === "orr" && cp.target_practice === "orr") {
-      const sourceOrr = db.select({ parentOrrId: schema.orrs.parentOrrId })
-        .from(schema.orrs).where(eq(schema.orrs.id, practiceId)).get();
-      if (sourceOrr?.parentOrrId) linkedPracticeId = sourceOrr.parentOrrId;
-    }
-
-    db.insert(schema.crossPracticeSuggestions).values({
-      id: suggId,
-      sourcePracticeType: practiceType,
-      sourcePracticeId: practiceId,
-      targetPracticeType: cp.target_practice as any,
-      suggestion: cp.suggestion,
-      rationale: cp.rationale,
-      linkedPracticeId,
-      createdAt: now,
-    }).run();
-
-    result.dataUpdates.push("suggest_cross_practice_action");
-    result.writtenItems++;
-  }
-
-  // --- Timeline events (incident only) ---
-  if (practiceType === "incident") {
-    for (const te of output.timeline_events) {
-      const position = db.select().from(schema.timelineEvents)
-        .where(eq(schema.timelineEvents.incidentId, practiceId))
-        .all().length;
-
-      db.insert(schema.timelineEvents).values({
-        id: nanoid(),
-        incidentId: practiceId,
-        position,
-        timestamp: te.timestamp,
-        description: te.description,
-        evidence: te.evidence || null,
-        actor: te.actor || null,
-        eventType: (te.event_type as any) || "other",
-        createdAt: now,
-      }).run();
-
-      result.dataUpdates.push("record_timeline_event");
-      result.writtenItems++;
-    }
-
-    // --- Contributing factors (incident only) ---
-    for (const cf of output.contributing_factors) {
-      db.insert(schema.contributingFactors).values({
-        id: nanoid(),
-        incidentId: practiceId,
-        category: cf.category as any,
-        description: cf.description,
-        context: cf.context || null,
-        isSystemic: cf.is_systemic,
-        createdAt: now,
-      }).run();
-
-      result.dataUpdates.push("record_contributing_factor");
-      result.writtenItems++;
-    }
-  }
+  // Dependencies, discoveries, experiments, action items, cross-practice suggestions,
+  // timeline events, and contributing factors are NOT extracted by the per-turn PERSIST phase.
+  // They come exclusively from explicit slash commands (/experiments, /dependencies, /learning, etc.).
+  // This prevents noise and duplication from every turn trying to extract 11 categories.
 
   traceLog("info", "Persist phase completed", {
     practiceType, practiceId, sessionId,
@@ -769,14 +567,7 @@ export async function* runPersistPhase(
         section_content: filterValid(raw.section_content, SectionContentSchema),
         depth_assessments: filterValid(raw.depth_assessments, DepthAssessmentSchema),
         flags: filterValid(raw.flags, FlagSchema),
-        dependencies: filterValid(raw.dependencies, DependencySchema),
-        discoveries: filterValid(raw.discoveries, DiscoverySchema),
-        experiments: filterValid(raw.experiments, ExperimentSchema),
-        action_items: filterValid(raw.action_items, ActionItemSchema),
-        cross_practice: filterValid(raw.cross_practice, CrossPracticeSchema),
-        timeline_events: filterValid(raw.timeline_events, TimelineEventSchema),
-        contributing_factors: filterValid(raw.contributing_factors, ContributingFactorSchema),
-      } as PersistOutput; // .parse() applies defaults, but TS infers input types
+      } as PersistOutput;
     }
   } catch (err) {
     traceLog("error", "Persist phase JSON parse failed", {
@@ -794,9 +585,6 @@ export async function* runPersistPhase(
     sectionContent: parsed.section_content.length,
     depthAssessments: parsed.depth_assessments.length,
     flags: parsed.flags.length,
-    dependencies: parsed.dependencies.length,
-    discoveries: parsed.discoveries.length,
-    experiments: parsed.experiments.length,
   });
 
   // Execute deterministic writes

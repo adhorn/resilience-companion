@@ -131,7 +131,7 @@ Here's the extraction:
     expect(responses["1"]).toBe("PostgreSQL and Redis");
   });
 
-  it("writes multiple items in one persist call", async () => {
+  it("writes question responses, depth, and flags in one persist call", async () => {
     const events = await runPersist(`{
       "question_responses": [
         {"section_id": "${sectionIds[0]}", "question_index": 0, "response": "Three-tier architecture"},
@@ -142,19 +142,7 @@ Here's the extraction:
       ],
       "flags": [
         {"section_id": "${sectionIds[0]}", "type": "GAP", "note": "No backup strategy"}
-      ],
-      "dependencies": [
-        {"name": "Redis", "type": "cache", "criticality": "important"}
-      ],
-      "discoveries": [
-        {"text": "Team discovered retry has no jitter"}
-      ],
-      "experiments": [],
-      "action_items": [],
-      "cross_practice": [],
-      "section_content": [],
-      "timeline_events": [],
-      "contributing_factors": []
+      ]
     }`);
 
     // Check question responses
@@ -170,17 +158,47 @@ Here's the extraction:
     const flags = section.flags as any[];
     expect(flags.some((f: any) => f.note === "No backup strategy")).toBe(true);
 
-    // Check dependency
-    const deps = db.select().from(schema.dependencies).where(eq(schema.dependencies.orrId, orrId)).all();
-    expect(deps.some((d) => d.name === "Redis")).toBe(true);
-
-    // Check discovery
-    const discoveries = db.select().from(schema.discoveries).all();
-    expect(discoveries.some((d) => d.text === "Team discovered retry has no jitter")).toBe(true);
-
     // Check SSE events were emitted
     const sectionUpdates = events.filter((e) => e.type === "section_updated");
     expect(sectionUpdates.length).toBeGreaterThan(0);
+  });
+
+  it("ignores experiments/dependencies/discoveries from LLM — those come from slash commands only", async () => {
+    const events = await runPersist(`{
+      "question_responses": [
+        {"section_id": "${sectionIds[0]}", "question_index": 0, "response": "The architecture is..."}
+      ],
+      "dependencies": [
+        {"name": "Redis", "type": "cache", "criticality": "important"}
+      ],
+      "discoveries": [
+        {"text": "Team discovered retry has no jitter"}
+      ],
+      "experiments": [
+        {"type": "chaos_experiment", "title": "Test", "hypothesis": "H", "rationale": "R", "priority": "high"}
+      ],
+      "action_items": [
+        {"title": "Do something", "type": "technical"}
+      ]
+    }`);
+
+    // Question response should persist
+    const section = db.select().from(schema.sections).where(eq(schema.sections.id, sectionIds[0])).get()!;
+    const responses = section.promptResponses as Record<string, string>;
+    expect(responses["0"]).toBe("The architecture is...");
+
+    // But dependencies, discoveries, experiments, action items should NOT be written
+    const deps = db.select().from(schema.dependencies).where(eq(schema.dependencies.orrId, orrId)).all();
+    expect(deps).toHaveLength(0);
+
+    const discoveries = db.select().from(schema.discoveries).all();
+    expect(discoveries).toHaveLength(0);
+
+    const experiments = db.select().from(schema.experimentSuggestions).all();
+    expect(experiments).toHaveLength(0);
+
+    const actions = db.select().from(schema.actionItems).all();
+    expect(actions).toHaveLength(0);
   });
 
   it("handles empty output gracefully", async () => {
@@ -233,35 +251,27 @@ Here's the extraction:
   });
 
   it("keeps valid items when one item has an invalid enum value", async () => {
-    // This is the exact bug: LLM returns action_item with type: "documentation"
-    // which is not in the enum. Previously this rejected the ENTIRE output.
+    // LLM returns a flag with an invalid type. Lenient parsing should keep
+    // the valid question_response and drop the bad flag.
     const events = await runPersist(`{
       "question_responses": [
         {"section_id": "${sectionIds[0]}", "question_index": 0, "response": "Three-tier architecture"}
       ],
       "depth_assessments": [],
-      "flags": [],
-      "dependencies": [],
-      "discoveries": [],
-      "experiments": [],
-      "action_items": [
-        {"title": "Valid item", "type": "technical", "priority": "medium"},
-        {"title": "Bad item", "type": "documentation", "priority": "medium"}
-      ],
-      "cross_practice": [],
-      "section_content": [],
-      "timeline_events": [],
-      "contributing_factors": []
+      "flags": [
+        {"section_id": "${sectionIds[0]}", "type": "RISK", "note": "Valid flag", "severity": "HIGH"},
+        {"section_id": "${sectionIds[0]}", "type": "DANGER", "note": "Invalid flag type"}
+      ]
     }`);
 
-    // Question response should still be written despite the bad action_item
+    // Question response should persist despite the bad flag
     const section = db.select().from(schema.sections).where(eq(schema.sections.id, sectionIds[0])).get()!;
     const responses = section.promptResponses as Record<string, string>;
     expect(responses["0"]).toBe("Three-tier architecture");
 
-    // Valid action item should be written, invalid one dropped
-    const actions = db.select().from(schema.actionItems).all();
-    expect(actions.some((a) => a.title === "Valid item")).toBe(true);
-    expect(actions.some((a) => a.title === "Bad item")).toBe(false);
+    // Valid flag should be written, invalid one dropped
+    const flags = section.flags as any[];
+    expect(flags.some((f: any) => f.note === "Valid flag")).toBe(true);
+    expect(flags.some((f: any) => f.note === "Invalid flag type")).toBe(false);
   });
 });
