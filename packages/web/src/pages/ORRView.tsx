@@ -156,6 +156,9 @@ export function ORRView() {
   const [pendingSuggestions, setPendingSuggestions] = useState<any[]>([]);
   const [featureSuggestions, setFeatureSuggestions] = useState<any[]>([]);
 
+  // Learning panel refresh counter — incremented on reloadData to trigger re-fetch
+  const [learningRefreshKey, setLearningRefreshKey] = useState(0);
+
   // Repo connection
   const [showRepoForm, setShowRepoForm] = useState(false);
   const [repoUrl, setRepoUrl] = useState("");
@@ -172,6 +175,7 @@ export function ORRView() {
     if (res.childOrrs) setChildOrrs(res.childOrrs);
     if (res.pendingSuggestions) setPendingSuggestions(res.pendingSuggestions);
     if (res.featureSuggestions) setFeatureSuggestions(res.featureSuggestions);
+    setLearningRefreshKey((k) => k + 1);
   }, [id]);
 
   const saveResponses = useCallback(
@@ -615,7 +619,7 @@ export function ORRView() {
         </div>
 
         {activeTab === "learning" ? (
-          <LearningPanel practiceType="orr" practiceId={id!} />
+          <LearningPanel practiceType="orr" practiceId={id!} refreshKey={learningRefreshKey} />
         ) : activeTab === "dependencies" ? (
           <DependenciesPanel orrId={id!} serviceName={orr.serviceName} sections={sections} />
         ) : activeTab === "experiments" ? (

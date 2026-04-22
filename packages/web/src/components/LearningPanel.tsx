@@ -6,6 +6,8 @@ import { PRIORITY_COLORS } from "../lib/style-constants";
 interface Props {
   practiceType: "orr" | "incident";
   practiceId: string;
+  /** Increment to trigger a data refresh (e.g. after /learning records discoveries) */
+  refreshKey?: number;
 }
 
 const TARGET_PRACTICE_LABELS: Record<string, string> = {
@@ -22,7 +24,7 @@ const DEPTH_BORDER = ["border-gray-200", "border-red-200", "border-yellow-200", 
 const DEPTH_TEXT = ["text-gray-400", "text-red-600", "text-yellow-600", "text-green-600"];
 const DEPTH_BAR = ["bg-gray-300", "bg-red-400", "bg-yellow-400", "bg-green-500"];
 
-export function LearningPanel({ practiceType, practiceId }: Props) {
+export function LearningPanel({ practiceType, practiceId, refreshKey }: Props) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +41,7 @@ export function LearningPanel({ practiceType, practiceId }: Props) {
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   if (loading) {
     return <div className="p-6 text-gray-500 text-sm">Loading learning signals...</div>;

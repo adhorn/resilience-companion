@@ -64,6 +64,7 @@ export function IncidentView() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("analysis");
+  const [learningRefreshKey, setLearningRefreshKey] = useState(0);
 
   const reloadData = useCallback(async () => {
     if (!id) return;
@@ -73,6 +74,7 @@ export function IncidentView() {
     setTimelineEvents(res.timelineEvents || []);
     setContributingFactors(res.contributingFactors || []);
     setActionItems(res.actionItems || []);
+    setLearningRefreshKey((k) => k + 1);
   }, [id]);
 
   const saveResponses = useCallback(
@@ -556,7 +558,7 @@ export function IncidentView() {
           )}
 
           {activeTab === "learning" && (
-            <LearningPanel practiceType="incident" practiceId={id!} />
+            <LearningPanel practiceType="incident" practiceId={id!} refreshKey={learningRefreshKey} />
           )}
         </div>
       </div>
