@@ -225,11 +225,28 @@ export function ORRView() {
 
         const msgRes = await api.sessions.getAllMessages(id!);
         if (msgRes.messages.length > 0) {
+          const slashCommands = ["experiments", "dependencies", "learning", "actions", "timeline", "factors"];
           session.setMessages(
-            msgRes.messages.map((m: any) => ({
-              role: m.role as "user" | "assistant",
-              content: m.content,
-            })),
+            msgRes.messages.map((m: any, i: number, arr: any[]) => {
+              const msg: any = { role: m.role as "user" | "assistant", content: m.content };
+              // Reconstruct slashResult for slash command responses loaded from DB
+              if (m.role === "assistant" && i > 0) {
+                const prev = arr[i - 1];
+                if (prev.role === "user" && prev.content.startsWith("/") && slashCommands.includes(prev.content.slice(1))) {
+                  try {
+                    const jsonMatch = m.content.match(/\{[\s\S]*"command"[\s\S]*"items"[\s\S]*\}/);
+                    if (jsonMatch) {
+                      const parsed = JSON.parse(jsonMatch[0]);
+                      if (parsed.command && Array.isArray(parsed.items)) {
+                        msg.slashResult = parsed;
+                        msg.content = parsed.summary || "";
+                      }
+                    }
+                  } catch { /* not valid JSON, render as text */ }
+                }
+              }
+              return msg;
+            }),
           );
         }
       } finally {
