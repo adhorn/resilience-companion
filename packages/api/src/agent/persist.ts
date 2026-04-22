@@ -44,8 +44,8 @@ const FlagSchema = z.object({
   section_id: z.string(),
   type: z.enum(["RISK", "GAP", "STRENGTH", "FOLLOW_UP"]),
   note: z.string().min(1),
-  severity: z.enum(["HIGH", "MEDIUM", "LOW"]).optional(),
-  deadline: z.string().optional(),
+  severity: z.enum(["HIGH", "MEDIUM", "LOW"]).optional().nullable(),
+  deadline: z.string().optional().nullable(),
 });
 
 const DependencySchema = z.object({
