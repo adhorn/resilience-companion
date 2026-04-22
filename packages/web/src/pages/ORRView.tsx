@@ -17,7 +17,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   {
     name: "dependencies",
     description: "Map all dependencies from what we've discussed",
-    prompt: 'Check the Already Recorded Dependencies list in your context. Review our conversation for any dependencies that are NOT already recorded. Respond with a JSON object: { "command": "dependencies", "summary": "brief summary", "items": [{ "name": "...", "type": "database|cache|api|service|infrastructure|other", "criticality": "critical|important|optional", "notes": "..." }] }. Only include genuinely new dependencies. If everything is already captured, return empty items array with a summary saying so.',
+    prompt: 'First, call read_section for each section that has answers (check the section overview — any section marked with answered questions). Read the actual answer text to find mentioned services, databases, APIs, queues, caches, and infrastructure. Then check the Already Recorded Dependencies list and identify any that are NOT already recorded. Respond with a JSON object: { "command": "dependencies", "summary": "brief summary", "items": [{ "name": "...", "type": "database|cache|api|service|infrastructure|other", "criticality": "critical|important|optional", "notes": "..." }] }. Only include genuinely new dependencies.',
   },
   {
     name: "summarize",
