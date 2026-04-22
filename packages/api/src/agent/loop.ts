@@ -292,8 +292,10 @@ Adjust your approach:
     }
   }
 
-  // If CONVERSE hit max iterations, give one final text-only wrap-up
-  if (!converseHadContent || (messages.at(-1)?.role === "tool")) {
+  // If CONVERSE hit max iterations, give one final text-only wrap-up.
+  // Skip for write slash commands — they already produced JSON output, wrap-up would duplicate it.
+  const isSlashWrite = input.displayContent && isWriteSlashCommand(input.displayContent);
+  if (!isSlashWrite && (!converseHadContent || (messages.at(-1)?.role === "tool"))) {
     const wrapUpSpanId = trace.startLLMCall(MAX_AGENT_ITERATIONS, model);
     try {
       messages.push({
