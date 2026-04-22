@@ -225,14 +225,20 @@ export function useReviewSession({
           setTimeout(() => setNotification(null), 8000);
         }
       }, displayContent);
-    } catch {
-      setLastError((prev) => prev || "Connection lost. Your conversation is saved — reload the page to continue.");
+    } catch (err) {
+      const msg = (err as Error).message || "";
+      if (msg.includes("token limit") || msg.includes("Daily token limit")) {
+        // Show the server's clear error message — don't mask it
+        setLastError(msg);
+      } else {
+        setLastError((prev) => prev || "Connection lost. Your conversation is saved — reload the page to continue.");
+      }
     }
 
     setStreamStatus(null);
     setThinkingStatus(null);
 
-    if (!assistantContent.trim()) {
+    if (!assistantContent.trim() && !lastError) {
       setLastError((prev) => prev || "No response received. The AI may be overloaded.");
       setMessages((prev) => {
         if (prev.length > 0 && prev[prev.length - 1].role === "assistant" && !prev[prev.length - 1].content.trim()) {
