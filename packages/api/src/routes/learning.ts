@@ -86,12 +86,19 @@ function buildLearningResponse(
     });
     const codeSourced = answered.filter(([, v]: any) => typeof v === "object" && v?.source === "code").length;
 
-    // Count flags by type
-    const gapCount = flags.filter((f: any) => f.type === "GAP").length;
-    const strengthCount = flags.filter((f: any) => f.type === "STRENGTH").length;
+    // Risk score: count OPEN flags (RISK + GAP + FOLLOW_UP), weighted by severity
+    const openFlags = flags.filter((f: any) =>
+      (f.type === "RISK" || f.type === "GAP" || f.type === "FOLLOW_UP")
+      && f.status !== "ACCEPTED" && f.status !== "RESOLVED"
+    );
+    const riskScore = openFlags.reduce((sum: number, f: any) => {
+      const weight = f.severity === "HIGH" ? 3 : f.severity === "MEDIUM" ? 2 : 1;
+      return sum + weight;
+    }, 0);
 
-    // Count discoveries for this section
+    // Insight count: discoveries + code-sourced answers (things team didn't know)
     const sectionDiscoveries = allDiscoveries.filter((d) => d.sectionId === s.id).length;
+    const insightCount = sectionDiscoveries + codeSourced;
 
     return {
       id: s.id,
@@ -99,10 +106,10 @@ function buildLearningResponse(
       position: s.position,
       depth: DEPTH_MAP[s.depth] ?? 0,
       depthRationale: s.depthRationale || null,
+      riskScore,
+      riskCount: openFlags.length,
+      insightCount,
       discoveries: sectionDiscoveries,
-      gaps: gapCount,
-      strengths: strengthCount,
-      strengthNotes: flags.filter((f: any) => f.type === "STRENGTH").map((f: any) => f.note),
       codeSourced,
       questionsAnswered: answered.length,
       questionsTotal: prompts.length,
@@ -110,10 +117,11 @@ function buildLearningResponse(
   });
 
   // Totals
+  const moderatePlus = sections.filter((s: any) => s.depth >= 2).length;
   const totals = {
-    discoveries: allDiscoveries.length,
-    gaps: sections.reduce((sum: number, s: any) => sum + s.gaps, 0),
-    strengths: sections.reduce((sum: number, s: any) => sum + s.strengths, 0),
+    depthCoverage: `${moderatePlus}/${sections.length}`,
+    totalRisks: sections.reduce((sum: number, s: any) => sum + s.riskCount, 0),
+    totalInsights: sections.reduce((sum: number, s: any) => sum + s.insightCount, 0),
     crossPracticeLinks: crossPracticeLinks.length,
     experiments: experiments.length,
   };
