@@ -161,49 +161,9 @@ describe("executePersist", () => {
     expect(result.errors[0]).toContain("not found");
   });
 
-  it("deduplicates dependencies by fuzzy name match", () => {
-    // Seed an existing dependency
-    db.insert(schema.dependencies).values({
-      id: "dep-1",
-      orrId,
-      name: "SQLite",
-      type: "database",
-      direction: "outbound",
-      criticality: "critical",
-      hasFallback: 0,
-      createdAt: new Date().toISOString(),
-    }).run();
-
-    const output: PersistOutput = PersistOutputSchema.parse({
-      dependencies: [
-        { name: "SQLite (better-sqlite3)", type: "database", criticality: "critical" },
-        { name: "Redis", type: "cache", criticality: "important" },
-      ],
-    });
-
-    const result = executePersist(output, "orr", orrId, sessionId);
-    // SQLite (better-sqlite3) should be deduped against SQLite, Redis should be new
-    expect(result.writtenItems).toBe(1);
-
-    const deps = db.select().from(schema.dependencies)
-      .where(eq(schema.dependencies.orrId, orrId))
-      .all();
-    expect(deps).toHaveLength(2); // original SQLite + new Redis
-    expect(deps.map(d => d.name).sort()).toEqual(["Redis", "SQLite"]);
-  });
-
-  it("deduplicates discoveries by exact text", () => {
-    const output: PersistOutput = PersistOutputSchema.parse({
-      discoveries: [
-        { text: "Retry logic has no jitter" },
-        { text: "Retry logic has no jitter" }, // duplicate in same batch
-      ],
-    });
-
-    const result = executePersist(output, "orr", orrId, sessionId);
-    // First write succeeds, second is deduped by DB check
-    expect(result.writtenItems).toBe(1);
-  });
+  // Dependencies, discoveries, experiments, action items, timeline events, and
+  // contributing factors are no longer extracted by PERSIST — they come from
+  // slash commands only. Dedup tests for those are in slash-commands.test.ts.
 
   it("handles empty output gracefully", () => {
     const output: PersistOutput = PersistOutputSchema.parse({});
@@ -212,31 +172,6 @@ describe("executePersist", () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  it("writes incident-specific fields", () => {
-    const incidentSeed = seedTestIncident(db);
-
-    const output: PersistOutput = PersistOutputSchema.parse({
-      timeline_events: [
-        { timestamp: "2026-03-15T14:30:00Z", description: "Alert fired", event_type: "detection" },
-      ],
-      contributing_factors: [
-        { category: "technical", description: "Connection pool exhaustion", is_systemic: true },
-      ],
-    });
-
-    const result = executePersist(output, "incident", incidentSeed.incidentId, "test-session");
-    expect(result.writtenItems).toBe(2);
-
-    const events = db.select().from(schema.timelineEvents)
-      .where(eq(schema.timelineEvents.incidentId, incidentSeed.incidentId))
-      .all();
-    expect(events).toHaveLength(1);
-    expect(events[0].eventType).toBe("detection");
-
-    const factors = db.select().from(schema.contributingFactors)
-      .where(eq(schema.contributingFactors.incidentId, incidentSeed.incidentId))
-      .all();
-    expect(factors).toHaveLength(1);
-    expect(factors[0].isSystemic).toBe(true);
-  });
+  // Incident-specific fields (timeline events, contributing factors) are now
+  // handled by slash commands only, not the PERSIST phase. Tests in slash-commands.test.ts.
 });
