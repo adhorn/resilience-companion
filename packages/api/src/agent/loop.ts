@@ -10,7 +10,6 @@ import { runBeforeHooks, runAfterHooks } from "./steering.js";
 import type { ToolLedgerEntry } from "./steering.js";
 import { assessEngagement } from "./engagement.js";
 import type { SectionEngagementContext } from "./engagement.js";
-import { runPersistPhase } from "./persist.js";
 import { isWriteSlashCommand, parseSlashResponse, persistSlashResult } from "./slash-commands.js";
 
 /** Translate raw LLM errors into user-friendly messages */
@@ -41,6 +40,11 @@ function categorizeError(msg: string): string {
   return "Something went wrong with the AI provider. Try sending your message again. If the problem persists, check the server logs.";
 }
 
+/** Finalize trace — emits summary log with totals for the agent turn. */
+function finalizeTrace(trace: TraceLogger): void {
+  trace.finalize();
+}
+
 export interface AgentInput {
   practiceConfig: PracticeConfig;
   practiceId: string;
@@ -54,46 +58,43 @@ export interface AgentInput {
 }
 
 /**
- * Core agent loop — two-phase state machine.
+ * Core agent loop — single loop with all tools (read + write).
  *
- * CONVERSE: LLM with read-only tools. Reads context, asks questions, discusses.
- *           Streams text to client. No write tools available.
+ * 1. Build system prompt via PracticeConfig (with token budget warnings at 75%/90%)
+ * 2. Send to LLM with ALL practice-specific tools (read and write)
+ * 3. If LLM calls tools, run steering hooks then execute — loop up to MAX_AGENT_ITERATIONS
+ * 4. Yield SSE events throughout for real-time streaming to client
+ * 5. On retry/fallback events from RetryAdapter, reset accumulated state
+ * 6. If max iterations hit, give LLM one final text-only turn to wrap up
  *
- * PERSIST:  Separate LLM call → structured JSON → deterministic code writes.
- *           Mandatory after every CONVERSE phase. Cannot be skipped.
- *           The LLM extracts what to persist; code does the actual DB writes.
+ * For write slash commands (/experiments, /learning, etc.), the agent returns
+ * structured JSON which is parsed and persisted directly after the loop.
  */
 export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
-  // Use legacy loop if configured (fallback during rollout)
-  if (process.env.AGENT_LOOP_VERSION === "v1") {
-    yield* runAgentLegacy(input);
-    return;
-  }
-
   const { practiceConfig, practiceId, sessionId, activeSectionId, conversationHistory, userMessage, sessionTokenUsage } = input;
   const llm = getLLM();
 
-  // Load steering tier and assemble hooks
+  // Load steering tier and assemble hooks via practice config
   const tier = practiceConfig.loadSteeringTier(practiceId);
   const steeringHooks = practiceConfig.getHooks(tier);
   const toolLedger: ToolLedgerEntry[] = [];
 
-  // Build context and system prompt
+  // Build context and system prompt via practice config
   const context = practiceConfig.buildContext(practiceId, activeSectionId);
   const systemPrompt = practiceConfig.buildSystemPrompt(context);
 
-  // Token budget warnings
+  // Append token budget warning when session is running long.
   const tokenFraction = sessionTokenUsage / MAX_SESSION_TOKENS;
   let budgetAwarePrompt = systemPrompt;
   if (tokenFraction >= SESSION_TOKEN_URGENT) {
     const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
-    budgetAwarePrompt += `\n\n## SESSION BUDGET — URGENT\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). The session will auto-renew soon. Wrap up the current topic. Make sure your final observations are clear in your response — they are captured automatically.`;
+    budgetAwarePrompt += `\n\n## SESSION BUDGET — URGENT\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). The session will auto-renew soon, which resets conversation context. Call write_session_summary NOW to preserve your observations, depth assessments, and discoveries before they are lost. Include a discoveries array — things that surprised the team or contradicted their expectations.`;
   } else if (tokenFraction >= SESSION_TOKEN_WARNING) {
     const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
-    budgetAwarePrompt += `\n\n## Session Budget\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). Start wrapping up the current line of discussion.`;
+    budgetAwarePrompt += `\n\n## Session Budget\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). Start wrapping up the current line of discussion. You should call write_session_summary soon to persist your observations and discoveries before the session auto-renews.`;
   }
 
-  // Engagement detection
+  // Adaptive learning: detect engagement zone and inject guidance
   let sectionCtx: SectionEngagementContext | null = null;
   const ctxSections = (context as any).sections as Array<{ id: string; depth: string; codeSourced: number; questionsAnswered: number }> | undefined;
   if (context.activeSectionId && ctxSections) {
@@ -112,6 +113,7 @@ Adjust your approach:
 - LOWER the code exploration barrier. You may now proactively offer: "Want me to search the codebase for that?" You don't need to wait for the team to ask.
 - Reframe "I don't know" as useful data: "That's useful — the team's operational model doesn't cover this area. Let's look at the code together and see what we find."
 - Ask simpler, more focused questions. Break complex topics into smaller pieces.
+- Tag this area as a blind spot worth noting in the session summary.
 - Do NOT reduce depth expectations — change HOW you get there, not WHERE you're going.`;
     log("info", "Engagement: FRUSTRATED zone", { sessionId, signals: engagement.signals, confidence: engagement.confidence });
   } else if (engagement.zone === "TOO_EASY") {
@@ -127,7 +129,7 @@ Adjust your approach:
     log("info", "Engagement: TOO_EASY zone", { sessionId, signals: engagement.signals, confidence: engagement.confidence });
   }
 
-  // Build messages
+  // Build messages array
   const messages: LLMMessage[] = [
     { role: "system", content: budgetAwarePrompt },
     ...conversationHistory,
@@ -142,31 +144,37 @@ Adjust your approach:
   yield { type: "message_start", messageId };
 
   let totalUsage = 0;
-  let previousIterationHadContent = false;
-  let converseHadContent = false;
-  let converseFullText = ""; // Accumulated agent text across all iterations (for slash command parsing)
+  let converseFullText = "";
   const cumulativeTokens = () => sessionTokenUsage + totalUsage;
 
-  // ═══════════════════════════════════════════════════════════
-  // PHASE 1: CONVERSE — read-only tools, streams text to user
-  // ═══════════════════════════════════════════════════════════
+  // Detect write slash commands — suppress text streaming, parse JSON after loop
+  const isSlashWrite = input.displayContent && isWriteSlashCommand(input.displayContent);
 
-  for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration++) {
+  // Dynamic iteration limit — extends when the agent is actively exploring code
+  const CODE_TOOLS = new Set(["search_code", "read_file", "list_directory"]);
+  let maxIterations = MAX_AGENT_ITERATIONS; // default 5
+  let codeToolsUsed = 0;
+
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
     if (iteration > 0 && cumulativeTokens() >= MAX_SESSION_TOKENS) {
       log("info", "Session hit token budget mid-turn", { sessionId, tokens: cumulativeTokens(), max: MAX_SESSION_TOKENS });
       break;
     }
 
-    // content_reset was removed — it cleared unique content, not just duplicates.
-    // The wrap-up prompt says "do not repeat" to handle repetition at the LLM level.
+    // Add separator between iterations' text so sentences don't run together
+    if (iteration > 0 && converseFullText.length > 0) {
+      converseFullText += "\n\n";
+      if (!isSlashWrite) {
+        yield { type: "content_delta", content: "\n\n" };
+      }
+    }
 
     let fullContent = "";
     const pendingToolCalls: Array<{ id: string; name: string; args: string }> = [];
     const llmSpanId = trace.startLLMCall(iteration, model);
 
     try {
-      // CONVERSE uses read-only tools only
-      const stream = llm.chat(messages, practiceConfig.converseTools);
+      const stream = llm.chat(messages, practiceConfig.tools);
 
       for await (const chunk of stream) {
         if (chunk.type === "retry") {
@@ -190,7 +198,10 @@ Adjust your approach:
             if (text.match(/<invoke\s|<parameter\s|<\/invoke>|<\/parameter>/)) break;
             fullContent += text;
             converseFullText += text;
-            yield { type: "content_delta", content: text };
+            // For write slash commands, suppress streaming — show spinner until slash_result
+            if (!isSlashWrite) {
+              yield { type: "content_delta", content: text };
+            }
             break;
           }
           case "tool_call_start":
@@ -216,7 +227,7 @@ Adjust your approach:
       }
     } catch (err) {
       const errMsg = (err as Error).message || "Unknown error";
-      log("error", "CONVERSE LLM error", { iteration, error: errMsg, traceId: trace.id });
+      log("error", "Agent LLM error", { iteration, error: errMsg, traceId: trace.id });
       trace.errorLLMCall(llmSpanId, errMsg, "llm_error");
       trace.setError(errMsg, "llm_error");
       finalizeTrace(trace);
@@ -225,14 +236,12 @@ Adjust your approach:
       return;
     }
 
-    if (fullContent) converseHadContent = true;
+    // If no tool calls, we're done with the loop
+    if (pendingToolCalls.length === 0) {
+      break;
+    }
 
-    // No tool calls → CONVERSE done, move to PERSIST
-    if (pendingToolCalls.length === 0) break;
-
-    previousIterationHadContent = fullContent.length > 0;
-
-    // Execute read-only tool calls
+    // Execute tool calls and build response messages
     const assistantMessage: LLMMessage = {
       role: "assistant",
       content: fullContent || null,
@@ -249,7 +258,7 @@ Adjust your approach:
       try { args = JSON.parse(tc.args); } catch { args = {}; }
 
       yield { type: "tool_call", tool: tc.name, args };
-      log("info", "CONVERSE tool call", { iteration, tool: tc.name, args, traceId: trace.id });
+      log("info", "Agent tool call", { iteration, tool: tc.name, args, traceId: trace.id });
 
       const toolSpanId = trace.startToolCall(iteration, tc.name, args);
       let result: string;
@@ -262,6 +271,9 @@ Adjust your approach:
         result = JSON.stringify({ error: steering.reason });
         parsedResult = { error: steering.reason };
         trace.endToolCall(toolSpanId, result.slice(0, 500), `steered:${steering.hookName}`);
+        log("info", "Steering guided tool call", {
+          hook: steering.hookName, tool: tc.name, reason: steering.reason, traceId: trace.id,
+        });
       } else {
         try {
           result = practiceConfig.executeTool(tc.name, args, practiceId, sessionId);
@@ -270,7 +282,7 @@ Adjust your approach:
           trace.endToolCall(toolSpanId, result.slice(0, 500));
         } catch (err) {
           const errMsg = (err as Error).message || "Unknown tool error";
-          log("error", "CONVERSE tool failed", { tool: tc.name, error: errMsg, traceId: trace.id });
+          log("error", "Tool execution failed", { tool: tc.name, error: errMsg, traceId: trace.id });
           const safeMsg = `Tool "${tc.name}" encountered an error. The operation could not be completed.`;
           result = JSON.stringify({ error: safeMsg });
           parsedResult = { error: safeMsg };
@@ -280,28 +292,39 @@ Adjust your approach:
       }
 
       toolLedger.push({ tool: tc.name, args, result, iteration });
+      log("info", "Agent tool result", { tool: tc.name, result: result.slice(0, 200), traceId: trace.id });
+
+      // Extend iteration limit when code exploration is happening — the agent needs
+      // more rounds to search, read files, and then respond with findings.
+      // Cap at 10 to prevent runaway loops.
+      if (CODE_TOOLS.has(tc.name)) {
+        codeToolsUsed++;
+        maxIterations = Math.min(MAX_AGENT_ITERATIONS + codeToolsUsed, 10);
+      }
+
       yield { type: "tool_result", tool: tc.name, result: parsedResult };
 
-      // read_section triggers UI section switch (not a write)
-      if (tc.name === "read_section" && args.section_id) {
-        yield { type: "section_updated", sectionId: args.section_id as string, field: "active" };
+      if (practiceConfig.sectionUpdateTools.includes(tc.name) && parsedResult.success) {
+        yield { type: "section_updated", sectionId: args.section_id as string, field: practiceConfig.sectionUpdateFieldMap[tc.name] || tc.name };
+      }
+      if (practiceConfig.dataUpdateTools.includes(tc.name) && parsedResult.success) {
+        yield { type: "data_updated", tool: tc.name };
       }
 
       messages.push({ role: "tool", content: result, tool_call_id: tc.id });
     }
   }
 
-  // If CONVERSE hit max iterations, give one final text-only wrap-up.
-  // Skip for write slash commands — they already produced JSON output, wrap-up would duplicate it.
-  const isSlashWrite = input.displayContent && isWriteSlashCommand(input.displayContent);
-  if (!isSlashWrite && (!converseHadContent || (messages.at(-1)?.role === "tool"))) {
-    // No content_reset here — it caused real content loss (#49)
-    const wrapUpSpanId = trace.startLLMCall(MAX_AGENT_ITERATIONS, model);
+  // If the loop ended mid-tool-exploration (last message is a tool result),
+  // give the LLM one final text-only turn to wrap up coherently.
+  // Skip if the agent already produced a text response (no tool calls in final iteration).
+  if (messages.at(-1)?.role === "tool") {
     try {
       messages.push({
         role: "user",
-        content: "[System: Wrap up your response to the team now — no more tool calls are available. Do not repeat what you already said.]",
+        content: "[System: Wrap up your response to the team now. Do not repeat what you already said.]",
       });
+      const wrapUpSpanId = trace.startLLMCall(MAX_AGENT_ITERATIONS, model);
       const finalStream = llm.chat(messages, []);
       for await (const chunk of finalStream) {
         if (chunk.type === "content") {
@@ -318,26 +341,16 @@ Adjust your approach:
       }
     } catch (err) {
       const errMsg = (err as Error).message || "Unknown error";
-      log("error", "CONVERSE wrap-up error", { error: errMsg, traceId: trace.id });
-      trace.errorLLMCall(wrapUpSpanId, errMsg, "llm_error");
+      log("error", "Agent wrap-up error", { error: errMsg, traceId: trace.id });
     }
   }
 
   finalizeTrace(trace);
   yield { type: "message_end", tokenUsage: totalUsage };
 
-  // ═══════════════════════════════════════════════════════════
-  // PHASE 2: PERSIST — runs AFTER message_end so the user isn't blocked.
-  // Structured JSON → deterministic writes. Happens in the background
-  // from the user's perspective (the SSE stream is still open but
-  // the client treats message_end as "done streaming text").
-  // ═══════════════════════════════════════════════════════════
-
-  // For write slash commands, parse the agent's structured response directly.
-  // No second LLM call needed — the CONVERSE agent already produced the data.
-  if (input.displayContent && isWriteSlashCommand(input.displayContent)) {
-    log("info", "Slash command persistence (direct parse)", { command: input.displayContent, practiceId, textLength: converseFullText.length });
-    const slashResult = parseSlashResponse(input.displayContent, converseFullText);
+  // For write slash commands, parse the agent's structured JSON and persist directly
+  if (isSlashWrite) {
+    const slashResult = parseSlashResponse(input.displayContent!, converseFullText);
     if (slashResult) {
       const written = persistSlashResult(slashResult, practiceConfig.practiceType, practiceId, sessionId);
       yield { type: "slash_result", result: slashResult } as SSEEvent;
@@ -345,195 +358,5 @@ Adjust your approach:
         yield { type: "data_updated", tool: slashResult.command } as SSEEvent;
       }
     }
-  } else {
-    // Normal conversation — run the PERSIST LLM to extract what to write
-    log("info", "PERSIST phase starting", { practiceId, sessionId, traceId: trace.id, messageCount: messages.length });
-
-    try {
-      for await (const event of runPersistPhase(
-        messages,
-        practiceConfig.practiceType,
-        practiceId,
-        sessionId,
-        activeSectionId,
-      )) {
-        if (event.persistTokens) {
-          totalUsage += event.persistTokens;
-        }
-        yield event as SSEEvent;
-      }
-    } catch (err) {
-      log("error", "PERSIST phase error", { error: (err as Error).message, traceId: trace.id });
-    }
   }
-}
-
-function finalizeTrace(trace: TraceLogger): void {
-  trace.finalize();
-}
-
-// ═══════════════════════════════════════════════════════════
-// LEGACY LOOP — kept as fallback. Set AGENT_LOOP_VERSION=v1
-// ═══════════════════════════════════════════════════════════
-
-async function* runAgentLegacy(input: AgentInput): AsyncGenerator<SSEEvent> {
-  const { practiceConfig, practiceId, sessionId, activeSectionId, conversationHistory, userMessage, sessionTokenUsage } = input;
-  const llm = getLLM();
-  const tier = practiceConfig.loadSteeringTier(practiceId);
-  const steeringHooks = practiceConfig.getHooks(tier);
-  const toolLedger: ToolLedgerEntry[] = [];
-  const context = practiceConfig.buildContext(practiceId, activeSectionId);
-  const systemPrompt = practiceConfig.buildSystemPrompt(context);
-
-  const tokenFraction = sessionTokenUsage / MAX_SESSION_TOKENS;
-  let budgetAwarePrompt = systemPrompt;
-  if (tokenFraction >= SESSION_TOKEN_URGENT) {
-    const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
-    budgetAwarePrompt += `\n\n## SESSION BUDGET — URGENT\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). The session will auto-renew soon, which resets conversation context. Call write_session_summary NOW to preserve your observations, depth assessments, and discoveries before they are lost. Include a discoveries array — things that surprised the team or contradicted their expectations.`;
-  } else if (tokenFraction >= SESSION_TOKEN_WARNING) {
-    const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
-    budgetAwarePrompt += `\n\n## Session Budget\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). Start wrapping up the current line of discussion. You should call write_session_summary soon to persist your observations and discoveries before the session auto-renews.`;
-  }
-
-  let sectionCtx: SectionEngagementContext | null = null;
-  const ctxSections = (context as any).sections as Array<{ id: string; depth: string; codeSourced: number; questionsAnswered: number }> | undefined;
-  if (context.activeSectionId && ctxSections) {
-    const sec = ctxSections.find(s => s.id === context.activeSectionId);
-    if (sec) sectionCtx = { depth: sec.depth, codeSourced: sec.codeSourced, questionsAnswered: sec.questionsAnswered };
-  }
-  const engagement = assessEngagement(conversationHistory, sectionCtx);
-  if (engagement.zone === "FRUSTRATED") {
-    budgetAwarePrompt += `\n\n## Adaptive Guidance — Team Struggling\nThe team appears to be hitting a wall (signals: ${engagement.signals.join("; ")}). Lower code exploration barrier. Ask simpler questions.`;
-  } else if (engagement.zone === "TOO_EASY") {
-    budgetAwarePrompt += `\n\n## Adaptive Guidance — Push Deeper\nConversation flowing too easily (signals: ${engagement.signals.join("; ")}). Raise the challenge. Probe for novel failures.`;
-  }
-
-  const messages: LLMMessage[] = [
-    { role: "system", content: budgetAwarePrompt },
-    ...conversationHistory,
-    { role: "user", content: userMessage },
-  ];
-
-  const messageId = nanoid();
-  const model = process.env.LLM_MODEL || "sonnet";
-  const trace = new TraceLogger(practiceConfig.practiceType, practiceId, sessionId, messageId, model);
-  trace.setEngagement(engagement.zone, engagement.signals);
-  yield { type: "message_start", messageId };
-
-  let totalUsage = 0;
-  let previousIterationHadContent = false;
-  const cumulativeTokens = () => sessionTokenUsage + totalUsage;
-
-  for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration++) {
-    if (iteration > 0 && cumulativeTokens() >= MAX_SESSION_TOKENS) break;
-    // content_reset removed — caused content loss (#49)
-
-    let fullContent = "";
-    const pendingToolCalls: Array<{ id: string; name: string; args: string }> = [];
-    const llmSpanId = trace.startLLMCall(iteration, model);
-
-    try {
-      const stream = llm.chat(messages, practiceConfig.tools); // ALL tools
-      for await (const chunk of stream) {
-        if (chunk.type === "retry") {
-          trace.addRetry(chunk.attempt!, chunk.reason!, chunk.delayMs!);
-          fullContent = ""; pendingToolCalls.length = 0;
-          yield { type: "status", message: `${chunk.reason}. Retrying (${chunk.attempt}/${chunk.maxRetries})...` } as SSEEvent;
-          continue;
-        }
-        if (chunk.type === "fallback") {
-          trace.addFallback(chunk.reason || "unknown", chunk.reason || "");
-          fullContent = ""; pendingToolCalls.length = 0;
-          yield { type: "status", message: `${chunk.reason}. Response quality may differ slightly.` } as SSEEvent;
-          continue;
-        }
-        switch (chunk.type) {
-          case "content": {
-            const text = chunk.content!;
-            if (!text.match(/<invoke\s|<parameter\s|<\/invoke>|<\/parameter>/)) {
-              fullContent += text;
-              yield { type: "content_delta", content: text };
-            }
-            break;
-          }
-          case "tool_call_start": pendingToolCalls.push({ id: chunk.toolCallId!, name: chunk.toolName!, args: "" }); break;
-          case "tool_call_args": { const tc = pendingToolCalls.find(t => t.id === chunk.toolCallId); if (tc) tc.args += chunk.toolArgs!; break; }
-          case "tool_call_end": { const tc = pendingToolCalls.find(t => t.id === chunk.toolCallId); if (tc) tc.args = chunk.toolArgs!; break; }
-          case "done": if (chunk.usage) { totalUsage += chunk.usage.promptTokens + chunk.usage.completionTokens; trace.endLLMCall(llmSpanId, chunk.usage); } break;
-        }
-      }
-    } catch (err) {
-      const errMsg = (err as Error).message || "Unknown error";
-      trace.errorLLMCall(llmSpanId, errMsg, "llm_error");
-      trace.setError(errMsg, "llm_error");
-      finalizeTrace(trace);
-      yield { type: "error", message: categorizeError(errMsg) } as SSEEvent;
-      yield { type: "message_end", tokenUsage: totalUsage };
-      return;
-    }
-
-    if (pendingToolCalls.length === 0) { finalizeTrace(trace); yield { type: "message_end", tokenUsage: totalUsage }; return; }
-    previousIterationHadContent = fullContent.length > 0;
-
-    const assistantMessage: LLMMessage = {
-      role: "assistant", content: fullContent || null,
-      tool_calls: pendingToolCalls.map(tc => ({ id: tc.id, type: "function" as const, function: { name: tc.name, arguments: tc.args } })),
-    };
-    messages.push(assistantMessage);
-
-    for (const tc of pendingToolCalls) {
-      let args: Record<string, unknown>;
-      try { args = JSON.parse(tc.args); } catch { args = {}; }
-      yield { type: "tool_call", tool: tc.name, args };
-      const toolSpanId = trace.startToolCall(iteration, tc.name, args);
-      let result: string; let parsedResult: Record<string, unknown>;
-      const ledger = { calls: toolLedger, currentIteration: iteration };
-      const steering = runBeforeHooks(steeringHooks, tc.name, args, ledger);
-      if (steering.action === "guide") {
-        result = JSON.stringify({ error: steering.reason }); parsedResult = { error: steering.reason };
-        trace.endToolCall(toolSpanId, result.slice(0, 500), `steered:${steering.hookName}`);
-      } else {
-        try {
-          result = practiceConfig.executeTool(tc.name, args, practiceId, sessionId);
-          result = runAfterHooks(steeringHooks, tc.name, args, result);
-          parsedResult = JSON.parse(result);
-          trace.endToolCall(toolSpanId, result.slice(0, 500));
-        } catch (err) {
-          const errMsg = (err as Error).message || "Unknown tool error";
-          const safeMsg = `Tool "${tc.name}" encountered an error.`;
-          result = JSON.stringify({ error: safeMsg }); parsedResult = { error: safeMsg };
-          trace.endToolCall(toolSpanId, result, errMsg);
-          yield { type: "error", message: safeMsg } as SSEEvent;
-        }
-      }
-      toolLedger.push({ tool: tc.name, args, result, iteration });
-      yield { type: "tool_result", tool: tc.name, result: parsedResult };
-      if (practiceConfig.sectionUpdateTools.includes(tc.name) && parsedResult.success) {
-        yield { type: "section_updated", sectionId: args.section_id as string, field: practiceConfig.sectionUpdateFieldMap[tc.name] || tc.name };
-      }
-      if (practiceConfig.dataUpdateTools.includes(tc.name) && parsedResult.success) {
-        yield { type: "data_updated", tool: tc.name };
-      }
-      messages.push({ role: "tool", content: result, tool_call_id: tc.id });
-    }
-  }
-
-  // Wrap-up
-  const wrapUpSpanId = trace.startLLMCall(MAX_AGENT_ITERATIONS, model);
-  try {
-    messages.push({ role: "user", content: "[System: You've used all available tool iterations. Wrap up now.]" });
-    const finalStream = llm.chat(messages, []);
-    for await (const chunk of finalStream) {
-      if (chunk.type === "content" && chunk.content && !chunk.content.match(/<invoke\s|<parameter\s/)) {
-        yield { type: "content_delta", content: chunk.content };
-      }
-      if (chunk.type === "done" && chunk.usage) { totalUsage += chunk.usage.promptTokens + chunk.usage.completionTokens; trace.endLLMCall(wrapUpSpanId, chunk.usage); }
-    }
-  } catch (err) {
-    const errMsg = (err as Error).message || "Unknown error";
-    trace.errorLLMCall(wrapUpSpanId, errMsg, "llm_error");
-    yield { type: "content_delta", content: "\n\n*I've reached the limit for tool operations. Please send another message to continue.*" };
-  }
-  finalizeTrace(trace);
-  yield { type: "message_end", tokenUsage: totalUsage };
 }

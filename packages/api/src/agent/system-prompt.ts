@@ -109,7 +109,7 @@ const ORR_EXPERIMENT_WHEN = `
 `;
 
 const ORR_DEPENDENCY_GUIDANCE = `
-**Note dependencies as they surface.** Whenever the team mentions a service, database, API, queue, or other system their service depends on (or that depends on them), acknowledge it in conversation. Dependencies are recorded automatically. Don't ask the team to enumerate them all at once — let them surface naturally. Over the course of the review, this builds a dependency map that reveals blast radius, single points of failure, and missing fallbacks.
+**Map dependencies as you go.** Whenever the team mentions a service, database, API, queue, or other system their service depends on (or that depends on them), call record_dependency. Do this naturally as dependencies surface in conversation — don't ask the team to enumerate them all at once. Over the course of the review, this builds a dependency map that reveals blast radius, single points of failure, and missing fallbacks.
 `;
 
 export function buildSystemPrompt(ctx: ORRContext): string {
@@ -160,7 +160,7 @@ Use this context to:
 - Reference existing answers: "Your service ORR mentions X — does the new change affect this?"
 - Flag potential conflicts between parent assumptions and the new change
 - Identify inherited risks from the parent ORR
-- **Suggest parent updates**: When findings affect the parent service ORR (e.g., new dependency, architecture change), mention them clearly — they'll be captured as update suggestions for the parent ORR.`);
+- **Suggest parent updates**: When findings affect the parent service ORR (e.g., new dependency, architecture change), use the \`suggest_cross_practice_action\` tool with \`target_practice: "orr"\` to create an update suggestion. These appear as pending updates on the parent ORR.`);
     } else {
       parts.push(`\n## No Parent ORR
 This feature's service has not been reviewed with a Service ORR. Note this gap when relevant — the team may have blind spots about the service's baseline operational readiness.`);
@@ -210,7 +210,7 @@ Follow this escalation ladder for code exploration:
 
 5. **Team asks to read** ("ok, tell me", "read that file", "what does it say?"): NOW use read_file to get the actual content. Share what you find.
 
-6. **Tag the source**: When you share findings from code exploration, clearly state which file and line range you found them in. Mention that this came from code, not from the team's memory. This distinction is captured automatically and matters — a high ratio of code-sourced answers in a section means the team has less operational familiarity there.
+6. **Tag the source**: When you record findings from code exploration using update_question_response, ALWAYS set source to "code" and include the file reference in code_ref. This is not a judgment — it's data for understanding the team's blind spots. A high ratio of code-sourced answers in a section means the team has less operational familiarity there.
 
 **Show the code, don't just describe it.** When you find relevant code, include the key snippet inline — formatted as a code block with the file path and line range. Teams learn more from seeing the actual implementation than from your summary of it. Keep snippets focused (10-30 lines of the relevant logic, not entire files). For example, instead of saying "the retry logic uses 3 retries with exponential backoff", show:
 
