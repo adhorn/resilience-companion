@@ -150,7 +150,12 @@ Adjust your approach:
   // Detect write slash commands — suppress text streaming, parse JSON after loop
   const isSlashWrite = input.displayContent && isWriteSlashCommand(input.displayContent);
 
-  for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration++) {
+  // Dynamic iteration limit — extends when the agent is actively exploring code
+  const CODE_TOOLS = new Set(["search_code", "read_file", "list_directory"]);
+  let maxIterations = MAX_AGENT_ITERATIONS; // default 5
+  let codeToolsUsed = 0;
+
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
     if (iteration > 0 && cumulativeTokens() >= MAX_SESSION_TOKENS) {
       log("info", "Session hit token budget mid-turn", { sessionId, tokens: cumulativeTokens(), max: MAX_SESSION_TOKENS });
       break;
@@ -288,6 +293,14 @@ Adjust your approach:
 
       toolLedger.push({ tool: tc.name, args, result, iteration });
       log("info", "Agent tool result", { tool: tc.name, result: result.slice(0, 200), traceId: trace.id });
+
+      // Extend iteration limit when code exploration is happening — the agent needs
+      // more rounds to search, read files, and then respond with findings.
+      // Cap at 10 to prevent runaway loops.
+      if (CODE_TOOLS.has(tc.name)) {
+        codeToolsUsed++;
+        maxIterations = Math.min(MAX_AGENT_ITERATIONS + codeToolsUsed, 10);
+      }
 
       yield { type: "tool_result", tool: tc.name, result: parsedResult };
 
