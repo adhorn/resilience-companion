@@ -232,10 +232,12 @@ Adjust your approach:
 
     previousIterationHadContent = fullContent.length > 0;
 
-    // Execute read-only tool calls
+    // Execute read-only tool calls.
+    // Don't include text content in the assistant message sent to the next iteration —
+    // it was already streamed to the user, and including it causes the LLM to repeat itself.
     const assistantMessage: LLMMessage = {
       role: "assistant",
-      content: fullContent || null,
+      content: null,
       tool_calls: pendingToolCalls.map((tc) => ({
         id: tc.id,
         type: "function" as const,
