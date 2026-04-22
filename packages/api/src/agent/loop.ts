@@ -156,6 +156,14 @@ Adjust your approach:
       break;
     }
 
+    // Add separator between iterations' text so sentences don't run together
+    if (iteration > 0 && converseFullText.length > 0) {
+      converseFullText += "\n\n";
+      if (!isSlashWrite) {
+        yield { type: "content_delta", content: "\n\n" };
+      }
+    }
+
     let fullContent = "";
     const pendingToolCalls: Array<{ id: string; name: string; args: string }> = [];
     const llmSpanId = trace.startLLMCall(iteration, model);
