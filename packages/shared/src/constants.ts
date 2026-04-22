@@ -253,6 +253,6 @@ export const SESSION_TOKEN_WARNING = 0.75;
 export const SESSION_TOKEN_URGENT = 0.90;
 
 // Daily token budget: hard cap across all sessions per team per day.
-// 2M tokens ≈ ~10 full ORR reviews on Sonnet (~$10-20/day).
-// Prevents runaway sessions from eating the monthly budget.
-export const MAX_DAILY_TOKENS = 2_000_000;
+// 10M tokens — generous for development and heavy review days.
+// TODO: #54 — replace hard cap with a user-acknowledging banner.
+export const MAX_DAILY_TOKENS = 10_000_000;
