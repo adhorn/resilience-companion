@@ -294,8 +294,9 @@ Adjust your approach:
   // If CONVERSE hit max iterations, give one final text-only wrap-up.
   // Skip for write slash commands — they already produced JSON output, wrap-up would duplicate it.
   const isSlashWrite = input.displayContent && isWriteSlashCommand(input.displayContent);
-  if (!isSlashWrite && (!converseHadContent || (messages.at(-1)?.role === "tool"))) {
-    // No content_reset here — it caused real content loss (#49)
+  // Only run wrap-up if CONVERSE produced NO text at all (only tool calls).
+  // If text was already produced, skip — the LLM will repeat itself.
+  if (!isSlashWrite && !converseHadContent) {
     const wrapUpSpanId = trace.startLLMCall(MAX_AGENT_ITERATIONS, model);
     try {
       messages.push({
