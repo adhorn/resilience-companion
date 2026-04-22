@@ -270,7 +270,8 @@ export async function sendSSEMessage(
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.message || "Failed to send message");
+    const msg = body?.message || `Request failed (${res.status})`;
+    throw new Error(msg);
   }
   if (!res.body) throw new Error("No response body");
 
