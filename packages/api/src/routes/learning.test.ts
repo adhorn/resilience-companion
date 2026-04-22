@@ -58,9 +58,9 @@ describe("learning routes", () => {
       const res = await app.request(`/api/v1/orrs/${orrIds.orrId}/learning`);
       const body = await res.json();
       const archSection = body.learning.sections.find((s: any) => s.title === "Architecture");
-      expect(archSection.gaps).toBe(2);
-      expect(archSection.strengths).toBe(1);
-      expect(archSection.strengthNotes).toContain("Good test coverage");
+      // GAP flags count as risks (riskCount), STRENGTH flags are no longer tracked separately
+      expect(archSection.riskCount).toBe(2);
+      expect(archSection.riskScore).toBe(2); // 2 GAPs with no severity = weight 1 each
     });
 
     it("counts code-sourced prompt responses", async () => {
@@ -98,7 +98,7 @@ describe("learning routes", () => {
       const body = await res.json();
       expect(body.learning.discoveries).toHaveLength(1);
       expect(body.learning.discoveries[0].text).toBe("Team didn't know about the timeout config");
-      expect(body.learning.totals.discoveries).toBe(1);
+      expect(body.learning.totals.totalInsights).toBe(1);
     });
 
     it("includes cross-practice suggestions", async () => {
