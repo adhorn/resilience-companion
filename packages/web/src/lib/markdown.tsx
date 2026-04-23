@@ -1,5 +1,40 @@
 import React from "react";
 
+interface SectionInfo {
+  id: string;
+  title: string;
+}
+
+type NavigateToQuestion = (sectionId: string, questionIndex: number) => void;
+
+// Module-level context for section-aware inline rendering.
+// Set by createSectionAwareMarkdown before each render call.
+let _sections: SectionInfo[] = [];
+let _activeSectionId: string | null = null;
+let _onNavigate: NavigateToQuestion | null = null;
+
+/**
+ * Create a renderMarkdown function that makes question references clickable.
+ * Clicking "Q1 (Architecture)" switches to the Architecture section and scrolls to Q1.
+ * References to the currently active section render as plain text (no link needed).
+ */
+export function createSectionAwareMarkdown(
+  sections: SectionInfo[],
+  activeSectionId: string | null,
+  onNavigate: NavigateToQuestion,
+): (text: string) => React.ReactNode {
+  return (text: string) => {
+    _sections = sections;
+    _activeSectionId = activeSectionId;
+    _onNavigate = onNavigate;
+    const result = renderMarkdown(text);
+    _sections = [];
+    _activeSectionId = null;
+    _onNavigate = null;
+    return result;
+  };
+}
+
 /**
  * Render markdown-ish text to React elements.
  * Handles: **bold**, *italic*, `code`, ```fenced code blocks```, bullet lists, numbered lists, paragraphs.
@@ -89,12 +124,65 @@ export function renderMarkdown(text: string): React.ReactNode {
   return <>{elements}</>;
 }
 
+/** Scroll to a question element by 0-based index, with a brief highlight */
+function scrollToQuestion(index: number) {
+  const el = document.getElementById(`question-${index}`);
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("bg-blue-50");
+    setTimeout(() => el.classList.remove("bg-blue-50"), 2000);
+  }
+}
+
+/** Try to find a section by matching its title (case-insensitive, partial) */
+function findSection(sectionName: string): SectionInfo | undefined {
+  const lower = sectionName.toLowerCase();
+  return _sections.find((s) => s.title.toLowerCase() === lower)
+    || _sections.find((s) => s.title.toLowerCase().includes(lower))
+    || _sections.find((s) => lower.includes(s.title.toLowerCase()));
+}
+
 export function renderInline(text: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
   let remaining = text;
   let key = 0;
 
   while (remaining.length > 0) {
+    // Question references — clickable, scroll to question.
+    // "Q1 (Architecture)" → switch section + scroll. Plain "Q1" → scroll in current section.
+    if (_onNavigate && _sections.length > 0) {
+      // First try: Q1 (Section Name)
+      const qWithSection = remaining.match(/^(.*?)\bQ(\d+)\s*\(([^)]+)\)(.*)/s);
+      if (qWithSection) {
+        const [, before, qNumStr, sectionName, after] = qWithSection;
+        const qNum = parseInt(qNumStr, 10);
+        const zeroIndex = qNum - 1;
+        const section = findSection(sectionName);
+        if (before) parts.push(<span key={key++}>{before}</span>);
+        const navigate = _onNavigate;
+        const targetId = section?.id || _activeSectionId;
+        parts.push(
+          <button
+            key={key++}
+            onClick={() => {
+              if (targetId && targetId !== _activeSectionId) navigate(targetId, zeroIndex);
+              setTimeout(() => scrollToQuestion(zeroIndex), targetId !== _activeSectionId ? 100 : 0);
+            }}
+            className="inline text-blue-600 hover:text-blue-800 underline decoration-dotted cursor-pointer font-medium"
+            title={section ? `Go to Q${qNum} in ${section.title}` : `Scroll to Q${qNum}`}
+          >
+            Q{qNumStr} ({sectionName})
+          </button>
+        );
+        remaining = after;
+        continue;
+      }
+
+      // Plain Q1, Q2 without section name — don't link, it's ambiguous
+      // (we don't know which section the agent means).
+      // Only "Q1 (Section Title)" format above gets linked.
+    }
+
     // Bold
     const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*(.*)/s);
     if (boldMatch) {

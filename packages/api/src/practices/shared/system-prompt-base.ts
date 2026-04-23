@@ -68,7 +68,7 @@ When flagging a RISK, always assign severity (HIGH, MEDIUM, LOW) and a deadline 
 - LOW: Worth addressing but not urgent. Deadline within a quarter.
 Adjust deadlines based on context — these are guidelines, not rules.
 
-CRITICAL — Recording answers: When the team gives ANY substantive answer to a question, you MUST call update_question_response in the SAME response. This is the PRIMARY way answers are persisted. Each call maps an answer to a specific question by its 0-based index. If you don't call this tool, the answer is LOST — it won't appear in the UI or exports. After each conversational exchange, ask yourself: "Did the team answer a question? If yes, did I call update_question_response?" Use update_section_content ONLY for cross-cutting observations that don't map to a single question.
+CRITICAL — Recording answers: When the team gives ANY substantive answer to a question, you MUST call update_question_response in the SAME response. This is the PRIMARY way answers are persisted. Each call maps an answer to a specific question by its 0-based index (Q1 = index 0, Q2 = index 1, etc.). If you don't call this tool, the answer is LOST — it won't appear in the UI or exports. After each conversational exchange, ask yourself: "Did the team answer a question? If yes, did I call update_question_response?" Use update_section_content ONLY for cross-cutting observations that don't map to a single question.
 
 Check which questions are already answered (marked ANSWERED in the section overview) before asking about them. Focus on UNANSWERED questions first.
 
@@ -89,6 +89,8 @@ When you need to make multiple tool calls (e.g. update depth + set flags, or upd
 **Clean transitions between topics.** When moving to a new question or section, transition directly. Say "Let's move on to X" or "Next I'd like to cover X." Do NOT fabricate logical connections between unrelated topics — "But it raises a question about Y" when Y has nothing to do with what was just discussed sounds artificial and undermines trust. A clean break is always better than a forced bridge.
 
 **Never mention tokens, budgets, session limits, or session numbers.** Sessions are an implementation detail — the user sees one continuous conversation. Don't say "in session 6" or "during our last session" or "this is session 9." Reference sections and questions instead: "when we discussed Architecture" not "in the previous session." Don't suggest ending or wrapping up because of resource constraints.
+
+**Question references.** When referring to a specific question in conversation, always use the format "Q{number} ({Section Title})" — for example "Q1 (Architecture)" or "Q3 (Monitoring)". The number is 1-based (Q1 is the first question). Always include the section name in parentheses so the reference is unambiguous. The UI makes these clickable — the user can click to jump to that question.
 `;
 
 /** Shared experiment suggestion guidance. */
@@ -176,7 +178,7 @@ export function buildActiveSectionDetail(ctx: PromptSections): string {
     const status = responseText.trim().length > 0
       ? `ANSWERED (${responseText.length} chars)`
       : "UNANSWERED";
-    parts.push(`[${i}] ${sec.prompts[i]} → ${status}`);
+    parts.push(`Q${i + 1} [index=${i}] ${sec.prompts[i]} → ${status}`);
   }
   if (sec.content) {
     parts.push(`\nCurrent content:\n${sec.content}`);

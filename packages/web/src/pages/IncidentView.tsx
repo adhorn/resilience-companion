@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../api/client";
 import { ConversationPanel } from "../components/ConversationPanel";
 import { ExperimentsPanel } from "../components/ExperimentsPanel";
 import { LearningPanel } from "../components/LearningPanel";
 import { DEPTH_COLORS, DEPTH_LABELS, SEVERITY_COLORS_BOLD, FACTOR_CATEGORY_COLORS, EVENT_TYPE_COLORS } from "../lib/style-constants";
-import { renderMarkdown } from "../lib/markdown";
+import { renderMarkdown, createSectionAwareMarkdown } from "../lib/markdown";
 import { parseResponses, getResponseText, answeredCount, totalQuestions } from "../lib/responses";
 import { useReviewSession, SlashCommand } from "../hooks/useReviewSession";
 
@@ -185,10 +185,20 @@ export function IncidentView() {
     await reloadData();
   }, [id, session, reloadData]);
 
+  const navigateToQuestion = useCallback((sectionId: string, _questionIndex: number) => {
+    setActiveSection(sectionId);
+    setActiveTab("analysis");
+  }, []);
+  const sectionAwareMarkdown = useMemo(
+    () => createSectionAwareMarkdown(sections, activeSection, navigateToQuestion),
+    [sections, activeSection, navigateToQuestion],
+  );
+
   if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
   if (!incident) return <div className="p-6 text-red-500">Incident not found</div>;
 
   const currentSection = sections.find((s) => s.id === activeSection);
+
   const currentPrompts = currentSection
     ? typeof currentSection.prompts === "string"
       ? JSON.parse(currentSection.prompts)
@@ -363,11 +373,12 @@ export function IncidentView() {
                   const responseValue = isEditing ? session.editingResponses[i] : savedValue;
                   const isAnswered = (savedValue || session.editingResponses[i] || "").trim().length > 0;
                   return (
-                    <div key={i} className="group">
+                    <div key={i} id={`question-${i}`} className="group scroll-mt-4">
                       <div className="flex items-start gap-2 mb-1.5">
                         <span className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
                           isAnswered ? "bg-green-500" : "bg-gray-300"
                         }`} />
+                        <span className="text-xs font-mono text-gray-400 mt-0.5 flex-shrink-0">Q{i + 1}</span>
                         <span className="text-sm text-gray-700 font-medium">{prompt}</span>
                       </div>
                       <div className="ml-4">
@@ -609,7 +620,7 @@ export function IncidentView() {
         discussingTitle={activeSection && currentSection ? currentSection.title : null}
         emptyStateText="Start an AI session to get help analyzing this incident."
         emptyStateSubtext="The AI will help you explore contributing factors, build timelines, and extract systemic learning."
-        renderMarkdown={renderMarkdown}
+        renderMarkdown={sectionAwareMarkdown}
         isReadOnly={incident?.status === "ARCHIVED"}
         readOnlyReason="archived"
       />
