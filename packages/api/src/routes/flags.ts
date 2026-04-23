@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, notInArray, and } from "drizzle-orm";
 import type { SectionFlag, RiskSeverity, FlagWithContext, FlagsSummary, ORRStatus } from "@orr/shared";
 import { getDb, schema } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -18,11 +18,14 @@ flagsRoutes.get("/", (c) => {
   const user = c.get("user");
   const db = getDb();
 
-  // Get all ORRs for team
+  // Get active ORRs for team (exclude terminated/archived)
   const orrs = db
     .select()
     .from(schema.orrs)
-    .where(eq(schema.orrs.teamId, user.teamId))
+    .where(and(
+      eq(schema.orrs.teamId, user.teamId),
+      notInArray(schema.orrs.status, ["TERMINATED", "ARCHIVED"]),
+    ))
     .all();
 
   if (orrs.length === 0) {
