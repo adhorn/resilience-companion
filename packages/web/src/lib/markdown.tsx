@@ -178,26 +178,9 @@ export function renderInline(text: string): React.ReactNode {
         continue;
       }
 
-      // Second: plain Q1, Q2, etc. — scroll within whatever section is currently displayed
-      const qPlain = remaining.match(/^(.*?)\bQ(\d+)\b(.*)/s);
-      if (qPlain) {
-        const [, before, qNumStr, after] = qPlain;
-        const qNum = parseInt(qNumStr, 10);
-        const zeroIndex = qNum - 1;
-        if (before) parts.push(<span key={key++}>{before}</span>);
-        parts.push(
-          <button
-            key={key++}
-            onClick={() => scrollToQuestion(zeroIndex)}
-            className="inline text-blue-600 hover:text-blue-800 underline decoration-dotted cursor-pointer font-medium"
-            title={`Scroll to Q${qNum}`}
-          >
-            Q{qNumStr}
-          </button>
-        );
-        remaining = after;
-        continue;
-      }
+      // Plain Q1, Q2 without section name — don't link, it's ambiguous
+      // (we don't know which section the agent means).
+      // Only "Q1 (Section Title)" format above gets linked.
     }
 
     // Bold
