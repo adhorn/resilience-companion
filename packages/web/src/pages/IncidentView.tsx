@@ -190,8 +190,8 @@ export function IncidentView() {
     setActiveTab("analysis");
   }, []);
   const sectionAwareMarkdown = useMemo(
-    () => createSectionAwareMarkdown(sections, navigateToQuestion),
-    [sections, navigateToQuestion],
+    () => createSectionAwareMarkdown(sections, activeSection, navigateToQuestion),
+    [sections, activeSection, navigateToQuestion],
   );
 
   if (loading) return <div className="p-6 text-gray-500">Loading...</div>;

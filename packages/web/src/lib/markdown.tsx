@@ -10,21 +10,26 @@ type NavigateToQuestion = (sectionId: string, questionIndex: number) => void;
 // Module-level context for section-aware inline rendering.
 // Set by createSectionAwareMarkdown before each render call.
 let _sections: SectionInfo[] = [];
+let _activeSectionId: string | null = null;
 let _onNavigate: NavigateToQuestion | null = null;
 
 /**
  * Create a renderMarkdown function that makes question references clickable.
  * Clicking "Q1 (Architecture)" switches to the Architecture section and scrolls to Q1.
+ * References to the currently active section render as plain text (no link needed).
  */
 export function createSectionAwareMarkdown(
   sections: SectionInfo[],
+  activeSectionId: string | null,
   onNavigate: NavigateToQuestion,
 ): (text: string) => React.ReactNode {
   return (text: string) => {
     _sections = sections;
+    _activeSectionId = activeSectionId;
     _onNavigate = onNavigate;
     const result = renderMarkdown(text);
     _sections = [];
+    _activeSectionId = null;
     _onNavigate = null;
     return result;
   };
@@ -152,17 +157,16 @@ export function renderInline(text: string): React.ReactNode {
         const qNum = parseInt(qNumStr, 10);
         const section = findSection(sectionName);
         if (before) parts.push(<span key={key++}>{before}</span>);
-        if (section) {
+        if (section && section.id !== _activeSectionId) {
+          // Different section — render as clickable link
           const navigate = _onNavigate;
           const sectionId = section.id;
-          // Q numbers in UI are 1-based, question indices are 0-based
           const zeroIndex = qNum - 1;
           parts.push(
             <button
               key={key++}
               onClick={() => {
                 navigate(sectionId, zeroIndex);
-                // Delay scroll slightly to let section switch render
                 setTimeout(() => scrollToQuestion(zeroIndex), 100);
               }}
               className="inline text-blue-600 hover:text-blue-800 underline decoration-dotted cursor-pointer font-medium"
@@ -172,7 +176,7 @@ export function renderInline(text: string): React.ReactNode {
             </button>
           );
         } else {
-          // Section not found — render as plain text
+          // Current section or not found — render as plain text
           parts.push(<span key={key++}>Q{qNumStr} ({sectionName})</span>);
         }
         remaining = after;
