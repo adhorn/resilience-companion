@@ -148,37 +148,53 @@ export function renderInline(text: string): React.ReactNode {
   let key = 0;
 
   while (remaining.length > 0) {
-    // Question reference with section: Q1 (Architecture), Q3 (Monitoring), etc.
-    // Only active when section context is provided via createSectionAwareMarkdown.
+    // Question references — clickable, scroll to question.
+    // "Q1 (Architecture)" → switch section + scroll. Plain "Q1" → scroll in current section.
     if (_onNavigate && _sections.length > 0) {
-      const qRefMatch = remaining.match(/^(.*?)\bQ(\d+)\s*\(([^)]+)\)(.*)/s);
-      if (qRefMatch) {
-        const [, before, qNumStr, sectionName, after] = qRefMatch;
+      // First try: Q1 (Section Name)
+      const qWithSection = remaining.match(/^(.*?)\bQ(\d+)\s*\(([^)]+)\)(.*)/s);
+      if (qWithSection) {
+        const [, before, qNumStr, sectionName, after] = qWithSection;
         const qNum = parseInt(qNumStr, 10);
+        const zeroIndex = qNum - 1;
         const section = findSection(sectionName);
         if (before) parts.push(<span key={key++}>{before}</span>);
-        if (section && section.id !== _activeSectionId) {
-          // Different section — render as clickable link
-          const navigate = _onNavigate;
-          const sectionId = section.id;
-          const zeroIndex = qNum - 1;
-          parts.push(
-            <button
-              key={key++}
-              onClick={() => {
-                navigate(sectionId, zeroIndex);
-                setTimeout(() => scrollToQuestion(zeroIndex), 100);
-              }}
-              className="inline text-blue-600 hover:text-blue-800 underline decoration-dotted cursor-pointer font-medium"
-              title={`Go to Q${qNum} in ${section.title}`}
-            >
-              Q{qNum} ({sectionName})
-            </button>
-          );
-        } else {
-          // Current section or not found — render as plain text
-          parts.push(<span key={key++}>Q{qNumStr} ({sectionName})</span>);
-        }
+        const navigate = _onNavigate;
+        const targetId = section?.id || _activeSectionId;
+        parts.push(
+          <button
+            key={key++}
+            onClick={() => {
+              if (targetId && targetId !== _activeSectionId) navigate(targetId, zeroIndex);
+              setTimeout(() => scrollToQuestion(zeroIndex), targetId !== _activeSectionId ? 100 : 0);
+            }}
+            className="inline text-blue-600 hover:text-blue-800 underline decoration-dotted cursor-pointer font-medium"
+            title={section ? `Go to Q${qNum} in ${section.title}` : `Scroll to Q${qNum}`}
+          >
+            Q{qNumStr} ({sectionName})
+          </button>
+        );
+        remaining = after;
+        continue;
+      }
+
+      // Second: plain Q1, Q2, etc. — scroll within current section
+      const qPlain = remaining.match(/^(.*?)\bQ(\d+)\b(.*)/s);
+      if (qPlain) {
+        const [, before, qNumStr, after] = qPlain;
+        const qNum = parseInt(qNumStr, 10);
+        const zeroIndex = qNum - 1;
+        if (before) parts.push(<span key={key++}>{before}</span>);
+        parts.push(
+          <button
+            key={key++}
+            onClick={() => scrollToQuestion(zeroIndex)}
+            className="inline text-blue-600 hover:text-blue-800 underline decoration-dotted cursor-pointer font-medium"
+            title={`Scroll to Q${qNum}`}
+          >
+            Q{qNumStr}
+          </button>
+        );
         remaining = after;
         continue;
       }
