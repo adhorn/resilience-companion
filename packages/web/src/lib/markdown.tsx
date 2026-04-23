@@ -178,25 +178,21 @@ export function renderInline(text: string): React.ReactNode {
         continue;
       }
 
-      // Second: plain Q1, Q2, etc. — scroll within current section, show section name
+      // Second: plain Q1, Q2, etc. — scroll within whatever section is currently displayed
       const qPlain = remaining.match(/^(.*?)\bQ(\d+)\b(.*)/s);
       if (qPlain) {
         const [, before, qNumStr, after] = qPlain;
         const qNum = parseInt(qNumStr, 10);
         const zeroIndex = qNum - 1;
-        const activeSection = _activeSectionId
-          ? _sections.find((s) => s.id === _activeSectionId)
-          : null;
-        const sectionLabel = activeSection ? ` (${activeSection.title})` : "";
         if (before) parts.push(<span key={key++}>{before}</span>);
         parts.push(
           <button
             key={key++}
             onClick={() => scrollToQuestion(zeroIndex)}
             className="inline text-blue-600 hover:text-blue-800 underline decoration-dotted cursor-pointer font-medium"
-            title={activeSection ? `Scroll to Q${qNum} in ${activeSection.title}` : `Scroll to Q${qNum}`}
+            title={`Scroll to Q${qNum}`}
           >
-            Q{qNumStr}{sectionLabel}
+            Q{qNumStr}
           </button>
         );
         remaining = after;
