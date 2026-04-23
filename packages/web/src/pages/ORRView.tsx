@@ -676,11 +676,12 @@ export function ORRView() {
                 const isAnswered = (savedValue || session.editingResponses[i] || "").trim().length > 0;
 
                 return (
-                  <div key={i} className="group">
+                  <div key={i} id={`question-${i}`} className="group scroll-mt-4">
                     <div className="flex items-start gap-2 mb-1.5">
                       <span className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
                         isAnswered ? "bg-green-500" : "bg-gray-300"
                       }`} />
+                      <span className="text-xs font-mono text-gray-400 mt-0.5 flex-shrink-0">Q{i + 1}</span>
                       <span className="text-sm text-gray-700 font-medium">{prompt}</span>
                     </div>
                     <div className="ml-4">
