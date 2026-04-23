@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../api/client";
 import { ConversationPanel } from "../components/ConversationPanel";
 import { ExperimentsPanel } from "../components/ExperimentsPanel";
 import { LearningPanel } from "../components/LearningPanel";
 import { DEPTH_COLORS, DEPTH_LABELS, SEVERITY_COLORS_BOLD, FACTOR_CATEGORY_COLORS, EVENT_TYPE_COLORS } from "../lib/style-constants";
-import { renderMarkdown } from "../lib/markdown";
+import { renderMarkdown, createSectionAwareMarkdown } from "../lib/markdown";
 import { parseResponses, getResponseText, answeredCount, totalQuestions } from "../lib/responses";
 import { useReviewSession, SlashCommand } from "../hooks/useReviewSession";
 
@@ -185,10 +185,20 @@ export function IncidentView() {
     await reloadData();
   }, [id, session, reloadData]);
 
+  const navigateToQuestion = useCallback((sectionId: string, _questionIndex: number) => {
+    setActiveSection(sectionId);
+    setActiveTab("analysis");
+  }, []);
+  const sectionAwareMarkdown = useMemo(
+    () => createSectionAwareMarkdown(sections, navigateToQuestion),
+    [sections, navigateToQuestion],
+  );
+
   if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
   if (!incident) return <div className="p-6 text-red-500">Incident not found</div>;
 
   const currentSection = sections.find((s) => s.id === activeSection);
+
   const currentPrompts = currentSection
     ? typeof currentSection.prompts === "string"
       ? JSON.parse(currentSection.prompts)
@@ -610,7 +620,7 @@ export function IncidentView() {
         discussingTitle={activeSection && currentSection ? currentSection.title : null}
         emptyStateText="Start an AI session to get help analyzing this incident."
         emptyStateSubtext="The AI will help you explore contributing factors, build timelines, and extract systemic learning."
-        renderMarkdown={renderMarkdown}
+        renderMarkdown={sectionAwareMarkdown}
         isReadOnly={incident?.status === "ARCHIVED"}
         readOnlyReason="archived"
       />

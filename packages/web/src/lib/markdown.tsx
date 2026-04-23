@@ -1,5 +1,35 @@
 import React from "react";
 
+interface SectionInfo {
+  id: string;
+  title: string;
+}
+
+type NavigateToQuestion = (sectionId: string, questionIndex: number) => void;
+
+// Module-level context for section-aware inline rendering.
+// Set by createSectionAwareMarkdown before each render call.
+let _sections: SectionInfo[] = [];
+let _onNavigate: NavigateToQuestion | null = null;
+
+/**
+ * Create a renderMarkdown function that makes question references clickable.
+ * Clicking "Q1 (Architecture)" switches to the Architecture section and scrolls to Q1.
+ */
+export function createSectionAwareMarkdown(
+  sections: SectionInfo[],
+  onNavigate: NavigateToQuestion,
+): (text: string) => React.ReactNode {
+  return (text: string) => {
+    _sections = sections;
+    _onNavigate = onNavigate;
+    const result = renderMarkdown(text);
+    _sections = [];
+    _onNavigate = null;
+    return result;
+  };
+}
+
 /**
  * Render markdown-ish text to React elements.
  * Handles: **bold**, *italic*, `code`, ```fenced code blocks```, bullet lists, numbered lists, paragraphs.
@@ -89,12 +119,67 @@ export function renderMarkdown(text: string): React.ReactNode {
   return <>{elements}</>;
 }
 
+/** Scroll to a question element by 0-based index, with a brief highlight */
+function scrollToQuestion(index: number) {
+  const el = document.getElementById(`question-${index}`);
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("bg-blue-50");
+    setTimeout(() => el.classList.remove("bg-blue-50"), 2000);
+  }
+}
+
+/** Try to find a section by matching its title (case-insensitive, partial) */
+function findSection(sectionName: string): SectionInfo | undefined {
+  const lower = sectionName.toLowerCase();
+  return _sections.find((s) => s.title.toLowerCase() === lower)
+    || _sections.find((s) => s.title.toLowerCase().includes(lower))
+    || _sections.find((s) => lower.includes(s.title.toLowerCase()));
+}
+
 export function renderInline(text: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
   let remaining = text;
   let key = 0;
 
   while (remaining.length > 0) {
+    // Question reference with section: Q1 (Architecture), Q3 (Monitoring), etc.
+    // Only active when section context is provided via createSectionAwareMarkdown.
+    if (_onNavigate && _sections.length > 0) {
+      const qRefMatch = remaining.match(/^(.*?)\bQ(\d+)\s*\(([^)]+)\)(.*)/s);
+      if (qRefMatch) {
+        const [, before, qNumStr, sectionName, after] = qRefMatch;
+        const qNum = parseInt(qNumStr, 10);
+        const section = findSection(sectionName);
+        if (before) parts.push(<span key={key++}>{before}</span>);
+        if (section) {
+          const navigate = _onNavigate;
+          const sectionId = section.id;
+          // Q numbers in UI are 1-based, question indices are 0-based
+          const zeroIndex = qNum - 1;
+          parts.push(
+            <button
+              key={key++}
+              onClick={() => {
+                navigate(sectionId, zeroIndex);
+                // Delay scroll slightly to let section switch render
+                setTimeout(() => scrollToQuestion(zeroIndex), 100);
+              }}
+              className="inline text-blue-600 hover:text-blue-800 underline decoration-dotted cursor-pointer font-medium"
+              title={`Go to Q${qNum} in ${section.title}`}
+            >
+              Q{qNum} ({sectionName})
+            </button>
+          );
+        } else {
+          // Section not found — render as plain text
+          parts.push(<span key={key++}>Q{qNumStr} ({sectionName})</span>);
+        }
+        remaining = after;
+        continue;
+      }
+    }
+
     // Bold
     const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*(.*)/s);
     if (boldMatch) {

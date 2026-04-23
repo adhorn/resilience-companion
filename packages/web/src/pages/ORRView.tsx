@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../api/client";
 import { DependenciesPanel } from "../components/DependenciesPanel";
@@ -7,7 +7,7 @@ import { RisksPanel } from "../components/RisksPanel";
 import { LearningPanel } from "../components/LearningPanel";
 import { ConversationPanel } from "../components/ConversationPanel";
 import { DEPTH_COLORS, DEPTH_LABELS, FLAG_COLORS, SEVERITY_COLORS_BOLD } from "../lib/style-constants";
-import { renderMarkdown } from "../lib/markdown";
+import { renderMarkdown, createSectionAwareMarkdown } from "../lib/markdown";
 import { parseResponses, getResponseText, getResponseSource, getResponseCodeRef, answeredCount, codeSourcedCount, totalQuestions } from "../lib/responses";
 import { useReviewSession, SlashCommand } from "../hooks/useReviewSession";
 
@@ -295,10 +295,22 @@ export function ORRView() {
     }
   }, [id, repoUrl, repoToken]);
 
+  // Section-aware markdown renderer for conversation panel —
+  // makes "Q1 (Architecture)" clickable, switching section + scrolling to question
+  const navigateToQuestion = useCallback((sectionId: string, _questionIndex: number) => {
+    setActiveSection(sectionId);
+    setActiveTab("review");
+  }, []);
+  const sectionAwareMarkdown = useMemo(
+    () => createSectionAwareMarkdown(sections, navigateToQuestion),
+    [sections, navigateToQuestion],
+  );
+
   if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
   if (!orr) return <div className="p-6 text-red-500">ORR not found</div>;
 
   const currentSection = sections.find((s) => s.id === activeSection);
+
   const currentPrompts = currentSection
     ? typeof currentSection.prompts === "string"
       ? JSON.parse(currentSection.prompts)
@@ -879,7 +891,7 @@ export function ORRView() {
         discussingTitle={activeSection && currentSection ? currentSection.title : null}
         emptyStateText="Start an AI session to get help reviewing this ORR."
         emptyStateSubtext="The AI will help you think through questions, share relevant lessons, and assess depth."
-        renderMarkdown={renderMarkdown}
+        renderMarkdown={sectionAwareMarkdown}
         isReadOnly={isReadOnly}
         readOnlyReason={orr.status === "TERMINATED" ? "terminated" : orr.status === "ARCHIVED" ? "archived" : undefined}
       />
