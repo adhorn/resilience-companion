@@ -1,7 +1,7 @@
 {
   "name": "resilience-companion",
   "private": true,
-  "license": "AGPL-3.0-or-later",
+  "license": "Apache-2.0",
   "workspaces": [
     "packages/shared",
     "packages/api",
