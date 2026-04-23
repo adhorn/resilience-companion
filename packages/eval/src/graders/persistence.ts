@@ -79,16 +79,20 @@ function gradeQuestionPersisted(
     };
   }
 
-  const responses = section.promptResponses as Record<string, string> | null;
-  const response = responses?.[String(questionIndex)];
-  const hasContent = typeof response === "string" && response.trim().length > 0;
+  const responses = section.promptResponses as Record<string, unknown> | null;
+  const raw = responses?.[String(questionIndex)];
+  // Responses can be plain strings OR objects with {answer, source, codeRef}
+  const responseText = typeof raw === "string"
+    ? raw
+    : (raw && typeof raw === "object" && "answer" in raw) ? (raw as {answer: string}).answer : "";
+  const hasContent = responseText.trim().length > 0;
 
   return {
     grader: "persistence",
     outcomeDescription: outcome.description,
     passed: hasContent,
     details: hasContent
-      ? `Question ${questionIndex} in section "${section.title}" persisted (${response!.length} chars)`
+      ? `Question ${questionIndex} in section "${section.title}" persisted (${responseText.length} chars)`
       : `Question ${questionIndex} in section "${section.title}" was NOT persisted (promptResponses[${questionIndex}] is empty or missing)`,
   };
 }
