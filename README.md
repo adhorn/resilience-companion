@@ -422,4 +422,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: this is a companion to a 
 
 ## License
 
-[AGPL-3.0](LICENSE). This means you can use, modify, and self-host freely, but if you modify the code and make it available as a network service, you must release your modifications under the same license.
+[Apache License 2.0](LICENSE).

@@ -1,7 +1,17 @@
 {
   "name": "resilience-companion",
   "private": true,
+  "description": "AI-facilitated resilience practices (ORRs, incident analysis) for engineering teams. Companion to 'Why We Still Suck at Resilience' by Adrian Hornsby.",
+  "author": "Adrian Hornsby",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adhorn/resilience-companion.git"
+  },
+  "homepage": "https://github.com/adhorn/resilience-companion#readme",
+  "bugs": {
+    "url": "https://github.com/adhorn/resilience-companion/issues"
+  },
   "workspaces": [
     "packages/shared",
     "packages/api",

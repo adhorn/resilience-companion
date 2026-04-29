@@ -20,7 +20,7 @@ If a proposed change conflicts with those claims, it probably won't land — not
 - **Active architectural flux.** Core structures (agent loop, retrieval, memory) are still moving. Coordinate before building anything non-trivial.
 - **Opinionated scope.** Features that don't serve the book's argument are out of scope, even if they'd be useful in other contexts.
 
-If any of that is a dealbreaker, fork it. That's a legitimate outcome — the AGPL-3.0 license allows it.
+If any of that is a dealbreaker, fork it. The Apache-2.0 license allows it.
 
 ## What I'm looking for
 
@@ -78,7 +78,7 @@ Reminder: this tool's threat model is "trusted internal network, single team." I
 
 ## Licensing of contributions
 
-By contributing, you agree that your contributions will be released under the [AGPL-3.0](LICENSE) license.
+By contributing, you agree that your contributions will be released under the [Apache License 2.0](LICENSE).
 
 ## Code of conduct
 
