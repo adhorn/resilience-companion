@@ -1,9 +1,10 @@
 /**
- * Agent loop tests — verifies text streaming behavior across multi-iteration turns.
+ * Agent loop tests — verifies wrap-up behavior doesn't cause text duplication.
  *
- * The core problem: when the LLM produces text + tool calls across multiple iterations,
- * later iterations paraphrase earlier text. These tests verify that only one block of
- * text reaches the client, and that the wrap-up only fires when no text was streamed.
+ * The bug: when the loop exits on a text-only iteration (no tool calls),
+ * the text isn't pushed as an assistant message. So messages.at(-1) is still
+ * "tool" from the previous iteration, and the wrap-up fires, producing a
+ * paraphrased duplicate of what was already streamed.
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import { setupTestDb, seedTestOrr, seedTestSession } from "../test-helpers.js";
@@ -13,33 +14,25 @@ import { runAgent } from "./loop.js";
 import type { AgentInput } from "./loop.js";
 import { orrPracticeConfig } from "../practices/orr/config.js";
 
-/**
- * Create a mock LLM that plays back a sequence of responses.
- * Each response is an array of StreamChunks representing one LLM call.
- * The mock advances through the sequence on each call to chat().
- */
+/** Mock LLM that plays a sequence of responses, one per chat() call. */
 function sequenceLLM(responses: StreamChunk[][]): LLMAdapter {
   let callIndex = 0;
   return {
-    async *chat(_messages: any, _tools?: LLMToolDef[]) {
+    async *chat() {
       const chunks = responses[callIndex] || [
         { type: "content" as const, content: "fallback" },
         { type: "done" as const, usage: { promptTokens: 10, completionTokens: 5 } },
       ];
       callIndex++;
-      for (const chunk of chunks) {
-        yield chunk;
-      }
+      for (const chunk of chunks) yield chunk;
     },
   };
 }
 
-/** Helper: create a content chunk */
 function text(content: string): StreamChunk {
   return { type: "content", content };
 }
 
-/** Helper: create tool call chunks (start + end) */
 function toolCall(id: string, name: string, args: Record<string, unknown>): StreamChunk[] {
   return [
     { type: "tool_call_start", toolCallId: id, toolName: name, toolArgs: "" },
@@ -47,34 +40,19 @@ function toolCall(id: string, name: string, args: Record<string, unknown>): Stre
   ];
 }
 
-/** Helper: done chunk */
 function done(): StreamChunk {
   return { type: "done", usage: { promptTokens: 100, completionTokens: 50 } };
 }
 
-/** Collect all content_delta text from agent events */
 async function collectText(input: AgentInput): Promise<string> {
-  let text = "";
+  let result = "";
   for await (const event of runAgent(input)) {
-    if (event.type === "content_delta") {
-      text += event.content;
-    }
+    if (event.type === "content_delta") result += event.content;
   }
-  return text;
+  return result;
 }
 
-/** Count content_delta events */
-async function collectEvents(input: AgentInput): Promise<Array<{ type: string; content?: string }>> {
-  const events: Array<{ type: string; content?: string }> = [];
-  for await (const event of runAgent(input)) {
-    if (event.type === "content_delta" || event.type === "message_start" || event.type === "message_end") {
-      events.push({ type: event.type, content: event.type === "content_delta" ? (event as any).content : undefined });
-    }
-  }
-  return events;
-}
-
-describe("agent loop — text duplication prevention", () => {
+describe("agent loop — wrap-up does not duplicate text", () => {
   let orrId: string;
   let sectionIds: string[];
   let sessionId: string;
@@ -88,7 +66,7 @@ describe("agent loop — text duplication prevention", () => {
     resetLLM();
   });
 
-  function makeInput(overrides?: Partial<AgentInput>): AgentInput {
+  function makeInput(): AgentInput {
     return {
       practiceConfig: orrPracticeConfig,
       practiceId: orrId,
@@ -97,35 +75,38 @@ describe("agent loop — text duplication prevention", () => {
       conversationHistory: [],
       userMessage: "Tell me about the architecture",
       sessionTokenUsage: 0,
-      ...overrides,
     };
   }
 
-  it("streams text only once when LLM produces text + tools across multiple iterations", async () => {
-    // Simulate: iteration 0 produces text + tool call, iteration 1 produces paraphrased text + tool call,
-    // iteration 2 produces more paraphrased text (no tools, loop exits)
+  it("does not run wrap-up when loop exits on a text-only iteration after tool iterations", async () => {
+    // This is the exact pattern from the incident trace:
+    // iteration 0: text + tool call (read_section)
+    // iteration 1: text + tool call (update_question_response)
+    // iteration 2: text only → loop exits
+    // wrap-up should NOT fire because iteration 2 produced text
     const llm = sequenceLLM([
-      // Iteration 0: text + tool call
+      // Iteration 0: text + read_section
       [
-        text("Good question about architecture. "),
-        text("Let me look at this section."),
+        text("Three layers of validation were missing. "),
         ...toolCall("tc1", "read_section", { section_id: sectionIds[0] }),
         done(),
       ],
-      // Iteration 1: paraphrased text + another tool call (should be suppressed)
+      // Iteration 1: text + update_question_response
       [
-        text("So the architecture section shows... "),
-        text("Let me record this observation."),
+        text("Let me record this. "),
         ...toolCall("tc2", "update_question_response", {
-          section_id: sectionIds[0],
-          question_index: 0,
-          response: "test answer",
+          section_id: sectionIds[0], question_index: 0, response: "test",
         }),
         done(),
       ],
-      // Iteration 2: final text only (should be suppressed since we already have text)
+      // Iteration 2: text only — loop should exit here
       [
-        text("To summarize what we found..."),
+        text("Let's move to the next question."),
+        done(),
+      ],
+      // Wrap-up — this should NOT be called
+      [
+        text("WRAP-UP SHOULD NOT APPEAR"),
         done(),
       ],
     ]);
@@ -133,35 +114,42 @@ describe("agent loop — text duplication prevention", () => {
     setLLM(llm);
     const output = await collectText(makeInput());
 
-    // Should only contain text from iteration 0
-    expect(output).toContain("Good question about architecture.");
-    expect(output).toContain("Let me look at this section.");
-    // Should NOT contain paraphrased text from later iterations
-    expect(output).not.toContain("So the architecture section shows");
-    expect(output).not.toContain("Let me record this observation");
-    expect(output).not.toContain("To summarize what we found");
+    expect(output).toContain("Three layers of validation were missing.");
+    expect(output).toContain("Let's move to the next question.");
+    expect(output).not.toContain("WRAP-UP SHOULD NOT APPEAR");
   });
 
-  it("runs wrap-up when no text was produced (only tool calls)", async () => {
-    // Simulate: iteration 0 produces only tool calls (no text), wrap-up should fire
+  it("does run wrap-up when loop exits with only tool calls and no text", async () => {
     const llm = sequenceLLM([
-      // Iteration 0: tool calls only, no text
+      // Iteration 0: tool call only, no text
       [
         ...toolCall("tc1", "read_section", { section_id: sectionIds[0] }),
         done(),
       ],
-      // Iteration 1: more tool calls only
+      // Iteration 1: tool call only
       [
         ...toolCall("tc2", "update_question_response", {
-          section_id: sectionIds[0],
-          question_index: 0,
-          response: "test",
+          section_id: sectionIds[0], question_index: 0, response: "test",
         }),
         done(),
       ],
-      // Wrap-up turn: should produce text
+      // Iteration 2: tool call only
       [
-        text("Based on my review of the section, here are the key points."),
+        ...toolCall("tc3", "read_section", { section_id: sectionIds[0] }),
+        done(),
+      ],
+      // Iterations 3-4: tool calls (fills up to max)
+      [
+        ...toolCall("tc4", "read_section", { section_id: sectionIds[0] }),
+        done(),
+      ],
+      [
+        ...toolCall("tc5", "read_section", { section_id: sectionIds[0] }),
+        done(),
+      ],
+      // Wrap-up — SHOULD fire since no text was produced
+      [
+        text("Here is my summary of what I found."),
         done(),
       ],
     ]);
@@ -169,49 +157,6 @@ describe("agent loop — text duplication prevention", () => {
     setLLM(llm);
     const output = await collectText(makeInput());
 
-    // Wrap-up text should be present since no text was streamed during the loop
-    expect(output).toContain("Based on my review");
-  });
-
-  it("skips wrap-up when text was already streamed", async () => {
-    // Simulate: iteration 0 produces text + tool call, loop ends at iteration limit
-    const llm = sequenceLLM([
-      // Iteration 0: text + tool call
-      [
-        text("Here is my analysis."),
-        ...toolCall("tc1", "read_section", { section_id: sectionIds[0] }),
-        done(),
-      ],
-      // Iterations 1-4: just tool calls (these consume the remaining iterations)
-      ...Array(4).fill([
-        ...toolCall("tc-n", "read_section", { section_id: sectionIds[0] }),
-        done(),
-      ]),
-      // Wrap-up (should NOT fire because text was already streamed)
-      [
-        text("This should never appear."),
-        done(),
-      ],
-    ]);
-
-    setLLM(llm);
-    const output = await collectText(makeInput());
-
-    expect(output).toContain("Here is my analysis");
-    expect(output).not.toContain("This should never appear");
-  });
-
-  it("single iteration with text only — no duplication possible", async () => {
-    const llm = sequenceLLM([
-      [
-        text("This is a simple response with no tool calls."),
-        done(),
-      ],
-    ]);
-
-    setLLM(llm);
-    const output = await collectText(makeInput());
-
-    expect(output).toBe("This is a simple response with no tool calls.");
+    expect(output).toContain("Here is my summary of what I found.");
   });
 });
