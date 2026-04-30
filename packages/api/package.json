@@ -11,11 +11,11 @@
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.26.4",
     "@anthropic-ai/sdk": "^0.78.0",
-    "@hono/node-server": "^1.19.14",
+    "@hono/node-server": "^2.0.1",
     "@orr/shared": "*",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.8.1",
-    "drizzle-orm": "^0.38.4",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.15",
     "jose": "^6.0.8",
     "nanoid": "^5.0.9",
