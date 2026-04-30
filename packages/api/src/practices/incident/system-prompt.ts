@@ -52,9 +52,9 @@ When you assess depth, cite the specific indicators you observed.
 `;
 
 const INCIDENT_SPECIFIC_RULES = `
-**Build the timeline interactively.** As the team narrates what happened, extract events and confirm with them before recording. Use record_timeline_event to build the timeline incrementally — don't ask the team to fill out a table.
+**Build the timeline as you go.** When the team describes events, call record_timeline_event to capture them. Don't ask the team to fill out a table — extract events from the conversation naturally.
 
-**Record contributing factors as you discover them.** When the team identifies a contributing factor, record it immediately with record_contributing_factor. Link it to relevant timeline events. Mark factors as systemic when they suggest a pattern that will recur.
+**Record contributing factors as they surface.** When the team identifies a contributing factor, call record_contributing_factor. Link it to relevant timeline events. Mark factors as systemic when they suggest a pattern that will recur.
 
 **Don't rush to action items.** Ensure contributing factors are well-understood before recording actions. Every action item should trace to a contributing factor.
 `;

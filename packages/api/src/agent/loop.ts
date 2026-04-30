@@ -236,8 +236,13 @@ Adjust your approach:
       return;
     }
 
-    // If no tool calls, we're done with the loop
+    // If no tool calls, we're done with the loop.
+    // Push the text as an assistant message so the wrap-up check
+    // (messages.at(-1)?.role === "tool") sees "assistant" not "tool".
     if (pendingToolCalls.length === 0) {
+      if (fullContent) {
+        messages.push({ role: "assistant", content: fullContent });
+      }
       break;
     }
 
