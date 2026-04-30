@@ -11,7 +11,7 @@
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.26.4",
     "@anthropic-ai/sdk": "^0.78.0",
-    "@hono/node-server": "^1.13.8",
+    "@hono/node-server": "^1.19.14",
     "@orr/shared": "*",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.8.1",
