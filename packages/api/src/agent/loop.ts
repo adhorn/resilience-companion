@@ -155,18 +155,18 @@ Adjust your approach:
   let maxIterations = MAX_AGENT_ITERATIONS; // default 5
   let codeToolsUsed = 0;
 
+  // Track whether we've already streamed substantive text to the client.
+  // When the LLM produces text + tool calls across multiple iterations,
+  // later iterations tend to paraphrase earlier text. We only stream text
+  // from the FIRST iteration that produces it; subsequent iterations' text
+  // is suppressed. The wrap-up turn (after the loop) produces the final
+  // coherent response if the loop ended mid-tool-exploration.
+  let hasStreamedText = false;
+
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     if (iteration > 0 && cumulativeTokens() >= MAX_SESSION_TOKENS) {
       log("info", "Session hit token budget mid-turn", { sessionId, tokens: cumulativeTokens(), max: MAX_SESSION_TOKENS });
       break;
-    }
-
-    // Add separator between iterations' text so sentences don't run together
-    if (iteration > 0 && converseFullText.length > 0) {
-      converseFullText += "\n\n";
-      if (!isSlashWrite) {
-        yield { type: "content_delta", content: "\n\n" };
-      }
     }
 
     let fullContent = "";
@@ -197,10 +197,13 @@ Adjust your approach:
             const text = chunk.content!;
             if (text.match(/<invoke\s|<parameter\s|<\/invoke>|<\/parameter>/)) break;
             fullContent += text;
-            converseFullText += text;
-            // For write slash commands, suppress streaming — show spinner until slash_result
-            if (!isSlashWrite) {
-              yield { type: "content_delta", content: text };
+            // Only stream text from the first iteration that produces it.
+            // Later iterations' text is repetitive paraphrasing.
+            if (!hasStreamedText) {
+              converseFullText += text;
+              if (!isSlashWrite) {
+                yield { type: "content_delta", content: text };
+              }
             }
             break;
           }
@@ -238,13 +241,19 @@ Adjust your approach:
 
     // If no tool calls, we're done with the loop
     if (pendingToolCalls.length === 0) {
+      if (fullContent.trim()) hasStreamedText = true;
       break;
     }
 
-    // Execute tool calls and build response messages
+    // Mark that we've streamed text so subsequent iterations suppress theirs
+    if (fullContent.trim()) hasStreamedText = true;
+
+    // Execute tool calls and build response messages.
+    // Content set to null — the text was already streamed to the client.
+    // Including it in conversation history causes the LLM to repeat itself.
     const assistantMessage: LLMMessage = {
       role: "assistant",
-      content: fullContent || null,
+      content: null,
       tool_calls: pendingToolCalls.map((tc) => ({
         id: tc.id,
         type: "function" as const,
@@ -315,10 +324,11 @@ Adjust your approach:
     }
   }
 
-  // If the loop ended mid-tool-exploration (last message is a tool result),
-  // give the LLM one final text-only turn to wrap up coherently.
-  // Skip if the agent already produced a text response (no tool calls in final iteration).
-  if (messages.at(-1)?.role === "tool") {
+  // If the loop ended mid-tool-exploration (last message is a tool result)
+  // AND we haven't streamed any text yet, give the LLM one final text-only
+  // turn to respond. Skip if text was already streamed — the user already
+  // has a response and the wrap-up would just paraphrase it.
+  if (messages.at(-1)?.role === "tool" && !hasStreamedText) {
     try {
       messages.push({
         role: "user",
