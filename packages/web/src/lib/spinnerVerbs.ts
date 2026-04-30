@@ -80,7 +80,9 @@ let lastIndex = -1;
 export function getSpinnerVerb(): string {
   let index: number;
   do {
-    index = Math.floor(Math.random() * SPINNER_VERBS.length);
+    const buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    index = buf[0] % SPINNER_VERBS.length;
   } while (index === lastIndex && SPINNER_VERBS.length > 1);
   lastIndex = index;
   return SPINNER_VERBS[index];
