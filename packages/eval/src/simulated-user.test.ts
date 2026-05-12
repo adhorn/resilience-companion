@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { shouldEndConversation } from "./simulated-user.js";
+import { shouldEndConversation, SimulatedUser } from "./simulated-user.js";
+import type { UserPersona } from "./types.js";
 
 describe("shouldEndConversation", () => {
   it("ends on empty string", () => {
@@ -32,5 +33,27 @@ describe("shouldEndConversation", () => {
 
   it("does NOT end on a substantive response", () => {
     expect(shouldEndConversation("We monitor with Datadog and PagerDuty.")).toBe(false);
+  });
+});
+
+describe("SimulatedUser.nextMessage", () => {
+  const stubPersona: UserPersona = {
+    systemPrompt: "test",
+    knowledge: "test",
+    style: "cooperative",
+  };
+
+  it("returns null when the agent message is empty (without calling the API)", async () => {
+    const user = new SimulatedUser(stubPersona, "fake-key-not-used");
+    // If the early-return guard is missing, this would fail with an auth error
+    // when the SDK tries to call Anthropic with the fake key.
+    const result = await user.nextMessage("");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when the agent message is whitespace-only", async () => {
+    const user = new SimulatedUser(stubPersona, "fake-key-not-used");
+    const result = await user.nextMessage("   \n\t  ");
+    expect(result).toBeNull();
   });
 });

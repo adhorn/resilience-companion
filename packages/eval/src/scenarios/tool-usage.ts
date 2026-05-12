@@ -10,11 +10,12 @@ import type { EvalScenario } from "../types.js";
 export const toolUsageScenarios: EvalScenario[] = [
   {
     id: "tool-min-call-rate",
-    name: "Minimum tool call rate across a 4-turn conversation",
+    name: "Minimum tool call rate across a short conversation",
     category: "tool_usage",
     type: "regression",
     practiceType: "orr",
-    maxTurns: 4,
+    model: "sonnet",
+    maxTurns: 3,
     userPersona: {
       style: "cooperative",
       knowledge: `
@@ -42,9 +43,10 @@ Answer questions directly with technical specifics.
     id: "tool-depth-assessment",
     name: "Depth assessment is called after substantive answers (any value)",
     category: "tool_usage",
-    type: "capability",
+    type: "regression",
     practiceType: "orr",
-    maxTurns: 7,
+    model: "sonnet",
+    maxTurns: 4,
     userPersona: {
       style: "cooperative",
       knowledge: `
@@ -74,9 +76,10 @@ which isn't much. Be honest about gaps.
     id: "tool-depth-assessment-surface",
     name: "Depth assessed as SURFACE when team is confidently vague (fluency illusion)",
     category: "tool_usage",
-    type: "capability",
+    type: "regression",
     practiceType: "orr",
-    maxTurns: 7,
+    model: "sonnet",
+    maxTurns: 5,
     userPersona: {
       style: "cooperative",
       knowledge: `
@@ -110,7 +113,8 @@ substance. Don't volunteer gaps. Keep answers 1-3 sentences.
     category: "tool_usage",
     type: "regression",
     practiceType: "orr",
-    maxTurns: 4,
+    model: "sonnet",
+    maxTurns: 3,
     userPersona: {
       style: "cooperative",
       knowledge: `

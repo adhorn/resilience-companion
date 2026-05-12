@@ -81,8 +81,13 @@ export async function runScenario(
     }
   }
 
-  // Set the production LLM adapter (from env vars — the real model under test)
-  // resetLLM() so getLLM() re-reads env and re-initializes from scratch
+  // Set the production LLM adapter for this scenario.
+  // If scenario.model is set, temporarily override LLM_MODEL so getLLM() picks it up;
+  // restore the original value in the finally block below so other scenarios aren't affected.
+  const originalModel = process.env.LLM_MODEL;
+  if (scenario.model) {
+    process.env.LLM_MODEL = scenario.model;
+  }
   resetLLM();
 
   const simulatedUser = new SimulatedUser(scenario.userPersona, opts.apiKey);
@@ -91,6 +96,8 @@ export async function runScenario(
   const allToolCalls: ToolCall[] = [];
   let conversationHistory: LLMMessage[] = [];
   let totalTokenUsage = 0;
+
+  try {
 
   // Kick off the conversation — simulated user speaks first
   const openingMsg = await simulatedUser.openingMessage();
@@ -176,4 +183,16 @@ export async function runScenario(
     tokenUsage: totalTokenUsage,
     durationMs: Date.now() - start,
   };
+
+  } finally {
+    // Restore LLM_MODEL so the next scenario starts from a clean slate.
+    if (scenario.model) {
+      if (originalModel === undefined) {
+        delete process.env.LLM_MODEL;
+      } else {
+        process.env.LLM_MODEL = originalModel;
+      }
+      resetLLM();
+    }
+  }
 }

@@ -1,10 +1,12 @@
 import { persistenceScenarios } from "./persistence.js";
 import { toolUsageScenarios } from "./tool-usage.js";
+import { longSessionScenarios } from "./long-session.js";
 import type { EvalScenario, EvalCategory } from "../types.js";
 
 export const ALL_SCENARIOS: EvalScenario[] = [
   ...persistenceScenarios,
   ...toolUsageScenarios,
+  ...longSessionScenarios,
 ];
 
 export function filterScenarios(
