@@ -19,9 +19,10 @@ export const persistenceScenarios: EvalScenario[] = [
     id: "persist-basic-qa",
     name: "Basic Q&A: architecture answer is persisted to DB",
     category: "persistence",
-    type: "capability",
+    type: "regression",
     practiceType: "orr",
-    maxTurns: 5,
+    model: "sonnet",
+    maxTurns: 3,
     userPersona: {
       style: "cooperative",
       knowledge: `
@@ -52,9 +53,10 @@ Don't over-explain — answer what's asked.
     id: "persist-multi-question",
     name: "Multi-question section: monitoring prompt persisted",
     category: "persistence",
-    type: "capability",
+    type: "regression",
     practiceType: "orr",
-    maxTurns: 8,
+    model: "sonnet",
+    maxTurns: 4,
     userPersona: {
       style: "cooperative",
       knowledge: `
@@ -85,9 +87,10 @@ If asked about gaps or missing runbooks, be honest about what doesn't exist yet.
     id: "persist-dependency-mention",
     name: "Dependency mentioned in conversation is recorded in DB",
     category: "persistence",
-    type: "capability",
+    type: "regression",
     practiceType: "orr",
-    maxTurns: 5,
+    model: "sonnet",
+    maxTurns: 3,
     userPersona: {
       style: "cooperative",
       knowledge: `
@@ -118,6 +121,7 @@ Be direct and technical.
     category: "persistence",
     type: "regression",
     practiceType: "orr",
+    model: "sonnet",
     maxTurns: 4,
     userPersona: {
       style: "verbose",
@@ -148,9 +152,10 @@ walk through the full process with specifics. Don't cut your answer short.
     id: "persist-terse-answers",
     name: "Terse answers: agent probes and persists what it learns",
     category: "persistence",
-    type: "capability",
+    type: "regression",
     practiceType: "orr",
-    maxTurns: 8,
+    model: "sonnet",
+    maxTurns: 5,
     userPersona: {
       style: "terse",
       knowledge: `

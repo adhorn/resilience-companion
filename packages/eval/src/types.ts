@@ -70,6 +70,13 @@ export interface EvalScenario {
   userPersona: UserPersona;
   /** Maximum number of conversation turns (user + agent = 1 turn) */
   maxTurns: number;
+  /**
+   * Optional per-scenario model override. Anthropic shortname (sonnet | opus | haiku)
+   * or full model ID. When omitted, falls through to the LLM_MODEL env var.
+   * Use this to run cheap regression scenarios on Sonnet while keeping a top-tier
+   * model for scenarios that explicitly need it (e.g. long-session realism).
+   */
+  model?: string;
   expectedOutcomes: ExpectedOutcome[];
 }
 
