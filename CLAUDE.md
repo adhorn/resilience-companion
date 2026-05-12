@@ -8,40 +8,39 @@ Resilience Companion is a web application for facilitating resilience practices 
 
 **Current state**: Phase 1 MVP — Review Facilitator + Incident Learning Facilitator agents, teaching moment library, portal, dashboard, markdown export.
 
-**Key design principle**: Document-first. The ORR/incident document is the durable artifact; conversations are ephemeral. The agent system uses a CONVERSE → PERSIST state machine: the conversational LLM has read-only tools, then a separate PERSIST phase extracts observations as structured JSON and writes deterministically to the DB.
+**Key design principle**: Document-first. The ORR/incident document is the durable artifact; conversations are ephemeral. The agent uses a **single loop with read and write tools**. An earlier CONVERSE → PERSIST split (read-only conversation + separate structured-JSON extraction pass) was tried and rolled back because the second-phase extraction degraded conversation quality.
 
 ## Commands
-
-```bash
-npm run eval            # Run agent quality evals (requires LLM_API_KEY)
-npm run eval:verbose    # Run evals with detailed output
-```
-
-## Testing Practices
-
-- **After any PR that touches agent code, prompts, or the persist phase**: run at least one eval scenario (`npm run eval -- --scenario persist-basic-qa`) and include the result in the PR.
-- **Never trust LLM output format**: any time we ask an LLM for structured data, extract it defensively (use `extractJson()` from `persist.ts`). LLMs add preamble, markdown fences, and commentary despite instructions.
-- **Integration tests over unit tests for LLM pipelines**: test the full chain (LLM response → extraction → validation → DB write), not just the writer in isolation. Mock the LLM with realistic messy output.
 
 ```bash
 npm run dev          # Start API (port 3000) + Web (port 5173) concurrently
 npm run build        # Build all packages in order: shared → api → web
 npm test             # Vitest — runs tests in packages/*/src/**/*.test.ts
-npm run lint         # TypeScript type-check (--noEmit) for api + web
+npm run lint         # TypeScript type-check (--noEmit) for api + web + eval
+npm run test:mutate  # Stryker mutation testing (config: stryker.config.json)
+npm run eval         # Run agent quality evals (requires LLM_API_KEY)
+npm run eval:verbose # Run evals with detailed output
 ```
 
-Per-workspace: `npm run dev -w @orr/shared`, `npm run dev -w @orr/api`, `npm run dev -w @orr/web`
+Run a single test file: `npx vitest run packages/api/src/routes/orrs.test.ts`
+Per-workspace dev: `npm run dev -w @orr/shared`, `npm run dev -w @orr/api`, `npm run dev -w @orr/web`
+
+## Testing Practices
+
+- **After any PR that touches agent code, prompts, or tool definitions**: run at least one eval scenario and include the result in the PR.
+- **Never trust LLM output format**: when extracting structured data from LLM output (e.g. write slash commands), use `extractJson()` from `agent/persist.ts` — LLMs add preamble, markdown fences, and commentary despite instructions.
+- **Integration tests over unit tests for LLM pipelines**: test the full chain (LLM response → extraction → validation → DB write), not just the writer in isolation. Mock the LLM with realistic messy output.
 
 ## Architecture
 
-TypeScript monorepo, three npm workspaces. SQLite database (Postgres planned).
+TypeScript monorepo, four npm workspaces. Runtime DB is SQLite only — `db/connection.ts` always uses `better-sqlite3` with `DB_PATH`. A Postgres schema (`db/schema-pg.ts`) and a `DATABASE_URL` env var in `.env.example` exist as scaffolding for a future migration, but neither is wired into the connection layer yet.
 
 ### `packages/shared` (@orr/shared)
 Pure TypeScript types and constants — no runtime code. **Must be built first.**
 - `types.ts` — All entity types and API DTOs
-- `constants.ts` — Enums, status types, agent profiles, token budget thresholds
-- `template/default-template.ts` — 11-section ORR template with 121 prompts from the book's appendix
-- `template/incident-template.ts` — 14-section incident analysis template with 99 prompts
+- `constants.ts` — Enums, status types, agent profiles, token budget thresholds, `MAX_AGENT_ITERATIONS`
+- `template/default-template.ts` — Default ORR template
+- `template/incident-template.ts` — Incident analysis template
 - `template/feature-template.ts` — Feature ORR question bank with `generateFeatureTemplate()`
 
 ### `packages/api` (@orr/api)
@@ -84,33 +83,33 @@ React 19 + Vite + TailwindCSS + React Query.
 
 In production, built web assets are copied to `packages/api/public/` and served by Hono with SPA fallback.
 
+### `packages/eval` (@orr/eval)
+Scenario-based agent quality harness. Drives the agent with a simulated user, scores outputs against graders. Entry point: `src/run.ts`. Layout: `harness.ts`, `runner.ts`, `simulated-user.ts`, `graders/`, `scenarios/`.
+
 ## Agent System
 
-POST `/api/v1/orrs/:orrId/sessions/:sessionId/messages` → `runAgent()` in `agent/loop.ts`. Two-phase state machine:
+POST `/api/v1/orrs/:orrId/sessions/:sessionId/messages` → `runAgent()` in `agent/loop.ts`. **Single loop with both read and write tools** — no separate persistence phase. (An earlier CONVERSE → PERSIST split was rolled back; see Key design principle.)
 
-**CONVERSE phase** — LLM with read-only tools, streams text to the user:
-1. Build context (`agent/context.ts`) — active section in full, others as summaries, session history, teaching moments
-2. Build system prompt (`agent/system-prompt.ts`) — persona-specific, with engagement zone and token budget guidance
-3. LLM converses with read-only tools (max 5 iterations), yields SSE content_delta events
+**Loop flow** (`agent/loop.ts`):
+1. Build context + system prompt via `PracticeConfig`; inject token-budget warnings at 75% / 90% of `MAX_SESSION_TOKENS`.
+2. Run engagement detection (`agent/engagement.ts`) and inject adaptive guidance for `FRUSTRATED` or `TOO_EASY` zones.
+3. Stream LLM response. On tool calls: run steering before-hooks → execute → run after-hooks → append result → iterate.
+4. Iteration cap: `MAX_AGENT_ITERATIONS = 5` default, dynamically extended up to 10 when code-exploration tools (`search_code`, `read_file`, `list_directory`) are called.
+5. If the loop ends on a tool result, give the LLM one final text-only turn to wrap up coherently.
 
-**PERSIST phase** — mandatory, runs after every CONVERSE:
-1. Separate LLM call with focused prompt (`agent/persist.ts`) → outputs structured JSON
-2. `extractJson()` defensively extracts JSON from potentially messy LLM output
-3. Zod schema validates the output
-4. Deterministic code writes to DB — the LLM decides WHAT, code decides HOW
-5. Yields section_updated/data_updated SSE events for UI refresh
+**Practice abstraction** — the loop is practice-agnostic and delegates to a `PracticeConfig` (`agent/practice.ts`). Each practice lives under `packages/api/src/practices/{orr,incident,shared}/` and supplies: context builder, system prompt, tool defs, tool executor, steering hooks, and section/data-update tool maps used to emit SSE events. Shared tools (section writes, session summary) come from `practices/shared/tools.ts`.
 
-**CONVERSE tools** (read-only): `read_section`, `query_teaching_moments`, `query_case_studies` + ORR-only: `search_code`, `read_file`, `list_directory`
+**Tools** (a non-exhaustive list — see each practice's `tools.ts`):
+- Read: `read_section`, `query_teaching_moments`, `query_case_studies` (shared); `search_code`, `read_file`, `list_directory` (ORR-only, gated on repository config).
+- Write: `update_question_response`, `write_section_content`, `write_depth_assessment`, `flag`, `record_dependency`, `write_session_summary`, plus incident-specific writes (timeline events, contributing factors).
 
-**PERSIST writes** (via structured JSON, not tool calls): question_responses, section_content, depth_assessments, flags, dependencies, discoveries, experiments, action_items, cross_practice, timeline_events, contributing_factors
+**Write slash commands** (`/experiments`, `/learning`, etc., in `agent/slash-commands.ts`): the agent returns structured JSON instead of conversational text. Streaming is suppressed; after the loop, the JSON is parsed via `extractJson` (the surviving piece of `persist.ts`) and persisted directly.
 
-**Legacy fallback**: Set `AGENT_LOOP_VERSION=v1` in `.env` to use the old unstructured loop with all tools.
+**Steering hooks** (`agent/hooks/`): before-hooks can block or guide tool calls; after-hooks rewrite results. Security hooks block sensitive file access (`.env`, `.pem`, SSH keys) and redact credentials. Content-scan hooks enforce size limits (~10KB per result, ~20 search matches).
 
-**Steering hooks** (`agent/hooks/`): Security hooks block sensitive file access (`.env`, `.pem`, SSH keys) and redact credentials from tool results. Content scan hooks enforce size limits (10KB per result, 20 search matches).
+**Agent profiles** (`packages/shared/src/constants.ts`, 6 defined, 2 implemented): `REVIEW_FACILITATOR`, `INCIDENT_LEARNING_FACILITATOR` (active); `SESSION_ASSISTANT`, `TRANSCRIPT_PROCESSOR`, `DRIFT_ANALYST`, `PREP_BRIEF_GENERATOR` (planned).
 
-**Agent profiles** (6 defined, 2 implemented): REVIEW_FACILITATOR, INCIDENT_LEARNING_FACILITATOR (both active); SESSION_ASSISTANT, TRANSCRIPT_PROCESSOR, DRIFT_ANALYST, PREP_BRIEF_GENERATOR (planned).
-
-**Engagement detection** (`agent/engagement.ts`): Heuristic function that runs every turn on conversation history. Detects frustration (hedging, terse responses, wall-hit patterns) and fluency illusion (overconfident long answers at shallow depth). Injects adaptive guidance into the system prompt.
+**Engagement detection** (`agent/engagement.ts`): heuristic over conversation history. `FRUSTRATED` zone (hedging, terse responses, hitting a wall) lowers the code-exploration barrier and asks simpler questions. `TOO_EASY` zone (fluent overconfident answers at shallow depth) pushes deeper with harder predictions and refuses to volunteer code lookups.
 
 ## LLM Integration
 
@@ -126,11 +125,16 @@ See `.env.example` for the full annotated list. Key variables:
 
 ```
 DB_PATH=./data/resilience-companion.db   # SQLite path (relative to monorepo root)
+# DATABASE_URL is documented in .env.example for a future Postgres mode, but the connection layer doesn't read it yet
 LLM_API_KEY=                       # Anthropic (sk-ant-*) or OpenAI-compatible; not needed for Bedrock
 LLM_MODEL=                         # Shortnames: sonnet, opus, haiku; or full model ID
+LLM_FALLBACK_MODEL=                # Optional fallback model for RetryAdapter
 LLM_PROVIDER=                      # Optional: bedrock (auto-detected from key if not set)
 LLM_BASE_URL=                      # Optional, for OpenAI-compatible endpoints
 AWS_REGION=                        # Optional, for Bedrock (defaults to us-east-1)
 TRUST_PROXY_AUTH=                  # Set to "true" behind a reverse proxy with auth headers
+JWT_SECRET=                        # Optional; encrypts repo tokens at rest. Auto-generated to data/.encryption-key if unset
 PORT=3000
 ```
+
+Code-exploration tools (`search_code`, `read_file`, `list_directory`) only work when an ORR has a configured repository — repo cloning and token decryption live in `packages/api/src/git.ts` (cloned repos under `repos/`).
