@@ -18,6 +18,19 @@ import type { UserPersona } from "./types.js";
 
 type ApiMessage = { role: "user" | "assistant"; content: string };
 
+/**
+ * Whether a simulated-user response should end the conversation.
+ * Empty/whitespace text counts as end-of-conversation — passing it through
+ * would send an empty user message to Anthropic, which is a 400 error.
+ */
+export function shouldEndConversation(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (trimmed === "[DONE]" || trimmed.startsWith("[DONE]")) return true;
+  if (trimmed.toLowerCase().includes("nothing else to add") && trimmed.length < 80) return true;
+  return false;
+}
+
 export class SimulatedUser {
   private client: Anthropic;
   private model: string;
@@ -81,14 +94,7 @@ export class SimulatedUser {
 
     const text = content.text.trim();
 
-    // Signal for conversation end
-    if (
-      text === "[DONE]" ||
-      text.startsWith("[DONE]") ||
-      (text.toLowerCase().includes("nothing else to add") && text.length < 80)
-    ) {
-      return null;
-    }
+    if (shouldEndConversation(text)) return null;
 
     // Commit to history only after we know we have a valid response
     this.history.push({ role: "user", content: agentMessage });

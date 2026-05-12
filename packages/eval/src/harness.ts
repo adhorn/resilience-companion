@@ -99,6 +99,8 @@ export async function runScenario(
   let currentUserMessage = openingMsg;
 
   for (let turn = 0; turn < scenario.maxTurns; turn++) {
+    if (!currentUserMessage.trim()) break;
+
     // Build agent input (mirrors session-routes.ts messages handler)
     const history = trimHistory(conversationHistory, MAX_HISTORY_TOKENS);
 
