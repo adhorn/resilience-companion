@@ -74,8 +74,15 @@ export class SimulatedUser {
   /**
    * Generate the next engineer response given the agent's latest message.
    * Returns null to signal the engineer wants to end the conversation.
+   *
+   * If the agent produced no text (e.g. it broke out of the loop mid-tool-exploration
+   * without a wrap-up), return null instead of sending an empty user message to
+   * Anthropic — which would be rejected with `messages.N: user messages must have
+   * non-empty content`.
    */
   async nextMessage(agentMessage: string): Promise<string | null> {
+    if (!agentMessage.trim()) return null;
+
     // Agent message is the "user" turn — the engineer responds as "assistant"
     const messages: ApiMessage[] = [
       ...this.history,
