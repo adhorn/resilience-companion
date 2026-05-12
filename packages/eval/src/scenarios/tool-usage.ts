@@ -40,7 +40,7 @@ Answer questions directly with technical specifics.
 
   {
     id: "tool-depth-assessment",
-    name: "Depth assessment called after substantive answers",
+    name: "Depth assessment is called after substantive answers (any value)",
     category: "tool_usage",
     type: "capability",
     practiceType: "orr",
@@ -63,10 +63,43 @@ which isn't much. Be honest about gaps.
     },
     expectedOutcomes: [
       {
+        type: "tool_called",
+        tool: "update_depth_assessment",
+        description: "Agent called update_depth_assessment with a rationale (any depth value)",
+      },
+    ],
+  },
+
+  {
+    id: "tool-depth-assessment-surface",
+    name: "Depth assessed as SURFACE when team is confidently vague (fluency illusion)",
+    category: "tool_usage",
+    type: "capability",
+    practiceType: "orr",
+    maxTurns: 7,
+    userPersona: {
+      style: "cooperative",
+      knowledge: `
+- Architecture: "a modern microservices stack" — you don't know the exact service boundaries or call graph
+- Monitoring: "we have dashboards and alerts" — you can't actually name the dashboards or recall any alert thresholds
+- Failure behavior: if asked what happens when a downstream service fails, say "we have retries and timeouts" — but you can't describe the actual configuration, retry policy, or backoff
+- Runbooks: "we have docs in Confluence" — you can't recall the URL or what's actually in them
+- On-call: "yes we have on-call" — you don't know the rotation, escalation policy, or how alerts are routed
+      `.trim(),
+      systemPrompt: `
+You are a senior engineer who believes your team has a solid setup. Answer questions
+with confidence — "we have X" — but when pressed for specifics, give vague non-answers
+("I think it's configured properly", "I'd have to check but yes we have that").
+Never admit you don't know the details. The pattern: confident on existence, vague on
+substance. Don't volunteer gaps. Keep answers 1-3 sentences.
+      `.trim(),
+    },
+    expectedOutcomes: [
+      {
         type: "depth_set",
         sectionIndex: 0,
         depth: "SURFACE",
-        description: "Section depth is assessed after substantive conversation (SURFACE expected for minimal setup)",
+        description: "Depth is correctly assessed as SURFACE when team is confidently vague",
       },
     ],
   },
