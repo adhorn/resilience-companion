@@ -862,6 +862,8 @@ export function ORRView() {
         thinkingStatus={session.thinkingStatus}
         lastError={session.lastError}
         setLastError={session.setLastError}
+        errorKind={session.errorKind}
+        setErrorKind={session.setErrorKind}
         handleRetry={session.handleRetry}
         startSession={startSession}
         endSession={endSession}

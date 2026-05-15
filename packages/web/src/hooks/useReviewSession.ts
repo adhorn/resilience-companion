@@ -3,6 +3,7 @@ import { sendSSEMessage } from "../api/client";
 import { useSpeechRecognition } from "./useSpeechRecognition";
 import { parseResponses } from "../lib/responses";
 import { getSpinnerVerb } from "../lib/spinnerVerbs";
+import { classifyApiError, type ErrorKind } from "../lib/error-kind";
 
 export interface SlashCommand {
   name: string;
@@ -57,6 +58,7 @@ export function useReviewSession({
   const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const [thinkingStatus, setThinkingStatus] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
   const lastUserMessageRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -125,6 +127,7 @@ export function useReviewSession({
 
     lastUserMessageRef.current = userMessage;
     setLastError(null);
+    setErrorKind(null);
     setStreaming(true);
     setStreamStatus(null);
     setThinkingStatus(`${getSpinnerVerb()}...`);
@@ -227,14 +230,14 @@ export function useReviewSession({
         }
       }, displayContent);
     } catch (err) {
-      const msg = (err as Error).message || "";
-      if (msg.includes("token limit") || msg.includes("Daily token limit")) {
-        setLastError(msg);
-        caughtError = true;
+      const kind = classifyApiError(err);
+      setErrorKind(kind);
+      if (kind.kind === "token_limit") {
+        setLastError(kind.message);
       } else {
         setLastError((prev) => prev || "Connection lost. Your conversation is saved — reload the page to continue.");
-        caughtError = true;
       }
+      caughtError = true;
     }
 
     setStreamStatus(null);
@@ -332,6 +335,7 @@ export function useReviewSession({
   const handleRetry = useCallback(async () => {
     if (!lastUserMessageRef.current || streaming) return;
     setLastError(null);
+    setErrorKind(null);
     await doSend(lastUserMessageRef.current);
   }, [streaming, doSend]);
 
@@ -382,6 +386,7 @@ export function useReviewSession({
     streamStatus,
     thinkingStatus,
     lastError, setLastError,
+    errorKind, setErrorKind,
     handleRetry,
     messagesEndRef,
 

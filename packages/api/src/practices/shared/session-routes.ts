@@ -15,6 +15,18 @@ import { streamSSE } from "hono/streaming";
 import { nanoid } from "nanoid";
 import { eq, and, gte, sql } from "drizzle-orm";
 import { MAX_SESSION_TOKENS, MAX_DAILY_TOKENS } from "@orr/shared";
+
+/**
+ * Effective daily token cap. Defaults to MAX_DAILY_TOKENS (10M), but can be
+ * overridden by the `DAILY_TOKEN_LIMIT` env var — primarily for testing the
+ * token-limit banner without exhausting the real cap.
+ */
+function getEffectiveDailyTokenLimit(): number {
+  const override = process.env.DAILY_TOKEN_LIMIT;
+  if (!override) return MAX_DAILY_TOKENS;
+  const parsed = parseInt(override, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : MAX_DAILY_TOKENS;
+}
 import { getDb, schema } from "../../db/index.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { runAgent } from "../../agent/loop.js";
@@ -432,12 +444,13 @@ export function createSessionRoutes(opts: SessionRouteOptions): Hono {
       return c.json({ error: "bad_request", message: "Session not active" }, 400);
     }
 
-    // Daily token cap
+    // Daily token cap (runaway-cost safety backstop)
     const dailyTokens = getDailyTokenUsage(db, user.teamId);
-    if (dailyTokens >= MAX_DAILY_TOKENS) {
+    const dailyLimit = getEffectiveDailyTokenLimit();
+    if (dailyTokens >= dailyLimit) {
       return c.json({
         error: "token_limit",
-        message: `Daily token limit reached (${Math.round(dailyTokens / 1000)}k / ${Math.round(MAX_DAILY_TOKENS / 1000)}k). Resets at midnight. You can still view and edit the ${opts.practiceLabel.toLowerCase()} document manually.`,
+        message: `Daily token limit reached (${Math.round(dailyTokens / 1000)}k / ${Math.round(dailyLimit / 1000)}k). Resets at midnight. You can still view and edit the ${opts.practiceLabel.toLowerCase()} document manually.`,
       }, 429);
     }
 
