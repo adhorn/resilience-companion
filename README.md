@@ -414,6 +414,27 @@ kill $(lsof -iTCP:3000 -sTCP:LISTEN -t)
 lsof -iTCP:3000 -sTCP:LISTEN
 ```
 
+### Port still in use after `kill` — old `npm run dev` is respawning
+
+If you run the `kill $(lsof …)` command above and the port immediately becomes occupied again, an older `npm run dev` is still running somewhere — its `tsx watch` respawns the api child the moment you kill it. You're chasing a respawning process.
+
+**Diagnose** — find the parent `concurrently` processes:
+
+```bash
+ps -eo pid,etime,command | grep -E "concurrently.*resilience-companion" | grep -v grep
+```
+
+Long `etime` (hours / days) indicates a forgotten dev server.
+
+**Fix** — kill the parent `concurrently` PID (not just the api child); it cascades to children:
+
+```bash
+kill <PID>            # SIGTERM, usually enough
+kill -9 <PID>         # if it refuses to exit
+```
+
+Then re-verify with `lsof -i :3000` (use `lsof -i :3000` rather than `-iTCP:…-sTCP:LISTEN` to catch IPv6-only listeners — the error message `address: '::'` means the process is bound to the IPv6 wildcard).
+
 If this happens frequently, the dev script already includes mitigations (direct `tsx` invocation instead of `npm run`, `--kill-others --kill-signal SIGTERM` in concurrently, and graceful shutdown handlers in the API server). If ghost processes persist, you can also try `kill -9` instead of `kill`.
 
 ## Contributing
