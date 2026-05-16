@@ -271,7 +271,12 @@ export async function sendSSEMessage(
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const msg = body?.message || `Request failed (${res.status})`;
-    throw new Error(msg);
+    // Preserve HTTP status + error discriminator so callers can classify the failure
+    // without resorting to substring matching on the message text.
+    const err = new Error(msg) as Error & { status?: number; errorCode?: string };
+    err.status = res.status;
+    if (typeof body?.error === "string") err.errorCode = body.error;
+    throw err;
   }
   if (!res.body) throw new Error("No response body");
 

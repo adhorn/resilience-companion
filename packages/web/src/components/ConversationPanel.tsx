@@ -31,6 +31,8 @@ export interface ConversationPanelProps {
   thinkingStatus: string | null;
   lastError: string | null;
   setLastError: (v: string | null) => void;
+  errorKind: import("../lib/error-kind").ErrorKind | null;
+  setErrorKind: (v: import("../lib/error-kind").ErrorKind | null) => void;
   handleRetry: () => void;
   startSession: () => void;
   endSession: () => void;
@@ -68,6 +70,8 @@ export function ConversationPanel({
   thinkingStatus,
   lastError,
   setLastError,
+  errorKind,
+  setErrorKind,
   handleRetry,
   startSession,
   endSession,
@@ -140,8 +144,28 @@ export function ConversationPanel({
         </div>
       )}
 
-      {/* Error banner with retry */}
-      {lastError && !streaming && (
+      {/* Token-limit banner — distinct UI: warning color, no Retry (retry can't help until reset) */}
+      {errorKind?.kind === "token_limit" && !streaming && (
+        <div className="px-4 py-3 bg-amber-50 border-b border-amber-200 text-xs text-amber-900 flex items-start justify-between">
+          <div className="flex flex-col gap-1">
+            <span className="font-medium">Daily token limit reached</span>
+            <span className="text-amber-800">{errorKind.message}</span>
+            <span className="text-amber-700 text-[11px]">
+              This is a safety limit to prevent runaway costs. You can still view and edit the document manually.
+            </span>
+          </div>
+          <button
+            onClick={() => { setErrorKind(null); setLastError(null); }}
+            className="text-amber-500 hover:text-amber-700 ml-4 shrink-0"
+            aria-label="Dismiss"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
+      {/* Generic error banner with retry — only when not a token_limit error */}
+      {lastError && errorKind?.kind !== "token_limit" && !streaming && (
         <div className="px-4 py-2 bg-red-50 border-b border-red-200 text-xs text-red-700 flex items-center justify-between">
           <span>{lastError}</span>
           <div className="flex items-center gap-2 ml-4 shrink-0">
@@ -151,7 +175,7 @@ export function ConversationPanel({
             >
               Retry
             </button>
-            <button onClick={() => setLastError(null)} className="text-red-400 hover:text-red-600">&times;</button>
+            <button onClick={() => { setLastError(null); setErrorKind(null); }} className="text-red-400 hover:text-red-600">&times;</button>
           </div>
         </div>
       )}
