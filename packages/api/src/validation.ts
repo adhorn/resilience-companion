@@ -10,6 +10,11 @@ const shortString = (max = 255) => z.string().min(1).max(max);
 const optionalShortString = (max = 255) => z.string().max(max).optional();
 const contentString = (max = 100_000) => z.string().max(max);
 
+const relativeServicePath = z.string().max(500).refine(
+  (v) => v === "" || (!v.startsWith("/") && !v.split(/[\\/]/).includes("..")),
+  { message: "repositoryServicePath must be a relative path (no leading slash, no '..' segments)" },
+);
+
 // --- ORR schemas ---
 
 export const createOrrSchema = z.object({
@@ -26,6 +31,7 @@ export const createOrrSchema = z.object({
     title: z.string().max(255),
     prompts: z.array(z.string().max(2000)),
   })).optional(),
+  repositoryServicePath: relativeServicePath.optional(),
 });
 
 export const terminateOrrSchema = z.object({
@@ -38,6 +44,7 @@ export const updateOrrSchema = z.object({
   steeringTier: z.enum(["standard", "thorough", "rigorous"]).optional(),
   repositoryUrl: z.union([z.string().url().max(2000), z.literal(""), z.null()]).optional(),
   repositoryToken: z.string().max(2000).optional(),
+  repositoryServicePath: z.union([relativeServicePath, z.null()]).optional(),
 });
 
 // --- Incident schemas ---

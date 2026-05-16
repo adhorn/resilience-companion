@@ -45,7 +45,7 @@ orrRoutes.post("/", async (c) => {
   const body = await c.req.json();
   const v = validateBody(createOrrSchema, body);
   if (!v.success) return c.json({ error: "validation", message: v.error }, 400);
-  const { serviceName, templateId, repositoryUrl, repositoryToken, orrType, parentOrrId, changeTypes, changeDescription, selectedSections } = v.data;
+  const { serviceName, templateId, repositoryUrl, repositoryToken, orrType, parentOrrId, changeTypes, changeDescription, selectedSections, repositoryServicePath } = v.data;
 
   // Feature ORR validation
   if (orrType === "feature" && !changeDescription) {
@@ -125,6 +125,7 @@ orrRoutes.post("/", async (c) => {
       repositoryPath: repositoryUrl || null,
       repositoryToken: encryptedToken,
       repositoryLocalPath: localPath,
+      repositoryServicePath: repositoryServicePath?.trim() ? repositoryServicePath.trim() : null,
       orrType: orrType || "service",
       parentOrrId: parentOrrId || null,
       changeTypes: JSON.stringify(changeTypes || []),
@@ -363,6 +364,9 @@ orrRoutes.patch("/:id", async (c) => {
       updates.repositoryToken = null;
       updates.repositoryLocalPath = null;
     }
+  }
+  if (d.repositoryServicePath !== undefined) {
+    updates.repositoryServicePath = d.repositoryServicePath?.trim() ? d.repositoryServicePath.trim() : null;
   }
 
   db.update(schema.orrs)

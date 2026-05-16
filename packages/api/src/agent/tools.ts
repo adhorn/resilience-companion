@@ -174,24 +174,38 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
     pulledThisSession.add(logicalRoot);
   }
 
-  let realRoot: string;
-  try { realRoot = realpathSync(logicalRoot); } catch { return { error: "Could not resolve repository path." }; }
+  // Compute effectiveRoot: if a service subpath is configured, narrow code-exploration
+  // to that subtree. NULL/empty keeps today's whole-repo behavior.
+  const servicePath = orr.repositoryServicePath ?? "";
+  const effectiveRoot = servicePath ? resolve(logicalRoot, servicePath) : logicalRoot;
 
-  const logicalPath = resolve(logicalRoot, relativePath);
-  if (!logicalPath.startsWith(logicalRoot + "/") && logicalPath !== logicalRoot) {
+  // Defensive re-check after path.resolve normalisation.
+  if (effectiveRoot !== logicalRoot && !effectiveRoot.startsWith(logicalRoot + "/")) {
+    return { error: "Configured service path escapes the repository root." };
+  }
+
+  if (!existsSync(effectiveRoot) || !statSync(effectiveRoot).isDirectory()) {
+    return { error: `Configured service path "${servicePath}" does not exist in the repository.` };
+  }
+
+  let realRoot: string;
+  try { realRoot = realpathSync(effectiveRoot); } catch { return { error: "Could not resolve repository path." }; }
+
+  const logicalPath = resolve(effectiveRoot, relativePath);
+  if (!logicalPath.startsWith(effectiveRoot + "/") && logicalPath !== effectiveRoot) {
     return { error: "Path escapes the repository root. Access denied." };
   }
 
   let realPath: string;
   try { realPath = realpathSync(logicalPath); } catch {
-    return { absPath: logicalPath, repoRoot: logicalRoot, warning };
+    return { absPath: logicalPath, repoRoot: effectiveRoot, warning };
   }
 
   if (!realPath.startsWith(realRoot + "/") && realPath !== realRoot) {
     return { error: "Path escapes the repository root via symlink. Access denied." };
   }
 
-  return { absPath: realPath, repoRoot: realRoot, warning };
+  return { absPath: realPath, repoRoot: effectiveRoot, warning };
 }
 
 /**

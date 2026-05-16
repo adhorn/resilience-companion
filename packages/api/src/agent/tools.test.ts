@@ -1,9 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { setupTestDb, seedTestOrr, seedTestSession } from "../test-helpers.js";
 import { executeTool } from "./tools.js";
 import { getDb } from "../db/connection.js";
 import * as schema from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 let orrId: string;
 let sessionId: string;
@@ -316,5 +319,79 @@ describe("unknown tool", () => {
   it("returns error for unknown tool", () => {
     const result = JSON.parse(executeTool("nonexistent_tool", {}, orrId, sessionId));
     expect(result.error).toContain("Unknown tool");
+  });
+});
+
+describe("repositoryServicePath scoping", () => {
+  let repoRoot = "";
+
+  function setupFakeRepo(opts: { servicePath?: string | null; createService?: boolean } = {}): string {
+    const root = mkdtempSync(join(tmpdir(), "orr-repo-"));
+    mkdirSync(join(root, ".git"));
+    writeFileSync(join(root, "README.md"), "root readme");
+    mkdirSync(join(root, "services"));
+    if (opts.createService !== false) {
+      mkdirSync(join(root, "services", "lambda-a"));
+      writeFileSync(join(root, "services", "lambda-a", "handler.ts"), "export const handler = () => 'a';\n");
+      mkdirSync(join(root, "services", "lambda-b"));
+      writeFileSync(join(root, "services", "lambda-b", "handler.ts"), "export const handler = () => 'b';\n");
+    }
+    const db = getDb();
+    db.update(schema.orrs)
+      .set({ repositoryLocalPath: root, repositoryServicePath: opts.servicePath ?? null })
+      .where(eq(schema.orrs.id, orrId))
+      .run();
+    return root;
+  }
+
+  afterEach(() => {
+    if (repoRoot) {
+      rmSync(repoRoot, { recursive: true, force: true });
+      repoRoot = "";
+    }
+  });
+
+  it("list_directory at '' returns service subtree, not repo root", () => {
+    repoRoot = setupFakeRepo({ servicePath: "services/lambda-a" });
+    const result = JSON.parse(executeTool("list_directory", { path: "" }, orrId, sessionId));
+    const names = (result.entries as Array<{ name: string }>).map((e) => e.name).sort();
+    expect(names).toEqual(["handler.ts"]);
+    expect(names).not.toContain("services");
+    expect(names).not.toContain("README.md");
+  });
+
+  it("read_file resolves paths relative to service subtree", () => {
+    repoRoot = setupFakeRepo({ servicePath: "services/lambda-a" });
+    const result = JSON.parse(executeTool("read_file", { file_path: "handler.ts" }, orrId, sessionId));
+    expect(result.content).toContain("'a'");
+  });
+
+  it("rejects '..' escape attempts to a sibling service", () => {
+    repoRoot = setupFakeRepo({ servicePath: "services/lambda-a" });
+    const result = JSON.parse(executeTool("read_file", { file_path: "../lambda-b/handler.ts" }, orrId, sessionId));
+    expect(result.error).toMatch(/escape/i);
+  });
+
+  it("returns a clear error when service path doesn't exist", () => {
+    repoRoot = setupFakeRepo({ servicePath: "services/missing" });
+    const result = JSON.parse(executeTool("list_directory", { path: "" }, orrId, sessionId));
+    expect(result.error).toMatch(/does not exist/i);
+  });
+
+  it("behaves as today when servicePath is null (whole repo)", () => {
+    repoRoot = setupFakeRepo({ servicePath: null });
+    const result = JSON.parse(executeTool("list_directory", { path: "" }, orrId, sessionId));
+    const names = (result.entries as Array<{ name: string }>).map((e) => e.name).sort();
+    expect(names).toContain("services");
+    expect(names).toContain("README.md");
+  });
+
+  it("search_code scopes results to service subtree", () => {
+    repoRoot = setupFakeRepo({ servicePath: "services/lambda-a" });
+    const result = JSON.parse(executeTool("search_code", { query: "handler" }, orrId, sessionId));
+    // Only lambda-a/handler.ts should match, not lambda-b's.
+    const files = (result.matches as Array<{ file: string }>).map((m) => m.file);
+    expect(files.every((f) => !f.includes("lambda-b"))).toBe(true);
+    expect(files.some((f) => f.includes("handler.ts"))).toBe(true);
   });
 });

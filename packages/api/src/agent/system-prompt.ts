@@ -45,6 +45,7 @@ export interface ORRContext {
   caseStudies: CaseStudySummary[];
   isReturningSession: boolean;
   hasRepositoryPath: boolean;
+  repositoryServicePath: string | null;
   existingDependencies: Array<{ name: string; type: string; criticality: string }>;
   existingExperiments: Array<{ title: string; type: string; status: string; hypothesis: string }>;
   // Feature ORR fields
@@ -192,6 +193,9 @@ This feature's service has not been reviewed with a Service ORR. Note this gap w
 
   // Code exploration guidance (only when a repository is configured)
   if (ctx.hasRepositoryPath) {
+    if (ctx.repositoryServicePath) {
+      parts.push(`\nNote: this service lives at \`${ctx.repositoryServicePath}\` within the configured repository. Code-exploration tools are automatically scoped to that subdirectory — relative paths you pass to read_file, list_directory, and search_code resolve inside the service path, not the repo root.`);
+    }
     parts.push(`\n## Code Exploration — Escalation Ladder
 
 You have tools to search and read the service's source code (search_code, read_file, list_directory). These are powerful but must be used carefully — struggle before assistance improves learning. The team's ability to recall system details from memory is itself a depth signal.

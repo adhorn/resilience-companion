@@ -117,6 +117,73 @@ describe("ORR routes", () => {
       });
       expect(res.status).toBe(400);
     });
+
+    it("round-trips repositoryServicePath through create and get", async () => {
+      const create = await app.request("/api/v1/orrs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceName: "Lambda A",
+          repositoryServicePath: "services/lambda-a",
+        }),
+      });
+      expect(create.status).toBe(201);
+      const created = await create.json();
+      expect(created.orr.repositoryServicePath).toBe("services/lambda-a");
+
+      const get = await app.request(`/api/v1/orrs/${created.orr.id}`);
+      const got = await get.json();
+      expect(got.orr.repositoryServicePath).toBe("services/lambda-a");
+    });
+
+    it("rejects an absolute repositoryServicePath", async () => {
+      const res = await app.request("/api/v1/orrs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serviceName: "X", repositoryServicePath: "/etc" }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects repositoryServicePath with '..' segments", async () => {
+      const res = await app.request("/api/v1/orrs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serviceName: "X", repositoryServicePath: "services/../etc" }),
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("PATCH /api/v1/orrs/:id — repositoryServicePath", () => {
+    it("updates repositoryServicePath", async () => {
+      const res = await app.request(`/api/v1/orrs/${ids.orrId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repositoryServicePath: "services/billing" }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.orr.repositoryServicePath).toBe("services/billing");
+    });
+
+    it("clears repositoryServicePath when null", async () => {
+      // First set a path
+      await app.request(`/api/v1/orrs/${ids.orrId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repositoryServicePath: "services/billing" }),
+      });
+      // Now clear it
+      const res = await app.request(`/api/v1/orrs/${ids.orrId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repositoryServicePath: null }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.orr.repositoryServicePath).toBeNull();
+    });
   });
 
   describe("PATCH /api/v1/orrs/:id", () => {

@@ -19,6 +19,7 @@ export function NewORR() {
   const [serviceName, setServiceName] = useState("");
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [repositoryToken, setRepositoryToken] = useState("");
+  const [repositoryServicePath, setRepositoryServicePath] = useState("");
 
   // Feature ORR fields
   const [changeTypes, setChangeTypes] = useState<ChangeType[]>([]);
@@ -83,6 +84,9 @@ export function NewORR() {
         data.repositoryUrl = repositoryUrl.trim();
         if (repositoryToken.trim()) {
           data.repositoryToken = repositoryToken.trim();
+        }
+        if (repositoryServicePath.trim()) {
+          data.repositoryServicePath = repositoryServicePath.trim();
         }
       }
 
@@ -272,6 +276,25 @@ export function NewORR() {
                 placeholder="ghp_... or glpat-..."
                 className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 font-mono"
               />
+            </div>
+          )}
+
+          {repositoryUrl.trim() && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Service path within repository
+                <span className="text-gray-400 font-normal ml-1">(for monorepos)</span>
+              </label>
+              <input
+                type="text"
+                value={repositoryServicePath}
+                onChange={(e) => setRepositoryServicePath(e.target.value)}
+                placeholder="e.g., services/payments"
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 font-mono"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                If set, code exploration is scoped to this subdirectory of the cloned repo. Leave blank for single-service repos.
+              </p>
             </div>
           )}
 

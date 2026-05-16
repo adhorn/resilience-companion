@@ -52,6 +52,7 @@ export interface ORR {
   changeDescription: string | null;
   status: ORRStatus;
   repositoryPath: string | null; // path to source code for code exploration
+  repositoryServicePath: string | null; // relative path within the cloned repo (monorepo support)
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -186,6 +187,7 @@ export interface CreateORRInput {
   serviceName: string;
   templateId?: string; // defaults to default template
   repositoryPath?: string; // optional: path to source code for code exploration
+  repositoryServicePath?: string; // optional: relative path within the repo (monorepo support)
   orrType?: ORRType;
   parentOrrId?: string;
   changeTypes?: ChangeType[];
