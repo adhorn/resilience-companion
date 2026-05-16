@@ -67,10 +67,12 @@ The database is auto-created on first boot and persisted in `./data/`. To reset,
 ```bash
 git clone <repo-url>
 cd resilience-companion
-npm install
+npm run setup            # see CONTRIBUTING.md → "Supply chain hygiene"
 cp .env.example .env     # edit LLM_API_KEY
 npm run dev              # API on :3000, web dev server on :5173
 ```
+
+`npm run setup` runs `npm ci` with the repo's `.npmrc` setting `ignore-scripts=true` (so a compromised transitive dep can't run install-time code on your machine) and then explicitly rebuilds `better-sqlite3` and `esbuild`, the two packages that legitimately require install scripts. See [CONTRIBUTING.md](CONTRIBUTING.md#supply-chain-hygiene) for the full rationale.
 
 Open http://localhost:5173 (hot-reloading frontend) or http://localhost:3000 (API-served static build).
 

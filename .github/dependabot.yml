@@ -1,0 +1,40 @@
+# Dependabot config: weekly npm updates with a cooldown window.
+#
+# The cooldown delays opening PRs for newly-published versions, giving the
+# ecosystem time to detect and unpublish supply-chain compromises before
+# we ingest them. Security advisories bypass this — Dependabot still
+# opens those immediately, regardless of cooldown.
+#
+# Reference: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+    # Wait before opening a PR for a newly-published version. Most malicious
+    # publishes get detected and yanked within days; sitting out the window
+    # avoids ingesting them. Security updates ignore this and ship immediately.
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
+
+    # Batch routine updates so they're easier to review.
+    groups:
+      npm-routine:
+        applies-to: version-updates
+        patterns: ["*"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7

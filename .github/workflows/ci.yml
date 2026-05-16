@@ -18,7 +18,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # `npm run setup` honors the repo's .npmrc (ignore-scripts=true), then
+      # explicitly rebuilds the two packages that legitimately require install
+      # scripts. Means a malicious transitive dep can't run lifecycle scripts
+      # in CI, while better-sqlite3 and esbuild still set themselves up.
+      - run: npm run setup
       - run: npm run build
       - run: npm run lint
       - run: npm test
