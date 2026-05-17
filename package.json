@@ -19,6 +19,7 @@
     "packages/eval"
   ],
   "scripts": {
+    "setup": "npm ci && npm rebuild --ignore-scripts=false better-sqlite3 esbuild",
     "predev": "npm run build -w @orr/shared",
     "dev": "concurrently --kill-others --kill-signal SIGTERM -n api,web -c blue,green \"cd packages/api && exec npx tsx watch --env-file=../../.env src/index.ts\" \"cd packages/web && exec npx vite\"",
     "build": "npm run build -w @orr/shared && npm run build -w @orr/api && npm run build -w @orr/web",

@@ -63,6 +63,18 @@ In rough priority order:
 - Group related changes into logical commits; don't squash everything into "fix stuff".
 - Rebase onto main before requesting review.
 
+## Supply chain hygiene
+
+This repo opts into a few defaults that reduce exposure to npm supply-chain attacks (e.g. the September 2025 / May 2026 Shai-Hulud worms). If you're contributing, please keep them in place:
+
+- **`ignore-scripts=true` in [.npmrc](.npmrc)** — `npm install` and `npm ci` skip *all* package lifecycle scripts (`preinstall` / `install` / `postinstall`). Random transitive dependencies cannot run arbitrary code on the developer's or CI's machine just by being installed.
+- **`npm run setup` instead of `npm install`** for the first clone. The `setup` script runs `npm ci` (which honors `ignore-scripts`) and then explicitly rebuilds the two packages that legitimately require install scripts: `better-sqlite3` (SQLite native binding) and `esbuild` (Vite's downloaded binary). When adding a new dependency that needs install scripts to function, audit it carefully and then add it to that rebuild list.
+- **Dependabot cooldown** ([.github/dependabot.yml](.github/dependabot.yml)) delays PRs for newly-published versions by 3–14 days depending on semver bump. Security updates bypass the cooldown.
+- **Lockfile integrity is load-bearing.** Always commit `package-lock.json` changes when adding a dependency. CI uses `npm ci`, which refuses to update the lockfile and fails on any integrity mismatch — that's the defense if npm later serves a different (compromised) version.
+- **Recommended (optional):** install the [Socket](https://socket.dev/) GitHub App on your fork — it flags supply-chain risk signals on dependency PRs (new maintainers, unusual permissions, install scripts) that `npm audit` doesn't catch.
+
+If you're publishing on npm yourself: use **granular access tokens with expiry** (≤ 90 days), never classic tokens. Same advice for GitHub PATs.
+
 ## Security
 
 Do not file public issues for security problems. Instead, email **adhorn@resiliumlabs.com** (see [SECURITY.md](SECURITY.md) for full policy). Include:
