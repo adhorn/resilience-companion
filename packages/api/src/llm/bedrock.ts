@@ -118,6 +118,7 @@ export class BedrockAdapter implements LLMAdapter {
     let currentToolId = "";
     let currentToolName = "";
     let currentToolArgs = "";
+    let doneEmitted = false;
 
     for await (const event of stream) {
       if (event.type === "content_block_start") {
@@ -167,18 +168,23 @@ export class BedrockAdapter implements LLMAdapter {
               completionTokens: usage.output_tokens || 0,
             },
           };
+          doneEmitted = true;
         }
       }
     }
 
-    // Ensure we always emit done
-    const finalMessage = await stream.finalMessage();
-    yield {
-      type: "done",
-      usage: {
-        promptTokens: finalMessage.usage.input_tokens,
-        completionTokens: finalMessage.usage.output_tokens,
-      },
-    };
+    // Backstop: emit done from finalMessage only if the message_delta path
+    // above didn't already fire. Without this guard, every call emits two
+    // done chunks with identical usage and the agent loop double-counts.
+    if (!doneEmitted) {
+      const finalMessage = await stream.finalMessage();
+      yield {
+        type: "done",
+        usage: {
+          promptTokens: finalMessage.usage.input_tokens,
+          completionTokens: finalMessage.usage.output_tokens,
+        },
+      };
+    }
   }
 }
