@@ -1,9 +1,13 @@
-# Dependabot config: weekly npm updates with a cooldown window.
+# Dependabot config — conservative-by-default supply-chain posture.
 #
-# The cooldown delays opening PRs for newly-published versions, giving the
-# ecosystem time to detect and unpublish supply-chain compromises before
-# we ingest them. Security advisories bypass this — Dependabot still
-# opens those immediately, regardless of cooldown.
+# Cooldown windows are long enough for the ecosystem to surface compromised
+# publishes and major regressions before we ingest a new version. Security
+# advisories bypass cooldown entirely, so this only delays routine
+# version-bump churn — never known-CVE patches.
+#
+# Grouping is intentionally scoped to patch and minor bumps only. Majors fall
+# through to one-PR-per-package by default, so breaking changes can be
+# reviewed individually rather than as a bundle.
 #
 # Reference: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
 
@@ -14,27 +18,38 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    # Raised from 5 to absorb the initial backlog of separate major-bump PRs
+    # that the split grouping will surface. Steady-state PR volume is much
+    # lower.
+    open-pull-requests-limit: 15
 
-    # Wait before opening a PR for a newly-published version. Most malicious
-    # publishes get detected and yanked within days; sitting out the window
-    # avoids ingesting them. Security updates ignore this and ship immediately.
     cooldown:
-      default-days: 7
-      semver-major-days: 14
-      semver-minor-days: 7
-      semver-patch-days: 3
+      default-days: 30
+      semver-major-days: 90
+      semver-minor-days: 60
+      semver-patch-days: 30
 
-    # Batch routine updates so they're easier to review.
     groups:
-      npm-routine:
+      # Patches: batch into one PR. Semver guarantees no behavior changes,
+      # review economy beats individual PRs.
+      npm-patch:
         applies-to: version-updates
         patterns: ["*"]
+        update-types: ["patch"]
+
+      # Minors: batch into one PR. Semver guarantees no breaking API changes.
+      npm-minor:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor"]
+
+      # Majors: no group — each gets its own PR so breaking changes are
+      # reviewed and merged one at a time.
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 5
     cooldown:
-      default-days: 7
+      default-days: 30
