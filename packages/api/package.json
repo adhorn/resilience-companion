@@ -9,26 +9,26 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@anthropic-ai/bedrock-sdk": "^0.26.4",
-    "@anthropic-ai/sdk": "^0.78.0",
-    "@hono/node-server": "^2.0.1",
+    "@anthropic-ai/bedrock-sdk": "^0.29.1",
+    "@anthropic-ai/sdk": "^0.95.1",
+    "@hono/node-server": "^2.0.2",
     "@orr/shared": "*",
-    "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^11.8.1",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.9.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.18",
-    "jose": "^6.0.8",
-    "nanoid": "^5.0.9",
-    "openai": "^4.82.0",
+    "jose": "^6.2.3",
+    "nanoid": "^5.1.11",
+    "openai": "^6.35.0",
     "pg": "^8.20.0",
-    "zod": "^3.25.76"
+    "zod": "^4.4.2"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
+    "@types/bcryptjs": "^3.0.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/pg": "^8.20.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
   }
 }
