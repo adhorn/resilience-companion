@@ -191,6 +191,18 @@ function resolveRepoPath(orrId: string, relativePath: string): { absPath: string
   let realRoot: string;
   try { realRoot = realpathSync(effectiveRoot); } catch { return { error: "Could not resolve repository path." }; }
 
+  // Defense in depth: if repositoryServicePath itself is a symlink to outside the
+  // repo (e.g. someone committed `services/escape -> /etc`), the per-file symlink
+  // check below would happily anchor on /etc. Verify realRoot stays inside the
+  // realpath of the clone root.
+  if (servicePath) {
+    let realLogicalRoot: string;
+    try { realLogicalRoot = realpathSync(logicalRoot); } catch { return { error: "Could not resolve repository path." }; }
+    if (!realRoot.startsWith(realLogicalRoot + "/") && realRoot !== realLogicalRoot) {
+      return { error: "Service path resolves outside the repository (symlinked escape)." };
+    }
+  }
+
   const logicalPath = resolve(effectiveRoot, relativePath);
   if (!logicalPath.startsWith(effectiveRoot + "/") && logicalPath !== effectiveRoot) {
     return { error: "Path escapes the repository root. Access denied." };

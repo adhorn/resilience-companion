@@ -4,7 +4,7 @@ import { executeTool } from "./tools.js";
 import { getDb } from "../db/connection.js";
 import * as schema from "../db/schema.js";
 import { eq } from "drizzle-orm";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -384,6 +384,21 @@ describe("repositoryServicePath scoping", () => {
     const names = (result.entries as Array<{ name: string }>).map((e) => e.name).sort();
     expect(names).toContain("services");
     expect(names).toContain("README.md");
+  });
+
+  it("rejects when repositoryServicePath itself is a symlink pointing outside the repo", () => {
+    repoRoot = setupFakeRepo({ servicePath: "services/escape" });
+    // Replace services/escape with a symlink pointing outside the repo.
+    rmSync(join(repoRoot, "services", "escape"), { recursive: true, force: true });
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    writeFileSync(join(outside, "secret.txt"), "secret");
+    try {
+      symlinkSync(outside, join(repoRoot, "services", "escape"));
+      const result = JSON.parse(executeTool("list_directory", { path: "" }, orrId, sessionId));
+      expect(result.error).toMatch(/symlinked escape|outside the repository/i);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("search_code scopes results to service subtree", () => {
