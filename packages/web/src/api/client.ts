@@ -36,6 +36,7 @@ export const api = {
       templateId?: string;
       repositoryUrl?: string;
       repositoryToken?: string;
+      repositoryServicePath?: string;
       orrType?: string;
       parentOrrId?: string;
       changeTypes?: string[];
@@ -46,7 +47,7 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    update: (id: string, data: { status?: string; serviceName?: string; repositoryUrl?: string; repositoryToken?: string; steeringTier?: string }) =>
+    update: (id: string, data: { status?: string; serviceName?: string; repositoryUrl?: string; repositoryToken?: string; repositoryServicePath?: string | null; steeringTier?: string }) =>
       request<{ orr: any }>(`/orrs/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),

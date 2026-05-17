@@ -72,6 +72,7 @@ export function buildORRContext(
     teamName: team?.name || "Unknown",
     status: orr.status,
     hasRepositoryPath: !!orr.repositoryPath,
+    repositoryServicePath: orr.repositoryServicePath ?? null,
     existingDependencies: existingDeps,
     existingExperiments: existingExps,
     orrType: orr.orrType || "service",

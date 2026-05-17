@@ -86,6 +86,7 @@ export const orrs = pgTable("orrs", {
   repositoryPath: text("repository_path"),
   repositoryToken: text("repository_token"),
   repositoryLocalPath: text("repository_local_path"),
+  repositoryServicePath: text("repository_service_path"),
   steeringTier: text("steering_tier").notNull().default("thorough"),
   orrType: text("orr_type").notNull().default("service"),
   parentOrrId: text("parent_orr_id"),
