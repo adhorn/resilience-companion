@@ -53,6 +53,7 @@ export interface ORR {
   status: ORRStatus;
   repositoryPath: string | null; // path to source code for code exploration
   repositoryServicePath: string | null; // relative path within the cloned repo (monorepo support)
+  createdBy: string | null; // user ID; nullable for ORRs created before this column existed
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
