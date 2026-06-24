@@ -46,21 +46,25 @@ Answer questions directly with technical specifics.
     type: "regression",
     practiceType: "orr",
     model: "sonnet",
-    maxTurns: 4,
+    maxTurns: 6,
     userPersona: {
       style: "cooperative",
       knowledge: `
-- Architecture: Django monolith, deployed on Heroku
-- No load balancer; relies on Heroku dynos
-- Database: Heroku PostgreSQL, no read replicas
-- Monitoring: Sentry for errors only; no metrics dashboard
-- No runbooks, no on-call rotation (best-effort response)
-- Testing: minimal unit tests, no CI; deployments done manually
+- Architecture: Django monolith on Heroku; gunicorn with 4 web dynos behind Heroku's router
+- Database: Heroku PostgreSQL (standard-2 plan), no read replicas; connection pooling via PgBouncer in transaction mode
+- Background jobs: Celery with a Redis broker; one worker dyno
+- Failure behavior: when Postgres connections exhaust, requests queue then time out at the dyno's 30s limit and users see 503s
+- Deploys: pushed manually via 'git push heroku main'; no canary, rollback is a manual re-push of the previous release
+- Monitoring: Sentry for errors; no metrics dashboard and no latency alerting
+- Testing: ~40% unit coverage in pytest; no CI, tests run locally before deploy
       `.trim(),
       systemPrompt: `
-You are a startup engineer with a simple but honest answer for everything.
-When asked about monitoring, reliability, or testing, share what actually exists —
-which isn't much. Be honest about gaps.
+You are a senior engineer who knows this service well and answers questions
+directly with concrete technical specifics. When asked how something works,
+trace the actual mechanism (e.g. what happens step by step when the database
+runs out of connections). Be honest about gaps — there's no CI and no metrics
+dashboard — but give real detail on the parts that do exist. Keep answers to
+2-4 sentences.
       `.trim(),
     },
     expectedOutcomes: [

@@ -10,6 +10,11 @@ import { wrapSummaryForPrompt } from "../../agent/summary-security.js";
  * 3. Each practice adds its own IDENTITY and practice-specific sections
  */
 
+export interface CacheableSystemPrompt {
+  staticPrefix: string;
+  dynamicSuffix: string;
+}
+
 // --- Shared types (used by context builders and prompt builders) ---
 
 export interface SectionSummary {

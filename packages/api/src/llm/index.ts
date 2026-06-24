@@ -1,23 +1,20 @@
 import type { LLMAdapter } from "./adapter.js";
 import { OpenAICompatibleAdapter } from "./openai-compatible.js";
 import { AnthropicAdapter } from "./anthropic.js";
-import { BedrockAdapter, resolveBedrockModel } from "./bedrock.js";
+import { BedrockAdapter } from "./bedrock.js";
 import { NoOpAdapter } from "./noop.js";
 import { RetryAdapter } from "./retry.js";
 import { log } from "../logger.js";
+import {
+  DEFAULT_LLM_MODEL,
+  resolveAnthropicModel,
+  resolveBedrockModel,
+} from "@orr/shared";
 
-export type { LLMAdapter, LLMMessage, LLMToolDef, LLMToolCall, StreamChunk } from "./adapter.js";
+export type { LLMAdapter, LLMMessage, LLMToolDef, LLMToolCall, StreamChunk, LLMChatOptions, LLMUsage, CacheBreakpoint, PromptCacheTtl } from "./adapter.js";
+export { totalInputTokens } from "./adapter.js";
+export { isPromptCachingEnabled, resolveConfiguredPromptCacheTtl } from "./caching-config.js";
 export type { RetryEvent } from "./retry.js";
-
-// Map short model names to Anthropic model IDs
-const ANTHROPIC_MODEL_MAP: Record<string, string> = {
-  "opus-4.6": "claude-opus-4-6",
-  "sonnet-4.6": "claude-sonnet-4-6",
-  "haiku-4.5": "claude-haiku-4-5-20251001",
-  "sonnet": "claude-sonnet-4-20250514",
-  "opus": "claude-opus-4-20250514",
-  "haiku": "claude-haiku-4-5-20251001",
-};
 
 function isAnthropicKey(key: string): boolean {
   return key.startsWith("sk-ant-");
@@ -47,13 +44,31 @@ export function resetLLM(): void {
   _adapter = null;
 }
 
+export function resolveConfiguredModelForLogging(env: Record<string, string | undefined> = process.env): string {
+  const provider = env.LLM_PROVIDER;
+  const apiKey = env.LLM_API_KEY;
+
+  if (provider === "bedrock") {
+    return resolveBedrockModel(env.LLM_MODEL || DEFAULT_LLM_MODEL);
+  }
+
+  if (apiKey) {
+    if (isAnthropicKey(apiKey)) {
+      return resolveAnthropicModel(env.LLM_MODEL || DEFAULT_LLM_MODEL);
+    }
+    return env.LLM_MODEL || "gpt-4o";
+  }
+
+  return "noop";
+}
+
 export function getLLM(): LLMAdapter {
   if (!_adapter) {
     const provider = process.env.LLM_PROVIDER;
     const apiKey = process.env.LLM_API_KEY;
 
     if (provider === "bedrock") {
-      const modelInput = process.env.LLM_MODEL || "sonnet";
+      const modelInput = process.env.LLM_MODEL || DEFAULT_LLM_MODEL;
       const model = resolveBedrockModel(modelInput);
       const region = process.env.AWS_REGION;
       const fallbackModelInput = process.env.LLM_FALLBACK_MODEL;
@@ -72,12 +87,12 @@ export function getLLM(): LLMAdapter {
       }
     } else if (apiKey) {
       if (isAnthropicKey(apiKey)) {
-        const modelInput = process.env.LLM_MODEL || "sonnet";
-        const model = ANTHROPIC_MODEL_MAP[modelInput] || modelInput;
+        const modelInput = process.env.LLM_MODEL || DEFAULT_LLM_MODEL;
+        const model = resolveAnthropicModel(modelInput);
         const fallbackModelInput = process.env.LLM_FALLBACK_MODEL;
 
         if (fallbackModelInput && fallbackModelInput !== modelInput) {
-          const fallbackModel = ANTHROPIC_MODEL_MAP[fallbackModelInput] || fallbackModelInput;
+          const fallbackModel = resolveAnthropicModel(fallbackModelInput);
           _adapter = new RetryAdapter(
             new AnthropicAdapter(apiKey, model),
             new AnthropicAdapter(apiKey, fallbackModel),

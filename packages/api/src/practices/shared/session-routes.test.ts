@@ -110,6 +110,7 @@ describe("flushSessionSummary", () => {
     dataUpdateTools: [],
     buildContext: vi.fn(),
     buildSystemPrompt: vi.fn(),
+    buildCacheableSystemPrompt: vi.fn().mockReturnValue({ staticPrefix: "static", dynamicSuffix: "dynamic" }),
     executeTool: vi.fn().mockReturnValue(JSON.stringify({ success: true })),
     loadSteeringTier: vi.fn(),
     getHooks: vi.fn(),

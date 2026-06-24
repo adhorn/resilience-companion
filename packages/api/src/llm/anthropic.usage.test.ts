@@ -17,7 +17,7 @@ function streamWithMessageDelta() {
       yield {
         type: "message_delta",
         delta: { stop_reason: "end_turn", stop_sequence: null },
-        usage: { input_tokens: 100, output_tokens: 50 },
+        usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 200, cache_read_input_tokens: 800 },
       };
     },
     finalMessage: async () => ({
@@ -52,7 +52,12 @@ describe("AnthropicAdapter usage emission", () => {
 
     const doneChunks = chunks.filter((c) => c.type === "done");
     expect(doneChunks.length).toBe(1);
-    expect(doneChunks[0].usage).toEqual({ promptTokens: 100, completionTokens: 50 });
+    expect(doneChunks[0].usage).toEqual({
+      promptTokens: 100,
+      completionTokens: 50,
+      cacheCreationTokens: 200,
+      cacheReadTokens: 800,
+    });
   });
 
   it("falls back to finalMessage() when no message_delta has usage", async () => {
@@ -68,6 +73,56 @@ describe("AnthropicAdapter usage emission", () => {
 
     const doneChunks = chunks.filter((c) => c.type === "done");
     expect(doneChunks.length).toBe(1);
-    expect(doneChunks[0].usage).toEqual({ promptTokens: 100, completionTokens: 50 });
+    expect(doneChunks[0].usage).toEqual({
+      promptTokens: 100,
+      completionTokens: 50,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    });
+  });
+
+  it("emits cache_control in stream args when caching enabled", async () => {
+    const streamMock = vi.fn(() => streamWithMessageDelta());
+    const adapter = new AnthropicAdapter("test-key");
+    (adapter as any).client = { messages: { stream: streamMock } };
+
+    for await (const _chunk of adapter.chat(
+      [
+        { role: "system", content: "static", cacheBreakpoint: { ttl: "5m" } },
+        { role: "system", content: "dynamic" },
+        { role: "user", content: "hi" },
+      ],
+      [{
+        type: "function",
+        function: { name: "tool_a", description: "A", parameters: { type: "object" } },
+      }],
+      { enablePromptCaching: true, toolsCacheTtl: "5m" },
+    )) {}
+
+
+    expect(streamMock).toHaveBeenCalled();
+    const args = (streamMock as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(Array.isArray(args.system)).toBe(true);
+    expect(args.system[0].cache_control).toEqual({ type: "ephemeral", ttl: "5m" });
+    expect(args.system[1].cache_control).toBeUndefined();
+    expect(args.tools[0].cache_control).toEqual({ type: "ephemeral", ttl: "5m" });
+  });
+
+  it("omits cache_control when caching disabled", async () => {
+    const streamMock = vi.fn(() => streamWithMessageDelta());
+    const adapter = new AnthropicAdapter("test-key");
+    (adapter as any).client = { messages: { stream: streamMock } };
+
+    for await (const _chunk of adapter.chat(
+      [{ role: "system", content: "static", cacheBreakpoint: { ttl: "5m" } }, { role: "user", content: "hi" }],
+      [{ type: "function", function: { name: "tool_a", description: "A", parameters: { type: "object" } } }],
+      { enablePromptCaching: false },
+    )) {}
+
+
+    expect(streamMock).toHaveBeenCalled();
+    const args = (streamMock as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(args.system[0].cache_control).toBeUndefined();
+    expect(args.tools[0].cache_control).toBeUndefined();
   });
 });

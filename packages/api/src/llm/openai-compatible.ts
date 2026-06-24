@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { LLMAdapter, LLMMessage, LLMToolDef, StreamChunk } from "./adapter.js";
+import type { LLMAdapter, LLMMessage, LLMToolDef, LLMChatOptions, StreamChunk } from "./adapter.js";
 
 export class OpenAICompatibleAdapter implements LLMAdapter {
   private client: OpenAI;
@@ -16,10 +16,27 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
   async *chat(
     messages: LLMMessage[],
     tools?: LLMToolDef[],
+    _options?: LLMChatOptions,
   ): AsyncGenerator<StreamChunk> {
+    const openAiMessages = messages.reduce<OpenAI.Chat.Completions.ChatCompletionMessageParam[]>(
+      (acc, msg) => {
+        if (msg.role === "system") {
+          const prev = acc[acc.length - 1];
+          if (prev?.role === "system" && typeof prev.content === "string") {
+            prev.content = `${prev.content}\n${msg.content || ""}`;
+            return acc;
+          }
+        }
+        const { cacheBreakpoint: _cacheBreakpoint, ...openAiMsg } = msg;
+        acc.push(openAiMsg as OpenAI.Chat.Completions.ChatCompletionMessageParam);
+        return acc;
+      },
+      [],
+    );
+
     const stream = await this.client.chat.completions.create({
       model: this.model,
-      messages: messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+      messages: openAiMessages,
       tools: tools as OpenAI.Chat.Completions.ChatCompletionTool[] | undefined,
       stream: true,
       stream_options: { include_usage: true },

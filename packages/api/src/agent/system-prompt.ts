@@ -17,6 +17,7 @@ import {
   buildActiveSectionDetail,
   buildReturningSessionBlock,
   buildKnowledgeBlock,
+  type CacheableSystemPrompt,
 } from "../practices/shared/system-prompt-base.js";
 
 // Re-export shared types so existing imports from this module still work
@@ -113,15 +114,27 @@ const ORR_DEPENDENCY_GUIDANCE = `
 **Map dependencies as you go.** Whenever the team mentions a service, database, API, queue, or other system their service depends on (or that depends on them), call record_dependency. Do this naturally as dependencies surface in conversation — don't ask the team to enumerate them all at once. Over the course of the review, this builds a dependency map that reveals blast radius, single points of failure, and missing fallbacks.
 `;
 
-export function buildSystemPrompt(ctx: ORRContext): string {
-  const parts = [ORR_IDENTITY];
+export function buildCacheableSystemPrompt(ctx: ORRContext): CacheableSystemPrompt {
+  const staticParts = [
+    ORR_IDENTITY,
+    SHARED_OPERATIONAL_RULES,
+    ORR_DEPENDENCY_GUIDANCE,
+    SHARED_EXPERIMENT_GUIDANCE,
+    ORR_EXPERIMENT_WHEN,
+    SHARED_CROSS_PRACTICE_GUIDANCE,
+    SHARED_DISCOVERY_GUIDANCE,
+  ];
 
-  parts.push(SHARED_OPERATIONAL_RULES);
-  parts.push(ORR_DEPENDENCY_GUIDANCE);
-  parts.push(SHARED_EXPERIMENT_GUIDANCE);
-  parts.push(ORR_EXPERIMENT_WHEN);
-  parts.push(SHARED_CROSS_PRACTICE_GUIDANCE);
-  parts.push(SHARED_DISCOVERY_GUIDANCE);
+  const dynamicParts = buildORRDynamicSuffixParts(ctx);
+
+  return {
+    staticPrefix: staticParts.join("\n"),
+    dynamicSuffix: dynamicParts.join("\n"),
+  };
+}
+
+function buildORRDynamicSuffixParts(ctx: ORRContext): string[] {
+  const parts: string[] = [];
 
   // ORR context
   parts.push(`\n## Current ORR
@@ -233,5 +246,10 @@ Then add your observations about what the code reveals — patterns, risks, or s
 The key insight: a team that can't recall how their retry logic works has a different readiness posture than a team that can trace it from memory. Both get the answer eventually, but the source tells us something important about operational preparedness.`);
   }
 
-  return parts.join("\n");
+  return parts;
+}
+
+export function buildSystemPrompt(ctx: ORRContext): string {
+  const { staticPrefix, dynamicSuffix } = buildCacheableSystemPrompt(ctx);
+  return `${staticPrefix}\n${dynamicSuffix}`;
 }

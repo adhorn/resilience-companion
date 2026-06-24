@@ -8,6 +8,7 @@
 
 import type { LLMToolDef } from "../llm/index.js";
 import type { SteeringHook, SteeringTier } from "./steering.js";
+import type { CacheableSystemPrompt } from "../practices/shared/system-prompt-base.js";
 
 export type PracticeType = "orr" | "incident";
 
@@ -30,6 +31,9 @@ export interface PracticeConfig {
 
   /** Build the system prompt from practice context. */
   buildSystemPrompt(context: PracticeContext): string;
+
+  /** Build static/dynamic system prompt split for prompt caching. */
+  buildCacheableSystemPrompt(context: PracticeContext): CacheableSystemPrompt;
 
   /** LLM tool definitions available to the agent. */
   tools: LLMToolDef[];
