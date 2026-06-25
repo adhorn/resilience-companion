@@ -13,7 +13,7 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@hono/node-server": "^2.0.4",
     "@orr/shared": "*",
-    "bcryptjs": "^2.4.3",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.8.1",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.23",
@@ -24,7 +24,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
+    "@types/bcryptjs": "^3.0.0",
     "@types/better-sqlite3": "^7.6.12",
     "@types/pg": "^8.20.0",
     "tsx": "^4.21.1",
