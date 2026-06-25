@@ -371,6 +371,7 @@ export function migrate(db: Db) {
     ["orrs", "parent_orr_id", "TEXT"],
     ["orrs", "change_types", "TEXT NOT NULL DEFAULT '[]'"],
     ["orrs", "change_description", "TEXT"],
+    ["orrs", "created_by", "TEXT REFERENCES users(id)"],
     ["sessions", "learning_quality", "TEXT"],
     ["sessions", "engagement_pattern", "TEXT"],
   ];

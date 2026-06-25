@@ -69,6 +69,9 @@ export const orrs = sqliteTable("orrs", {
   changeTypes: text("change_types", { mode: "json" }).notNull().default("[]"), // ChangeType[]
   changeDescription: text("change_description"),
   terminationReason: text("termination_reason"), // required when status is TERMINATED
+  // Nullable to allow rows that existed before this column was added.
+  // New rows are populated from the authenticated user at creation time.
+  createdBy: text("created_by").references(() => users.id),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   completedAt: text("completed_at"),

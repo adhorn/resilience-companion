@@ -131,6 +131,7 @@ orrRoutes.post("/", async (c) => {
       changeTypes: JSON.stringify(changeTypes || []),
       changeDescription: changeDescription || null,
       status: "DRAFT",
+      createdBy: user.sub,
       createdAt: now,
       updatedAt: now,
       completedAt: null,
