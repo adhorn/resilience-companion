@@ -23,6 +23,31 @@ jobs:
       # scripts. Means a malicious transitive dep can't run lifecycle scripts
       # in CI, while better-sqlite3 and esbuild still set themselves up.
       - run: npm run setup
+      # Supply-chain: verify every installed package against its npm registry
+      # signature/attestation. Fails the build if an artifact was tampered with
+      # or republished without a valid signature — catches a compromised
+      # registry publish that a version bump alone wouldn't reveal.
+      - name: Verify dependency signatures
+        run: npm audit signatures
       - run: npm run build
       - run: npm run lint
       - run: npm test
+
+  # Supply-chain gate for dependency PRs (incl. Dependabot): diffs the
+  # dependency manifest and blocks introduction of packages carrying
+  # high/critical advisories before they reach main, posting a summary on
+  # failure. Complements the cooldown windows in dependabot.yml — cooldown
+  # delays ingest so bad publishes surface; this actively blocks known-bad
+  # changes at merge time.
+  dependency-review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
