@@ -16,6 +16,7 @@ const LEGACY_ANTHROPIC_MODEL_IDS: Record<string, string> = {
   haiku: "claude-haiku-4-5",
   "haiku-4.5": "claude-haiku-4-5",
   "sonnet-4.6": ANTHROPIC_MODEL_IDS.sonnet,
+  "opus-4.6": "claude-opus-4-6",
   "opus-4.8": ANTHROPIC_MODEL_IDS.opus,
 };
 
@@ -23,6 +24,7 @@ const LEGACY_BEDROCK_MODEL_IDS: Record<string, string> = {
   haiku: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
   "haiku-4.5": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
   "sonnet-4.6": BEDROCK_MODEL_IDS.sonnet,
+  "opus-4.6": "us.anthropic.claude-opus-4-6",
   "opus-4.8": BEDROCK_MODEL_IDS.opus,
 };
 
@@ -44,9 +46,13 @@ export interface PromptCachingModelConfig {
 
 export const PROMPT_CACHING_MODEL_CONFIG: Record<string, PromptCachingModelConfig> = {
   "claude-sonnet-4-6": { allowedTtls: ["5m"] },
+  "claude-opus-4-6": { allowedTtls: ["5m"] },
+  "claude-opus-4-7": { allowedTtls: ["5m"] },
   "claude-opus-4-8": { allowedTtls: ["5m"] },
   "claude-haiku-4-5": { allowedTtls: ["5m", "1h"] },
   "us.anthropic.claude-sonnet-4-6": { allowedTtls: ["5m"] },
+  "us.anthropic.claude-opus-4-6": { allowedTtls: ["5m"] },
+  "us.anthropic.claude-opus-4-7": { allowedTtls: ["5m"] },
   "us.anthropic.claude-opus-4-8": { allowedTtls: ["5m"] },
   "us.anthropic.claude-haiku-4-5-20251001-v1:0": { allowedTtls: ["5m", "1h"] },
   "us.anthropic.claude-sonnet-4-5-20250929-v1:0": { allowedTtls: ["5m", "1h"] },

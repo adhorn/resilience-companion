@@ -37,4 +37,18 @@ describe("caching-config", () => {
       LLM_PROMPT_CACHE_TTL: "1h",
     })).toBe("5m");
   });
+
+  it("enables caching for Anthropic Opus 4.6 by default", () => {
+    expect(isPromptCachingEnabled({
+      LLM_API_KEY: "sk-ant-test",
+      LLM_MODEL: "claude-opus-4-6",
+    })).toBe(true);
+  });
+
+  it("enables caching for Bedrock opus-4.6 alias", () => {
+    expect(isPromptCachingEnabled({
+      LLM_PROVIDER: "bedrock",
+      LLM_MODEL: "opus-4.6",
+    })).toBe(true);
+  });
 });

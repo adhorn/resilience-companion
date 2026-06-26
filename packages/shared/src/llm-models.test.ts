@@ -24,6 +24,11 @@ describe("llm-models", () => {
     expect(resolveAnthropicModel("claude-opus-4-6")).toBe("claude-opus-4-6");
   });
 
+  it("resolves legacy opus-4.6 alias", () => {
+    expect(resolveAnthropicModel("opus-4.6")).toBe("claude-opus-4-6");
+    expect(resolveBedrockModel("opus-4.6")).toBe("us.anthropic.claude-opus-4-6");
+  });
+
   it("resolves bedrock shortnames", () => {
     expect(resolveBedrockModel("sonnet")).toBe(BEDROCK_MODEL_IDS.sonnet);
     expect(resolveBedrockModel("opus")).toBe(BEDROCK_MODEL_IDS.opus);
@@ -69,7 +74,10 @@ describe("resolvePromptCacheTtl", () => {
 describe("supportsPromptCaching", () => {
   it("returns true for known caching-capable models", () => {
     expect(supportsPromptCaching("us.anthropic.claude-sonnet-4-6")).toBe(true);
+    expect(supportsPromptCaching("claude-opus-4-6")).toBe(true);
+    expect(supportsPromptCaching("claude-opus-4-7")).toBe(true);
     expect(supportsPromptCaching("claude-opus-4-8")).toBe(true);
+    expect(supportsPromptCaching("us.anthropic.claude-opus-4-6")).toBe(true);
   });
 
   it("returns false for unknown models", () => {
