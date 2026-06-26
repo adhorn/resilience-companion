@@ -13,7 +13,7 @@ function streamWithMessageDelta() {
       yield {
         type: "message_delta",
         delta: { stop_reason: "end_turn", stop_sequence: null },
-        usage: { input_tokens: 100, output_tokens: 50 },
+        usage: { input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 200, cache_read_input_tokens: 800 },
       };
     },
     finalMessage: async () => ({
@@ -47,7 +47,12 @@ describe("BedrockAdapter usage emission", () => {
 
     const doneChunks = chunks.filter((c) => c.type === "done");
     expect(doneChunks.length).toBe(1);
-    expect(doneChunks[0].usage).toEqual({ promptTokens: 100, completionTokens: 50 });
+    expect(doneChunks[0].usage).toEqual({
+      promptTokens: 100,
+      completionTokens: 50,
+      cacheCreationTokens: 200,
+      cacheReadTokens: 800,
+    });
   });
 
   it("falls back to finalMessage() when no message_delta has usage", async () => {
@@ -63,6 +68,11 @@ describe("BedrockAdapter usage emission", () => {
 
     const doneChunks = chunks.filter((c) => c.type === "done");
     expect(doneChunks.length).toBe(1);
-    expect(doneChunks[0].usage).toEqual({ promptTokens: 100, completionTokens: 50 });
+    expect(doneChunks[0].usage).toEqual({
+      promptTokens: 100,
+      completionTokens: 50,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
+    });
   });
 });

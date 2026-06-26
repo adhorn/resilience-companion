@@ -1,4 +1,4 @@
-import type { LLMAdapter, LLMMessage, LLMToolDef, StreamChunk } from "./adapter.js";
+import type { LLMAdapter, LLMMessage, LLMToolDef, LLMChatOptions, StreamChunk } from "./adapter.js";
 
 /**
  * NoOp adapter — used when no LLM is configured.
@@ -8,6 +8,7 @@ export class NoOpAdapter implements LLMAdapter {
   async *chat(
     _messages: LLMMessage[],
     _tools?: LLMToolDef[],
+    _options?: LLMChatOptions,
   ): AsyncGenerator<StreamChunk> {
     yield {
       type: "content",

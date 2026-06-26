@@ -6,7 +6,7 @@
 import type { PracticeConfig, PracticeContext } from "../../agent/practice.js";
 import type { SteeringTier } from "../../agent/steering.js";
 import { buildORRContext } from "../../agent/context.js";
-import { buildSystemPrompt } from "../../agent/system-prompt.js";
+import { buildSystemPrompt, buildCacheableSystemPrompt } from "../../agent/system-prompt.js";
 import { AGENT_TOOLS, executeTool } from "../../agent/tools.js";
 import { getHooksForTier } from "../../agent/hooks/index.js";
 import { getDb, schema } from "../../db/index.js";
@@ -29,6 +29,11 @@ export const orrPracticeConfig: PracticeConfig = {
     // Strip PracticeContext wrapper — buildSystemPrompt expects ORRContext
     const { practiceType: _pt, practiceId: _pid, activeSectionId: _asid, ...orrContext } = context;
     return buildSystemPrompt(orrContext as any);
+  },
+
+  buildCacheableSystemPrompt(context: PracticeContext) {
+    const { practiceType: _pt, practiceId: _pid, activeSectionId: _asid, ...orrContext } = context;
+    return buildCacheableSystemPrompt(orrContext as any);
   },
 
   tools: AGENT_TOOLS,

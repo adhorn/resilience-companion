@@ -5,7 +5,7 @@
  * secondary model if configured.
  */
 
-import type { LLMAdapter, LLMMessage, LLMToolDef, StreamChunk } from "./adapter.js";
+import type { LLMAdapter, LLMMessage, LLMToolDef, LLMChatOptions, StreamChunk } from "./adapter.js";
 import { log } from "../logger.js";
 
 const MAX_RETRIES = 3;
@@ -82,12 +82,13 @@ export class RetryAdapter implements LLMAdapter {
   async *chat(
     messages: LLMMessage[],
     tools?: LLMToolDef[],
+    options?: LLMChatOptions,
   ): AsyncGenerator<StreamChunk> {
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const stream = this.inner.chat(messages, tools);
+        const stream = this.inner.chat(messages, tools, options);
         for await (const chunk of stream) {
           yield chunk;
         }
@@ -122,13 +123,14 @@ export class RetryAdapter implements LLMAdapter {
 
       yield {
         type: "fallback",
-        reason: `Primary model unavailable, using ${label}`,
+        reason: "Primary model unavailable, switched to a fallback model",
+        fallbackModel: label,
       } satisfies StreamChunk;
 
       // Fallback gets its own retry cycle
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
-          const stream = this.fallback.chat(messages, tools);
+          const stream = this.fallback.chat(messages, tools, options);
           for await (const chunk of stream) {
             yield chunk;
           }

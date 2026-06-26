@@ -12,6 +12,7 @@ import {
   buildActiveSectionDetail,
   buildReturningSessionBlock,
   buildKnowledgeBlock,
+  type CacheableSystemPrompt,
 } from "../shared/system-prompt-base.js";
 
 const INCIDENT_IDENTITY = `You are the Incident Learning Facilitator — an AI that helps teams extract deep understanding from incidents through structured, learning-focused conversation.
@@ -75,39 +76,48 @@ const INCIDENT_EXPERIMENT_WHEN = `
 `;
 
 
-export function buildIncidentSystemPrompt(ctx: IncidentContext): string {
-  const parts = [INCIDENT_IDENTITY];
+export function buildCacheableIncidentSystemPrompt(ctx: IncidentContext): CacheableSystemPrompt {
+  const staticParts = [
+    INCIDENT_IDENTITY,
+    SHARED_OPERATIONAL_RULES,
+    INCIDENT_SPECIFIC_RULES,
+    SHARED_EXPERIMENT_GUIDANCE,
+    INCIDENT_EXPERIMENT_WHEN,
+    SHARED_CROSS_PRACTICE_GUIDANCE,
+    SHARED_DISCOVERY_GUIDANCE,
+  ];
 
-  parts.push(SHARED_OPERATIONAL_RULES);
-  parts.push(INCIDENT_SPECIFIC_RULES);
-  parts.push(SHARED_EXPERIMENT_GUIDANCE);
-  parts.push(INCIDENT_EXPERIMENT_WHEN);
-  parts.push(SHARED_CROSS_PRACTICE_GUIDANCE);
-  parts.push(SHARED_DISCOVERY_GUIDANCE);
+  const dynamicParts: string[] = [];
 
-  // Incident context
-  parts.push(`\n## Current Incident Analysis`);
-  parts.push(`- Title: ${ctx.title}`);
-  if (ctx.serviceName) parts.push(`- Service: ${ctx.serviceName}`);
-  parts.push(`- Team: ${ctx.teamName}`);
-  parts.push(`- Status: ${ctx.status}`);
-  if (ctx.severity) parts.push(`- Severity: ${ctx.severity}`);
-  if (ctx.incidentType) parts.push(`- Type: ${ctx.incidentType}`);
-  if (ctx.incidentDate) parts.push(`- Date: ${ctx.incidentDate}`);
+  dynamicParts.push(`\n## Current Incident Analysis`);
+  dynamicParts.push(`- Title: ${ctx.title}`);
+  if (ctx.serviceName) dynamicParts.push(`- Service: ${ctx.serviceName}`);
+  dynamicParts.push(`- Team: ${ctx.teamName}`);
+  dynamicParts.push(`- Status: ${ctx.status}`);
+  if (ctx.severity) dynamicParts.push(`- Severity: ${ctx.severity}`);
+  if (ctx.incidentType) dynamicParts.push(`- Type: ${ctx.incidentType}`);
+  if (ctx.incidentDate) dynamicParts.push(`- Date: ${ctx.incidentDate}`);
 
-  // Progress summary
   const progressParts: string[] = [];
   if (ctx.timelineEventCount > 0) progressParts.push(`${ctx.timelineEventCount} timeline events`);
   if (ctx.contributingFactorCount > 0) progressParts.push(`${ctx.contributingFactorCount} contributing factors`);
   if (ctx.actionItemCount > 0) progressParts.push(`${ctx.actionItemCount} action items`);
   if (progressParts.length > 0) {
-    parts.push(`- Recorded so far: ${progressParts.join(", ")}`);
+    dynamicParts.push(`- Recorded so far: ${progressParts.join(", ")}`);
   }
 
-  parts.push(buildSectionOverview(ctx));
-  parts.push(buildActiveSectionDetail(ctx));
-  parts.push(buildReturningSessionBlock(ctx, "incident analysis"));
-  parts.push(buildKnowledgeBlock(ctx));
+  dynamicParts.push(buildSectionOverview(ctx));
+  dynamicParts.push(buildActiveSectionDetail(ctx));
+  dynamicParts.push(buildReturningSessionBlock(ctx, "incident analysis"));
+  dynamicParts.push(buildKnowledgeBlock(ctx));
 
-  return parts.join("\n");
+  return {
+    staticPrefix: staticParts.join("\n"),
+    dynamicSuffix: dynamicParts.join("\n"),
+  };
+}
+
+export function buildIncidentSystemPrompt(ctx: IncidentContext): string {
+  const { staticPrefix, dynamicSuffix } = buildCacheableIncidentSystemPrompt(ctx);
+  return `${staticPrefix}\n${dynamicSuffix}`;
 }
