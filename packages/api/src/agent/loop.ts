@@ -1,6 +1,6 @@
 import { MAX_AGENT_ITERATIONS, MAX_SESSION_TOKENS, SESSION_TOKEN_WARNING, SESSION_TOKEN_URGENT } from "@orr/shared";
-import { getLLM } from "../llm/index.js";
-import type { LLMMessage } from "../llm/index.js";
+import { getLLM, resolveConfiguredModelForLogging, isPromptCachingEnabled, resolveConfiguredPromptCacheTtl, totalInputTokens } from "../llm/index.js";
+import type { LLMMessage, LLMChatOptions, PromptCacheTtl } from "../llm/index.js";
 import type { SSEEvent } from "@orr/shared";
 import type { PracticeConfig } from "./practice.js";
 import { nanoid } from "nanoid";
@@ -45,6 +45,61 @@ function finalizeTrace(trace: TraceLogger): void {
   trace.finalize();
 }
 
+function appendBudgetWarning(dynamicSuffix: string, sessionTokenUsage: number): string {
+  const tokenFraction = sessionTokenUsage / MAX_SESSION_TOKENS;
+  if (tokenFraction >= SESSION_TOKEN_URGENT) {
+    const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
+    return dynamicSuffix + `\n\n## SESSION BUDGET — URGENT\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). The session will auto-renew soon, which resets conversation context. Call write_session_summary NOW to preserve your observations, depth assessments, and discoveries before they are lost. Include a discoveries array — things that surprised the team or contradicted their expectations.`;
+  }
+  if (tokenFraction >= SESSION_TOKEN_WARNING) {
+    const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
+    return dynamicSuffix + `\n\n## Session Budget\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). Start wrapping up the current line of discussion. You should call write_session_summary soon to persist your observations and discoveries before the session auto-renews.`;
+  }
+  return dynamicSuffix;
+}
+
+function appendEngagementGuidance(
+  dynamicSuffix: string,
+  engagement: ReturnType<typeof assessEngagement>,
+  sessionId: string,
+): string {
+  if (engagement.zone === "FRUSTRATED") {
+    log("info", "Engagement: FRUSTRATED zone", { sessionId, signals: engagement.signals, confidence: engagement.confidence });
+    return dynamicSuffix + `\n\n## Adaptive Guidance — Team Struggling
+The team appears to be hitting a wall in this area (signals: ${engagement.signals.join("; ")}).
+
+Adjust your approach:
+- LOWER the code exploration barrier. You may now proactively offer: "Want me to search the codebase for that?" You don't need to wait for the team to ask.
+- Reframe "I don't know" as useful data: "That's useful — the team's operational model doesn't cover this area. Let's look at the code together and see what we find."
+- Ask simpler, more focused questions. Break complex topics into smaller pieces.
+- Tag this area as a blind spot worth noting in the session summary.
+- Do NOT reduce depth expectations — change HOW you get there, not WHERE you're going.`;
+  }
+  if (engagement.zone === "TOO_EASY") {
+    log("info", "Engagement: TOO_EASY zone", { sessionId, signals: engagement.signals, confidence: engagement.confidence });
+    return dynamicSuffix + `\n\n## Adaptive Guidance — Push Deeper
+The conversation is flowing easily with few surprises (signals: ${engagement.signals.join("; ")}). This may indicate fluency illusion — the team sounds confident but may not have deep understanding.
+
+Adjust your approach:
+- RAISE the challenge. Ask harder prediction questions: "What happens if X AND Y fail simultaneously?" "What's the blast radius if this component is down for 30 minutes?"
+- TIGHTEN the code exploration ladder. Do NOT offer to check code — push the team to recall from memory first. Their recall gaps ARE the learning signal.
+- Probe for novel scenarios the docs don't cover. Find the boundary of their knowledge.
+- Try cross-section connection questions: "How does this interact with what you described in [other section]?"
+- Consider whether the current depth assessment is too generous — fluent recitation is SURFACE, not MODERATE.`;
+  }
+  return dynamicSuffix;
+}
+
+function markCurrentTurnUserMessageForCaching(messages: LLMMessage[], ttl: PromptCacheTtl): void {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role === "user" && msg.content && !msg.content.startsWith("[System:")) {
+      msg.cacheBreakpoint = { ttl };
+      return;
+    }
+  }
+}
+
 export interface AgentInput {
   practiceConfig: PracticeConfig;
   practiceId: string;
@@ -79,20 +134,11 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
   const steeringHooks = practiceConfig.getHooks(tier);
   const toolLedger: ToolLedgerEntry[] = [];
 
-  // Build context and system prompt via practice config
+  // Build context and cacheable system prompt via practice config
   const context = practiceConfig.buildContext(practiceId, activeSectionId);
-  const systemPrompt = practiceConfig.buildSystemPrompt(context);
+  const { staticPrefix, dynamicSuffix: baseDynamicSuffix } = practiceConfig.buildCacheableSystemPrompt(context);
 
-  // Append token budget warning when session is running long.
-  const tokenFraction = sessionTokenUsage / MAX_SESSION_TOKENS;
-  let budgetAwarePrompt = systemPrompt;
-  if (tokenFraction >= SESSION_TOKEN_URGENT) {
-    const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
-    budgetAwarePrompt += `\n\n## SESSION BUDGET — URGENT\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). The session will auto-renew soon, which resets conversation context. Call write_session_summary NOW to preserve your observations, depth assessments, and discoveries before they are lost. Include a discoveries array — things that surprised the team or contradicted their expectations.`;
-  } else if (tokenFraction >= SESSION_TOKEN_WARNING) {
-    const remaining = Math.round((MAX_SESSION_TOKENS - sessionTokenUsage) / 1000);
-    budgetAwarePrompt += `\n\n## Session Budget\nThis session has used ${Math.round(tokenFraction * 100)}% of its token budget (~${remaining}k tokens remaining). Start wrapping up the current line of discussion. You should call write_session_summary soon to persist your observations and discoveries before the session auto-renews.`;
-  }
+  let dynamicSuffix = appendBudgetWarning(baseDynamicSuffix, sessionTokenUsage);
 
   // Adaptive learning: detect engagement zone and inject guidance
   let sectionCtx: SectionEngagementContext | null = null;
@@ -104,40 +150,29 @@ export async function* runAgent(input: AgentInput): AsyncGenerator<SSEEvent> {
     }
   }
   const engagement = assessEngagement(conversationHistory, sectionCtx);
+  dynamicSuffix = appendEngagementGuidance(dynamicSuffix, engagement, sessionId);
 
-  if (engagement.zone === "FRUSTRATED") {
-    budgetAwarePrompt += `\n\n## Adaptive Guidance — Team Struggling
-The team appears to be hitting a wall in this area (signals: ${engagement.signals.join("; ")}).
-
-Adjust your approach:
-- LOWER the code exploration barrier. You may now proactively offer: "Want me to search the codebase for that?" You don't need to wait for the team to ask.
-- Reframe "I don't know" as useful data: "That's useful — the team's operational model doesn't cover this area. Let's look at the code together and see what we find."
-- Ask simpler, more focused questions. Break complex topics into smaller pieces.
-- Tag this area as a blind spot worth noting in the session summary.
-- Do NOT reduce depth expectations — change HOW you get there, not WHERE you're going.`;
-    log("info", "Engagement: FRUSTRATED zone", { sessionId, signals: engagement.signals, confidence: engagement.confidence });
-  } else if (engagement.zone === "TOO_EASY") {
-    budgetAwarePrompt += `\n\n## Adaptive Guidance — Push Deeper
-The conversation is flowing easily with few surprises (signals: ${engagement.signals.join("; ")}). This may indicate fluency illusion — the team sounds confident but may not have deep understanding.
-
-Adjust your approach:
-- RAISE the challenge. Ask harder prediction questions: "What happens if X AND Y fail simultaneously?" "What's the blast radius if this component is down for 30 minutes?"
-- TIGHTEN the code exploration ladder. Do NOT offer to check code — push the team to recall from memory first. Their recall gaps ARE the learning signal.
-- Probe for novel scenarios the docs don't cover. Find the boundary of their knowledge.
-- Try cross-section connection questions: "How does this interact with what you described in [other section]?"
-- Consider whether the current depth assessment is too generous — fluent recitation is SURFACE, not MODERATE.`;
-    log("info", "Engagement: TOO_EASY zone", { sessionId, signals: engagement.signals, confidence: engagement.confidence });
-  }
+  const cacheTtl = resolveConfiguredPromptCacheTtl();
+  const enablePromptCaching = isPromptCachingEnabled();
+  const chatOptions: LLMChatOptions = {
+    enablePromptCaching,
+    toolsCacheTtl: cacheTtl,
+  };
 
   // Build messages array
   const messages: LLMMessage[] = [
-    { role: "system", content: budgetAwarePrompt },
+    {
+      role: "system",
+      content: staticPrefix,
+      ...(enablePromptCaching ? { cacheBreakpoint: { ttl: cacheTtl } } : {}),
+    },
+    { role: "system", content: dynamicSuffix },
     ...conversationHistory,
     { role: "user", content: userMessage },
   ];
 
   const messageId = nanoid();
-  const model = process.env.LLM_MODEL || "sonnet";
+  const model = resolveConfiguredModelForLogging();
   const trace = new TraceLogger(practiceConfig.practiceType, practiceId, sessionId, messageId, model);
   trace.setEngagement(engagement.zone, engagement.signals);
 
@@ -174,7 +209,11 @@ Adjust your approach:
     const llmSpanId = trace.startLLMCall(iteration, model);
 
     try {
-      const stream = llm.chat(messages, practiceConfig.tools);
+      if (iteration >= 1 && enablePromptCaching) {
+        markCurrentTurnUserMessageForCaching(messages, cacheTtl);
+      }
+
+      const stream = llm.chat(messages, practiceConfig.tools, chatOptions);
 
       for await (const chunk of stream) {
         if (chunk.type === "retry") {
@@ -185,7 +224,7 @@ Adjust your approach:
           continue;
         }
         if (chunk.type === "fallback") {
-          trace.addFallback(chunk.reason || "unknown", chunk.reason || "");
+          trace.addFallback(chunk.fallbackModel || "unknown", chunk.reason || "");
           fullContent = "";
           pendingToolCalls.length = 0;
           yield { type: "status", message: `${chunk.reason}. Response quality may differ slightly.` } as SSEEvent;
@@ -219,7 +258,7 @@ Adjust your approach:
           }
           case "done":
             if (chunk.usage) {
-              totalUsage += chunk.usage.promptTokens + chunk.usage.completionTokens;
+              totalUsage += totalInputTokens(chunk.usage) + chunk.usage.completionTokens;
               trace.endLLMCall(llmSpanId, chunk.usage);
             }
             break;
@@ -260,6 +299,7 @@ Adjust your approach:
 
     for (const tc of pendingToolCalls) {
       let args: Record<string, unknown>;
+      // LLM tool JSON is occasionally malformed; empty args let steering hooks reject the call.
       try { args = JSON.parse(tc.args); } catch { args = {}; }
 
       yield { type: "tool_call", tool: tc.name, args };
@@ -330,7 +370,7 @@ Adjust your approach:
         content: "[System: Wrap up your response to the team now. Do not repeat what you already said.]",
       });
       const wrapUpSpanId = trace.startLLMCall(MAX_AGENT_ITERATIONS, model);
-      const finalStream = llm.chat(messages, []);
+      const finalStream = llm.chat(messages, [], chatOptions);
       for await (const chunk of finalStream) {
         if (chunk.type === "content") {
           const text = chunk.content!;
@@ -340,7 +380,7 @@ Adjust your approach:
           }
         }
         if (chunk.type === "done" && chunk.usage) {
-          totalUsage += chunk.usage.promptTokens + chunk.usage.completionTokens;
+          totalUsage += totalInputTokens(chunk.usage) + chunk.usage.completionTokens;
           trace.endLLMCall(wrapUpSpanId, chunk.usage);
         }
       }
@@ -357,7 +397,7 @@ Adjust your approach:
   if (isSlashWrite) {
     const slashResult = parseSlashResponse(input.displayContent!, converseFullText);
     if (slashResult) {
-      const written = persistSlashResult(slashResult, practiceConfig.practiceType, practiceId, sessionId);
+      const written = await persistSlashResult(slashResult, practiceConfig.practiceType, practiceId, sessionId);
       yield { type: "slash_result", result: slashResult } as SSEEvent;
       if (written > 0) {
         yield { type: "data_updated", tool: slashResult.command } as SSEEvent;

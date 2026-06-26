@@ -5,7 +5,7 @@
 import type { PracticeConfig, PracticeContext } from "../../agent/practice.js";
 import type { SteeringTier } from "../../agent/steering.js";
 import { buildIncidentContext } from "./context.js";
-import { buildIncidentSystemPrompt } from "./system-prompt.js";
+import { buildIncidentSystemPrompt, buildCacheableIncidentSystemPrompt } from "./system-prompt.js";
 import { INCIDENT_AGENT_TOOLS, executeIncidentTool } from "./tools.js";
 import { getIncidentHooksForTier } from "./hooks.js";
 import { getDb, schema } from "../../db/index.js";
@@ -27,6 +27,11 @@ export const incidentPracticeConfig: PracticeConfig = {
   buildSystemPrompt(context: PracticeContext): string {
     const { practiceType: _pt, practiceId: _pid, activeSectionId: _asid, ...incidentContext } = context;
     return buildIncidentSystemPrompt(incidentContext as any);
+  },
+
+  buildCacheableSystemPrompt(context: PracticeContext) {
+    const { practiceType: _pt, practiceId: _pid, activeSectionId: _asid, ...incidentContext } = context;
+    return buildCacheableIncidentSystemPrompt(incidentContext as any);
   },
 
   tools: INCIDENT_AGENT_TOOLS,

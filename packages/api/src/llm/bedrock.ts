@@ -1,20 +1,9 @@
 import AnthropicBedrock from "@anthropic-ai/bedrock-sdk";
-import type Anthropic from "@anthropic-ai/sdk";
-import type { LLMAdapter, LLMMessage, LLMToolDef, StreamChunk } from "./adapter.js";
+import type { LLMAdapter, LLMMessage, LLMChatOptions, LLMToolDef, StreamChunk } from "./adapter.js";
+import { buildAnthropicStreamRequest, mapAnthropicUsage } from "./anthropic-request.js";
+import { BEDROCK_MODEL_IDS } from "@orr/shared";
 
-// Bedrock uses different model IDs than the direct API
-const BEDROCK_MODEL_MAP: Record<string, string> = {
-  "sonnet": "us.anthropic.claude-sonnet-4-20250514-v1:0",
-  "sonnet-4.6": "us.anthropic.claude-sonnet-4-6-20250610-v1:0",
-  "opus": "us.anthropic.claude-opus-4-20250514-v1:0",
-  "opus-4.6": "us.anthropic.claude-opus-4-6-20250610-v1:0",
-  "haiku": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-  "haiku-4.5": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-};
-
-export function resolveBedrockModel(input: string): string {
-  return BEDROCK_MODEL_MAP[input] || input;
-}
+export { resolveBedrockModel } from "@orr/shared";
 
 /**
  * Amazon Bedrock adapter using @anthropic-ai/bedrock-sdk.
@@ -29,90 +18,22 @@ export class BedrockAdapter implements LLMAdapter {
     this.client = new AnthropicBedrock({
       awsRegion: awsRegion || process.env.AWS_REGION || "us-east-1",
     });
-    this.model = model || "us.anthropic.claude-sonnet-4-20250514-v1:0";
+    this.model = model || BEDROCK_MODEL_IDS.sonnet;
   }
 
   async *chat(
     messages: LLMMessage[],
     tools?: LLMToolDef[],
+    options?: LLMChatOptions,
   ): AsyncGenerator<StreamChunk> {
-    // Extract system message
-    const systemMsg = messages.find((m) => m.role === "system");
-    const nonSystemMsgs = messages.filter((m) => m.role !== "system");
-
-    // Convert messages to Anthropic format (same as direct API)
-    const anthropicMessages: Anthropic.MessageParam[] = nonSystemMsgs.map((m) => {
-      if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
-        const content: Anthropic.ContentBlockParam[] = [];
-        if (m.content) {
-          content.push({ type: "text", text: m.content });
-        }
-        for (const tc of m.tool_calls) {
-          let input: Record<string, unknown>;
-          try {
-            input = JSON.parse(tc.function.arguments);
-          } catch {
-            input = {};
-          }
-          content.push({
-            type: "tool_use",
-            id: tc.id,
-            name: tc.function.name,
-            input,
-          });
-        }
-        return { role: "assistant" as const, content };
-      }
-
-      if (m.role === "tool") {
-        return {
-          role: "user" as const,
-          content: [
-            {
-              type: "tool_result" as const,
-              tool_use_id: m.tool_call_id!,
-              content: m.content || "",
-            },
-          ],
-        };
-      }
-
-      return {
-        role: m.role as "user" | "assistant",
-        content: m.content || "",
-      };
-    });
-
-    // Merge consecutive user messages
-    const mergedMessages: Anthropic.MessageParam[] = [];
-    for (const msg of anthropicMessages) {
-      const last = mergedMessages[mergedMessages.length - 1];
-      if (last && last.role === "user" && msg.role === "user") {
-        const lastContent = Array.isArray(last.content)
-          ? last.content
-          : [{ type: "text" as const, text: last.content }];
-        const msgContent = Array.isArray(msg.content)
-          ? msg.content
-          : [{ type: "text" as const, text: msg.content }];
-        last.content = [...lastContent, ...msgContent] as Anthropic.ContentBlockParam[];
-      } else {
-        mergedMessages.push(msg);
-      }
-    }
-
-    // Convert tools
-    const anthropicTools: Anthropic.Tool[] | undefined = tools?.map((t) => ({
-      name: t.function.name,
-      description: t.function.description,
-      input_schema: t.function.parameters as Anthropic.Tool.InputSchema,
-    }));
+    const request = buildAnthropicStreamRequest(messages, tools, options, this.model);
 
     const stream = this.client.messages.stream({
       model: this.model,
       max_tokens: 4096,
-      system: systemMsg?.content || undefined,
-      messages: mergedMessages,
-      tools: anthropicTools,
+      system: request.system,
+      messages: request.messages,
+      tools: request.tools,
     });
 
     let currentToolId = "";
@@ -159,32 +80,18 @@ export class BedrockAdapter implements LLMAdapter {
       }
 
       if (event.type === "message_delta") {
-        const usage = (event as any).usage;
+        const usage = (event as { usage?: Parameters<typeof mapAnthropicUsage>[0] }).usage;
         if (usage) {
-          yield {
-            type: "done",
-            usage: {
-              promptTokens: usage.input_tokens || 0,
-              completionTokens: usage.output_tokens || 0,
-            },
-          };
+          yield { type: "done", usage: mapAnthropicUsage(usage) };
           doneEmitted = true;
         }
       }
     }
 
-    // Backstop: emit done from finalMessage only if the message_delta path
-    // above didn't already fire. Without this guard, every call emits two
-    // done chunks with identical usage and the agent loop double-counts.
     if (!doneEmitted) {
+      // Backstop: emit done from finalMessage only if message_delta didn't already fire.
       const finalMessage = await stream.finalMessage();
-      yield {
-        type: "done",
-        usage: {
-          promptTokens: finalMessage.usage.input_tokens,
-          completionTokens: finalMessage.usage.output_tokens,
-        },
-      };
+      yield { type: "done", usage: mapAnthropicUsage(finalMessage.usage) };
     }
   }
 }

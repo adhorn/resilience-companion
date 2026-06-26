@@ -9,6 +9,7 @@
  * doesn't need to know the difference.
  */
 
+import type { LLMUsage } from "../llm/adapter.js";
 import { randomBytes } from "node:crypto";
 import { traceLog } from "../logger.js";
 
@@ -34,6 +35,8 @@ export class TraceLogger {
   private startTime: number;
   private totalPromptTokens = 0;
   private totalCompletionTokens = 0;
+  private totalCacheCreationTokens = 0;
+  private totalCacheReadTokens = 0;
   private retryCount = 0;
   private fallbackUsed = false;
   private fallbackModel: string | null = null;
@@ -100,21 +103,27 @@ export class TraceLogger {
     return spanId;
   }
 
-  endLLMCall(spanId: string, usage?: { promptTokens: number; completionTokens: number }): void {
+  endLLMCall(spanId: string, usage?: LLMUsage): void {
     const active = this.activeSpans.get(spanId);
     if (!active) return;
     this.activeSpans.delete(spanId);
 
     const prompt = usage?.promptTokens || 0;
     const completion = usage?.completionTokens || 0;
+    const cacheCreation = usage?.cacheCreationTokens ?? 0;
+    const cacheRead = usage?.cacheReadTokens ?? 0;
     this.totalPromptTokens += prompt;
     this.totalCompletionTokens += completion;
+    this.totalCacheCreationTokens += cacheCreation;
+    this.totalCacheReadTokens += cacheRead;
 
     this.emitSpan("llm_call", spanId, {
       ...active.attrs,
       "llm.usage.prompt_tokens": prompt,
       "llm.usage.completion_tokens": completion,
-      "llm.usage.total_tokens": prompt + completion,
+      "llm.usage.cache_creation_tokens": cacheCreation,
+      "llm.usage.cache_read_tokens": cacheRead,
+      "llm.usage.total_tokens": prompt + cacheCreation + cacheRead + completion,
     }, undefined, Date.now() - active.startTime);
   }
 
@@ -188,7 +197,7 @@ export class TraceLogger {
 
   /** Emit final summary span with totals for the entire agent turn. */
   finalize(): void {
-    const totalTokens = this.totalPromptTokens + this.totalCompletionTokens;
+    const totalTokens = this.totalPromptTokens + this.totalCacheCreationTokens + this.totalCacheReadTokens + this.totalCompletionTokens;
     this.emitSpan("trace_end", newSpanId(), {
       "practice.type": this.practiceType,
       "practice.id": this.practiceId,
@@ -198,6 +207,8 @@ export class TraceLogger {
       ...(this.fallbackModel ? { "llm.fallback_model": this.fallbackModel } : {}),
       "llm.usage.prompt_tokens": this.totalPromptTokens,
       "llm.usage.completion_tokens": this.totalCompletionTokens,
+      "llm.usage.cache_creation_tokens": this.totalCacheCreationTokens,
+      "llm.usage.cache_read_tokens": this.totalCacheReadTokens,
       "llm.usage.total_tokens": totalTokens,
       "agent.iteration_count": this.iterationCount,
       "agent.tool_calls_count": this.toolCallsCount,
