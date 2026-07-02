@@ -11,13 +11,13 @@
     "@orr/shared": "*",
     "@tanstack/react-query": "^5.66.9",
     "d3-force": "^3.0.0",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "react-router-dom": "^7.1.5"
   },
   "devDependencies": {
     "@types/d3-force": "^3.0.10",
-    "@types/react": "^19.2.15",
+    "@types/react": "^19.2.16",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.4.20",
