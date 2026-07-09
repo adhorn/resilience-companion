@@ -12,7 +12,7 @@
     "@orr/api": "*"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.91.1",
+    "@anthropic-ai/sdk": "^0.95.1",
     "tsx": "^4.21.1",
     "typescript": "^5.7.3"
   }
