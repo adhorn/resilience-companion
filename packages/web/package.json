@@ -9,11 +9,11 @@
   },
   "dependencies": {
     "@orr/shared": "*",
-    "@tanstack/react-query": "^5.100.9",
+    "@tanstack/react-query": "^5.100.14",
     "d3-force": "^3.0.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.15.0"
+    "react-router-dom": "^7.15.1"
   },
   "devDependencies": {
     "@types/d3-force": "^3.0.10",
