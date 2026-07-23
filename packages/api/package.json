@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.29.2",
-    "@anthropic-ai/sdk": "^0.96.0",
+    "@anthropic-ai/sdk": "^0.98.0",
     "@hono/node-server": "^2.0.6",
     "@orr/shared": "*",
     "bcryptjs": "^3.0.3",
@@ -19,8 +19,8 @@
     "hono": "^4.12.27",
     "jose": "^6.2.3",
     "nanoid": "^5.1.15",
-    "openai": "^6.38.0",
-    "pg": "^8.20.0",
+    "openai": "^6.39.0",
+    "pg": "^8.21.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
