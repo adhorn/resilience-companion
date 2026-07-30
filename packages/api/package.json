@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^0.29.2",
-    "@anthropic-ai/sdk": "^0.98.0",
+    "@anthropic-ai/sdk": "^0.100.1",
     "@hono/node-server": "^2.0.12",
     "@orr/shared": "*",
     "bcryptjs": "^3.0.3",
