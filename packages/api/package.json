@@ -9,8 +9,8 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@anthropic-ai/bedrock-sdk": "^0.29.2",
-    "@anthropic-ai/sdk": "^0.98.0",
+    "@anthropic-ai/bedrock-sdk": "^0.30.2",
+    "@anthropic-ai/sdk": "^0.104.1",
     "@hono/node-server": "^2.0.12",
     "@orr/shared": "*",
     "bcryptjs": "^3.0.3",
@@ -19,7 +19,7 @@
     "hono": "^4.13.0",
     "jose": "^6.2.3",
     "nanoid": "^5.1.16",
-    "openai": "^6.39.1",
+    "openai": "^6.42.0",
     "pg": "^8.21.0",
     "zod": "^3.25.76"
   },
