@@ -21,7 +21,7 @@
     "nanoid": "^5.1.16",
     "openai": "^6.39.1",
     "pg": "^8.21.0",
-    "zod": "^3.25.76"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
