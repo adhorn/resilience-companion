@@ -16,7 +16,7 @@
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.10.1",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.13.0",
+    "hono": "^4.13.7",
     "jose": "^6.2.3",
     "nanoid": "^5.1.16",
     "openai": "^6.39.1",
