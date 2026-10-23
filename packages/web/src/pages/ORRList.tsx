@@ -28,7 +28,7 @@ export function ORRList() {
         <h2 className="text-xl font-bold text-gray-900">ORRs</h2>
         <Link
           to="/orrs/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+          className="px-4 py-2 bg-blue-600 text-white rounded-sm text-sm font-medium hover:bg-blue-700"
         >
           New ORR
         </Link>
@@ -49,7 +49,7 @@ export function ORRList() {
               header: "Type",
               render: (item: any) => (
                 <span
-                  className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                  className={`inline-block px-2 py-0.5 rounded-sm text-xs font-medium ${
                     item.orrType === "feature"
                       ? "bg-purple-100 text-purple-700"
                       : "bg-gray-100 text-gray-600"

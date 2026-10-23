@@ -86,7 +86,7 @@ export function LearningPanel({ practiceType, practiceId, refreshKey }: Props) {
             <p>No learning signals yet.</p>
             <p className="mt-2 text-xs">
               Start an AI session to explore your system's operational readiness.
-              Use <code className="bg-gray-100 px-1 rounded">/learning</code> to extract signals from past conversations.
+              Use <code className="bg-gray-100 px-1 rounded-sm">/learning</code> to extract signals from past conversations.
             </p>
           </div>
         </div>
@@ -129,7 +129,7 @@ export function LearningPanel({ practiceType, practiceId, refreshKey }: Props) {
               {sections.map((s: any) => (
                 <div
                   key={s.id}
-                  className={`flex-1 h-5 rounded-sm ${DEPTH_BAR[s.depth]} relative group flex items-center justify-center`}
+                  className={`flex-1 h-5 rounded-xs ${DEPTH_BAR[s.depth]} relative group flex items-center justify-center`}
                   title={`${s.title}: ${DEPTH_LABELS[s.depth]}`}
                 >
                   <span className="text-[8px] font-bold text-white/80 leading-none">{s.position}</span>
@@ -137,10 +137,10 @@ export function LearningPanel({ practiceType, practiceId, refreshKey }: Props) {
               ))}
             </div>
             <div className="flex justify-center gap-4 mt-1.5 text-[9px] text-gray-400">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-green-500 inline-block" /> Deep</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-yellow-400 inline-block" /> Moderate</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-400 inline-block" /> Surface</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-gray-300 inline-block" /> Not reviewed</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-xs bg-green-500 inline-block" /> Deep</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-xs bg-yellow-400 inline-block" /> Moderate</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-xs bg-red-400 inline-block" /> Surface</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-xs bg-gray-300 inline-block" /> Not reviewed</span>
             </div>
           </div>
 
@@ -165,7 +165,7 @@ export function LearningPanel({ practiceType, practiceId, refreshKey }: Props) {
                         {[1, 2, 3].map((level) => (
                           <div
                             key={level}
-                            className={`w-2 h-5 rounded-sm ${s.depth >= level ? DEPTH_BAR[level] : "bg-gray-200"}`}
+                            className={`w-2 h-5 rounded-xs ${s.depth >= level ? DEPTH_BAR[level] : "bg-gray-200"}`}
                           />
                         ))}
                       </div>
@@ -203,7 +203,7 @@ export function LearningPanel({ practiceType, practiceId, refreshKey }: Props) {
                   {s.strengthNotes?.length > 0 && (
                     <div className="space-y-1.5 mt-2">
                       {s.strengthNotes.map((note: string, idx: number) => (
-                        <div key={`str-${idx}`} className="bg-white/70 border border-green-200/60 rounded px-2.5 py-1.5">
+                        <div key={`str-${idx}`} className="bg-white/70 border border-green-200/60 rounded-sm px-2.5 py-1.5">
                           <p className="text-xs text-gray-700">{note}</p>
                         </div>
                       ))}
@@ -214,7 +214,7 @@ export function LearningPanel({ practiceType, practiceId, refreshKey }: Props) {
                   {sectionDiscoveries.length > 0 && (
                     <div className="space-y-1.5 mt-2">
                       {sectionDiscoveries.map((d: any) => (
-                        <div key={d.id} className="bg-white/70 border border-amber-200/60 rounded px-2.5 py-1.5">
+                        <div key={d.id} className="bg-white/70 border border-amber-200/60 rounded-sm px-2.5 py-1.5">
                           <p className="text-xs text-gray-700">{d.text}</p>
                         </div>
                       ))}
@@ -230,7 +230,7 @@ export function LearningPanel({ practiceType, practiceId, refreshKey }: Props) {
                 <div className="text-sm font-medium text-indigo-800 mb-2">Cross-Section</div>
                 <div className="space-y-1.5">
                   {discoveriesBySection.get(null)!.map((d: any) => (
-                    <div key={d.id} className="bg-white/70 border border-indigo-200/60 rounded px-2.5 py-1.5">
+                    <div key={d.id} className="bg-white/70 border border-indigo-200/60 rounded-sm px-2.5 py-1.5">
                       <p className="text-xs text-gray-700">{d.text}</p>
                     </div>
                   ))}
@@ -246,7 +246,7 @@ export function LearningPanel({ practiceType, practiceId, refreshKey }: Props) {
 
       {/* Anti-surrogation reminder */}
       {hasSignals && (
-        <div className="mx-4 mb-4 bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800">
+        <div className="mx-4 mb-4 bg-amber-50 border border-amber-200 rounded-sm p-3 text-xs text-amber-800">
           These signals describe what the team explored, not how "ready" the system is.
           What matters: did anything surprise you? Did your mental model change? Are there untested assumptions?
         </div>
@@ -288,12 +288,12 @@ function CrossPracticeAndActions({ crossPracticeLinks, actionItems }: {
           <h4 className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2">Cross-Practice Connections</h4>
           <div className="space-y-1.5">
             {crossPracticeLinks.map((link: any) => (
-              <div key={link.id} className="bg-indigo-50 border border-indigo-200 rounded px-2.5 py-2">
+              <div key={link.id} className="bg-indigo-50 border border-indigo-200 rounded-sm px-2.5 py-2">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-700">
+                  <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-medium bg-indigo-100 text-indigo-700">
                     {TARGET_PRACTICE_LABELS[link.targetPracticeType] || link.targetPracticeType}
                   </span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                  <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${
                     link.status === "accepted" ? "bg-green-100 text-green-700" :
                     link.status === "dismissed" ? "bg-gray-100 text-gray-400" :
                     "bg-gray-100 text-gray-600"
@@ -316,12 +316,12 @@ function CrossPracticeAndActions({ crossPracticeLinks, actionItems }: {
             {actionItems.map((a: any) => {
               const isDone = a.status === "done";
               return (
-                <div key={a.id} className={`bg-white border border-gray-200 rounded px-2.5 py-2 ${isDone ? "opacity-50" : ""}`}>
+                <div key={a.id} className={`bg-white border border-gray-200 rounded-sm px-2.5 py-2 ${isDone ? "opacity-50" : ""}`}>
                   <div className="flex items-center gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${PRIORITY_COLORS[a.priority] || ""}`}>
+                    <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-bold ${PRIORITY_COLORS[a.priority] || ""}`}>
                       {a.priority}
                     </span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${
                       a.status === "done" ? "bg-green-100 text-green-700" :
                       a.status === "in_progress" ? "bg-blue-100 text-blue-700" :
                       "bg-gray-100 text-gray-600"

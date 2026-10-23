@@ -117,7 +117,7 @@ export function renderInline(text: string): React.ReactNode {
     const codeMatch = remaining.match(/^(.*?)`(.+?)`(.*)/s);
     if (codeMatch) {
       if (codeMatch[1]) parts.push(<span key={key++}>{codeMatch[1]}</span>);
-      parts.push(<code key={key++} className="px-1 py-0.5 bg-gray-200 rounded text-xs font-mono">{codeMatch[2]}</code>);
+      parts.push(<code key={key++} className="px-1 py-0.5 bg-gray-200 rounded-sm text-xs font-mono">{codeMatch[2]}</code>);
       remaining = codeMatch[3];
       continue;
     }

@@ -83,7 +83,7 @@ export function Settings() {
               value={newTokenName}
               onChange={(e) => setNewTokenName(e.target.value)}
               placeholder="e.g. Slack bot, MCP server"
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-sm focus:outline-hidden focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <div className="w-32">
@@ -93,13 +93,13 @@ export function Settings() {
               value={expiryDays}
               onChange={(e) => setExpiryDays(Number(e.target.value))}
               min={0}
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-sm focus:outline-hidden focus:ring-1 focus:ring-blue-500"
             />
           </div>
           <button
             type="submit"
             disabled={creating || !newTokenName.trim()}
-            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-sm hover:bg-blue-700 disabled:opacity-50"
           >
             Create
           </button>
@@ -114,14 +114,14 @@ export function Settings() {
             Token created. Copy it now — you won't see it again.
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 text-xs bg-white border border-green-300 rounded px-3 py-2 font-mono select-all">
+            <code className="flex-1 text-xs bg-white border border-green-300 rounded-sm px-3 py-2 font-mono select-all">
               {createdToken}
             </code>
             <button
               onClick={() => {
                 navigator.clipboard.writeText(createdToken);
               }}
-              className="px-3 py-2 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+              className="px-3 py-2 text-xs bg-green-600 text-white rounded-sm hover:bg-green-700"
             >
               Copy
             </button>

@@ -95,7 +95,7 @@ export function ConversationPanel({
   readOnlyReason,
 }: ConversationPanelProps) {
   return (
-    <div className="w-[40%] flex-shrink-0 flex flex-col bg-white border-l border-gray-200">
+    <div className="w-[40%] shrink-0 flex flex-col bg-white border-l border-gray-200">
       {/* Session controls */}
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
         <h3 className="font-medium text-gray-900 text-sm">AI Assistant</h3>
@@ -110,7 +110,7 @@ export function ConversationPanel({
             )}
             <button
               onClick={endSession}
-              className="text-xs px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              className="text-xs px-3 py-1 bg-gray-100 text-gray-700 rounded-sm hover:bg-gray-200"
             >
               End Session
             </button>
@@ -118,7 +118,7 @@ export function ConversationPanel({
         ) : (
           <button
             onClick={startSession}
-            className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="text-xs px-3 py-1 bg-blue-600 text-white rounded-sm hover:bg-blue-700"
           >
             Start AI Session
           </button>
@@ -171,7 +171,7 @@ export function ConversationPanel({
           <div className="flex items-center gap-2 ml-4 shrink-0">
             <button
               onClick={handleRetry}
-              className="px-2 py-1 bg-red-600 text-white rounded hover:bg-red-700 font-medium"
+              className="px-2 py-1 bg-red-600 text-white rounded-sm hover:bg-red-700 font-medium"
             >
               Retry
             </button>
@@ -275,7 +275,7 @@ export function ConversationPanel({
               placeholder={speech.isListening ? "Listening..." : "Type a message or / for commands... (Shift+Enter for new line)"}
               disabled={streaming}
               rows={1}
-              className={`flex-1 px-3 py-2 border rounded text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 resize-none overflow-hidden ${
+              className={`flex-1 px-3 py-2 border rounded-sm text-sm focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 resize-none overflow-hidden ${
                 speech.isListening ? "border-red-400 bg-red-50" : "border-gray-300"
               }`}
               style={{ minHeight: "38px", maxHeight: "160px" }}
@@ -290,7 +290,7 @@ export function ConversationPanel({
                 onClick={speech.toggle}
                 disabled={streaming}
                 title={speech.isListening ? "Stop listening" : "Voice input"}
-                className={`px-3 py-2 rounded text-sm font-medium disabled:opacity-50 ${
+                className={`px-3 py-2 rounded-sm text-sm font-medium disabled:opacity-50 ${
                   speech.isListening
                     ? "bg-red-500 text-white hover:bg-red-600"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -311,7 +311,7 @@ export function ConversationPanel({
             <button
               onClick={handleSend}
               disabled={streaming || !input.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-blue-600 text-white rounded-sm text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
               {streaming ? "..." : "Send"}
             </button>

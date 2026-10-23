@@ -36,7 +36,7 @@ export function NewIncident() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</div>
+          <div className="text-sm text-red-600 bg-red-50 p-2 rounded-sm">{error}</div>
         )}
 
         <div>
@@ -47,7 +47,7 @@ export function NewIncident() {
             onChange={(e) => setTitle(e.target.value)}
             required
             placeholder="e.g., DB Connection Exhaustion - March 2024"
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-sm text-sm focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
 
@@ -61,7 +61,7 @@ export function NewIncident() {
             value={serviceName}
             onChange={(e) => setServiceName(e.target.value)}
             placeholder="e.g., Payment Service"
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-sm text-sm focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
 
@@ -74,7 +74,7 @@ export function NewIncident() {
             type="datetime-local"
             value={incidentDate}
             onChange={(e) => setIncidentDate(e.target.value)}
-            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+            className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-sm text-sm focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
 
@@ -87,7 +87,7 @@ export function NewIncident() {
             <select
               value={severity}
               onChange={(e) => setSeverity(e.target.value)}
-              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-sm text-sm focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">--</option>
               <option value="HIGH">High</option>
@@ -104,7 +104,7 @@ export function NewIncident() {
             <select
               value={incidentType}
               onChange={(e) => setIncidentType(e.target.value)}
-              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-sm text-sm focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="">--</option>
               <option value="OUTAGE">Outage</option>
@@ -122,7 +122,7 @@ export function NewIncident() {
         <button
           type="submit"
           disabled={creating}
-          className="w-full py-2 px-4 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="w-full py-2 px-4 bg-blue-600 text-white rounded-sm text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
         >
           {creating ? "Creating..." : "Create Incident Analysis"}
         </button>

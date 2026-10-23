@@ -27,7 +27,7 @@ export function Layout() {
             <Link
               key={item.path}
               to={item.path}
-              className={`block px-3 py-2 rounded text-sm ${
+              className={`block px-3 py-2 rounded-sm text-sm ${
                 location.pathname.startsWith(item.path)
                   ? "bg-blue-50 text-blue-700 font-medium"
                   : "text-gray-700 hover:bg-gray-100"

@@ -23,7 +23,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 function Badge({ text, className }: { text: string; className?: string }) {
   return (
-    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${className || "bg-gray-100 text-gray-600"}`}>
+    <span className={`inline-block px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${className || "bg-gray-100 text-gray-600"}`}>
       {text}
     </span>
   );
