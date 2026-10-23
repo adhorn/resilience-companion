@@ -101,7 +101,7 @@ function ParentContextPanel({ parentOrr }: { parentOrr: any }) {
             const isOpen = expandedSections.has(s.id);
             const flags = typeof s.flags === "string" ? JSON.parse(s.flags) : (s.flags || []);
             return (
-              <div key={s.id} className="rounded border border-blue-100 bg-white">
+              <div key={s.id} className="rounded-sm border border-blue-100 bg-white">
                 <button
                   onClick={() => toggleSection(s.id)}
                   className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left"
@@ -112,10 +112,10 @@ function ParentContextPanel({ parentOrr }: { parentOrr: any }) {
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${DEPTH_COLORS[s.depth]}`} />
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${DEPTH_COLORS[s.depth]}`} />
                   <span className="text-xs text-gray-700 font-medium">{s.title}</span>
                   {flags.length > 0 && (
-                    <span className="text-[9px] px-1 py-0.5 rounded bg-red-50 text-red-600">
+                    <span className="text-[9px] px-1 py-0.5 rounded-sm bg-red-50 text-red-600">
                       {flags.length} flag{flags.length !== 1 ? "s" : ""}
                     </span>
                   )}
@@ -316,14 +316,14 @@ export function ORRView() {
   return (
     <div className="flex h-screen">
       {/* Column 1: Section sidebar */}
-      <div className="w-56 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 overflow-hidden">
+      <div className="w-56 shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 overflow-hidden">
         <div className="p-3 border-b border-gray-200">
           <Link to="/orrs" className="text-[10px] text-gray-400 hover:text-blue-600">&larr; All ORRs</Link>
           <h2 className="font-bold text-sm text-gray-900 truncate mt-1">{orr.serviceName}</h2>
           <div className="text-[10px] text-gray-500 mt-1 flex items-center gap-1.5">
             <span>{orr.status.replace(/_/g, " ")}</span>
             <span
-              className={`px-1.5 py-0.5 rounded font-medium ${
+              className={`px-1.5 py-0.5 rounded-sm font-medium ${
                 orr.orrType === "feature"
                   ? "bg-purple-100 text-purple-700"
                   : "bg-gray-100 text-gray-600"
@@ -344,7 +344,7 @@ export function ORRView() {
               {orr.changeTypes && orr.changeTypes.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {(typeof orr.changeTypes === "string" ? JSON.parse(orr.changeTypes) : orr.changeTypes).map((ct: string) => (
-                    <span key={ct} className="px-1 py-0.5 rounded bg-purple-50 text-purple-600 text-[9px]">
+                    <span key={ct} className="px-1 py-0.5 rounded-sm bg-purple-50 text-purple-600 text-[9px]">
                       {ct.replace(/_/g, " ")}
                     </span>
                   ))}
@@ -382,7 +382,7 @@ export function ORRView() {
               await api.orrs.update(id!, { steeringTier: tier });
             }}
             disabled={isReadOnly}
-            className={`mt-1.5 w-full text-[10px] px-1.5 py-0.5 border border-gray-300 rounded bg-white text-gray-700 ${isReadOnly ? "opacity-50 cursor-not-allowed" : ""}`}
+            className={`mt-1.5 w-full text-[10px] px-1.5 py-0.5 border border-gray-300 rounded-sm bg-white text-gray-700 ${isReadOnly ? "opacity-50 cursor-not-allowed" : ""}`}
             title="Agent steering rigor — controls how strictly the AI follows review workflow rules"
           >
             <option value="standard">Standard — fast, fewer checks</option>
@@ -412,7 +412,7 @@ export function ORRView() {
                     value={repoUrl}
                     onChange={(e) => setRepoUrl(e.target.value)}
                     placeholder="https://github.com/org/repo"
-                    className="w-full px-1.5 py-1 border border-gray-300 rounded text-[10px] font-mono"
+                    className="w-full px-1.5 py-1 border border-gray-300 rounded-sm text-[10px] font-mono"
                   />
                   {repoUrl.trim() && (
                     <input
@@ -420,7 +420,7 @@ export function ORRView() {
                       value={repoToken}
                       onChange={(e) => setRepoToken(e.target.value)}
                       placeholder="Token (for private repos)"
-                      className="w-full px-1.5 py-1 border border-gray-300 rounded text-[10px] font-mono"
+                      className="w-full px-1.5 py-1 border border-gray-300 rounded-sm text-[10px] font-mono"
                     />
                   )}
                   {repoError && <div className="text-[10px] text-red-600">{repoError}</div>}
@@ -428,13 +428,13 @@ export function ORRView() {
                     <button
                       onClick={handleRepoSubmit}
                       disabled={repoSaving || !repoUrl.trim()}
-                      className="flex-1 py-0.5 bg-blue-600 text-white rounded text-[10px] disabled:opacity-50"
+                      className="flex-1 py-0.5 bg-blue-600 text-white rounded-sm text-[10px] disabled:opacity-50"
                     >
                       {repoSaving ? "Cloning..." : "Connect"}
                     </button>
                     <button
                       onClick={() => { setShowRepoForm(false); setRepoError(""); }}
-                      className="px-2 py-0.5 text-gray-500 rounded text-[10px] hover:bg-gray-200"
+                      className="px-2 py-0.5 text-gray-500 rounded-sm text-[10px] hover:bg-gray-200"
                     >
                       Cancel
                     </button>
@@ -458,7 +458,7 @@ export function ORRView() {
                 key={s.id}
                 onClick={() => setActiveSection(s.id)}
                 title={`${s.title}: ${DEPTH_LABELS[s.depth]}`}
-                className={`flex-1 h-2 rounded-sm ${DEPTH_COLORS[s.depth]} ${
+                className={`flex-1 h-2 rounded-xs ${DEPTH_COLORS[s.depth]} ${
                   s.id === activeSection ? "ring-2 ring-blue-500" : ""
                 }`}
               />
@@ -478,7 +478,7 @@ export function ORRView() {
                   alert(err.message || "Failed to terminate ORR");
                 }
               }}
-              className="mt-2 w-full text-[10px] px-1.5 py-1 text-red-600 hover:bg-red-50 border border-red-200 rounded transition-colors"
+              className="mt-2 w-full text-[10px] px-1.5 py-1 text-red-600 hover:bg-red-50 border border-red-200 rounded-sm transition-colors"
             >
               Terminate ORR
             </button>
@@ -502,12 +502,12 @@ export function ORRView() {
                 }`}
               >
                 <div className="flex items-center gap-1.5">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${DEPTH_COLORS[s.depth]}`} />
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${DEPTH_COLORS[s.depth]}`} />
                   <span className="flex-1 truncate text-gray-700">
                     {s.position}. {s.title}
                   </span>
                   {orr.orrType === "feature" && parentOrr && s.title === "Impact on Existing Service" && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" title="Checks impact on parent service ORR" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" title="Checks impact on parent service ORR" />
                   )}
                 </div>
                 <div className="ml-3.5 mt-0.5 text-[10px] text-gray-400">
@@ -534,10 +534,10 @@ export function ORRView() {
                   <Link
                     key={child.id}
                     to={`/orrs/${child.id}`}
-                    className="block px-2 py-1.5 rounded hover:bg-gray-100 transition-colors"
+                    className="block px-2 py-1.5 rounded-sm hover:bg-gray-100 transition-colors"
                   >
                     <div className="flex items-center gap-1.5">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-400 flex-shrink-0" />
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
                       <span className="text-xs text-gray-700 truncate">
                         {child.changeDescription
                           ? child.changeDescription.length > 40
@@ -548,7 +548,7 @@ export function ORRView() {
                     </div>
                     <div className="ml-3 mt-0.5 flex flex-wrap gap-0.5">
                       {types.slice(0, 3).map((ct: string) => (
-                        <span key={ct} className="px-1 py-0 rounded bg-purple-50 text-purple-500 text-[8px]">
+                        <span key={ct} className="px-1 py-0 rounded-sm bg-purple-50 text-purple-500 text-[8px]">
                           {ct.replace(/_/g, " ")}
                         </span>
                       ))}
@@ -568,7 +568,7 @@ export function ORRView() {
             </div>
             <div className="space-y-2">
               {pendingSuggestions.map((s: any) => (
-                <div key={s.id} className="rounded border border-amber-200 bg-amber-50 p-2">
+                <div key={s.id} className="rounded-sm border border-amber-200 bg-amber-50 p-2">
                   <p className="text-xs text-gray-700">{s.suggestion}</p>
                   <p className="text-[10px] text-gray-500 mt-1 italic">{s.rationale}</p>
                   <div className="flex gap-1 mt-1.5">
@@ -577,7 +577,7 @@ export function ORRView() {
                         await api.orrs.updateSuggestion(id!, s.id, "accepted");
                         setPendingSuggestions((prev) => prev.filter((p) => p.id !== s.id));
                       }}
-                      className="text-[9px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 hover:bg-green-100"
+                      className="text-[9px] px-1.5 py-0.5 rounded-sm bg-green-50 text-green-600 hover:bg-green-100"
                     >
                       Accept
                     </button>
@@ -586,7 +586,7 @@ export function ORRView() {
                         await api.orrs.updateSuggestion(id!, s.id, "dismissed");
                         setPendingSuggestions((prev) => prev.filter((p) => p.id !== s.id));
                       }}
-                      className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      className="text-[9px] px-1.5 py-0.5 rounded-sm bg-gray-100 text-gray-500 hover:bg-gray-200"
                     >
                       Dismiss
                     </button>
@@ -620,14 +620,14 @@ export function ORRView() {
           <div className="ml-auto flex items-center gap-1 pr-2">
             <a
               href={`/api/v1/orrs/${id}/export/markdown`}
-              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-sm transition-colors"
               title="Export ORR document as Markdown"
             >
               Export Doc
             </a>
             <a
               href={`/api/v1/orrs/${id}/export/conversation`}
-              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-sm transition-colors"
               title="Export conversation transcript"
             >
               Export Chat
@@ -679,10 +679,10 @@ export function ORRView() {
                 return (
                   <div key={i} id={`question-${i}`} className="group scroll-mt-4">
                     <div className="flex items-start gap-2 mb-1.5">
-                      <span className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                      <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
                         isAnswered ? "bg-green-500" : "bg-gray-300"
                       }`} />
-                      <span className="text-xs font-mono text-gray-400 mt-0.5 flex-shrink-0">Q{i + 1}</span>
+                      <span className="text-xs font-mono text-gray-400 mt-0.5 shrink-0">Q{i + 1}</span>
                       <span className="text-sm text-gray-700 font-medium">{prompt}</span>
                     </div>
                     <div className="ml-4">
@@ -700,13 +700,13 @@ export function ORRView() {
                             });
                           }}
                           placeholder="Type your answer here..."
-                          className="w-full bg-white rounded border border-blue-300 p-2.5 text-sm text-gray-700 ring-1 ring-blue-500 resize-y transition-colors"
+                          className="w-full bg-white rounded-sm border border-blue-300 p-2.5 text-sm text-gray-700 ring-1 ring-blue-500 resize-y transition-colors"
                           rows={responseValue ? Math.max(3, responseValue.split("\n").length + 1) : 3}
                         />
                       ) : savedValue ? (
                         <div
                           onClick={isReadOnly ? undefined : () => session.setEditingResponses((prev) => ({ ...prev, [i]: savedValue }))}
-                          className={`w-full bg-gray-50 rounded border border-gray-200 p-2.5 text-sm text-gray-700 ${isReadOnly ? "" : "cursor-text hover:border-gray-300 hover:bg-gray-100"} transition-colors`}
+                          className={`w-full bg-gray-50 rounded-sm border border-gray-200 p-2.5 text-sm text-gray-700 ${isReadOnly ? "" : "cursor-text hover:border-gray-300 hover:bg-gray-100"} transition-colors`}
                         >
                           {renderMarkdown(savedValue)}
                           {source === "code" && (
@@ -722,12 +722,12 @@ export function ORRView() {
                       ) : !isReadOnly ? (
                         <div
                           onClick={() => session.setEditingResponses((prev) => ({ ...prev, [i]: "" }))}
-                          className="w-full bg-gray-50 rounded border border-gray-200 border-dashed p-2.5 text-sm text-gray-400 cursor-text hover:border-gray-300 transition-colors"
+                          className="w-full bg-gray-50 rounded-sm border border-gray-200 border-dashed p-2.5 text-sm text-gray-400 cursor-text hover:border-gray-300 transition-colors"
                         >
                           Click to answer, or let the AI capture your response during the review...
                         </div>
                       ) : (
-                        <div className="w-full bg-gray-50 rounded border border-gray-200 border-dashed p-2.5 text-sm text-gray-400">
+                        <div className="w-full bg-gray-50 rounded-sm border border-gray-200 border-dashed p-2.5 text-sm text-gray-400">
                           Not answered
                         </div>
                       )}
@@ -740,7 +740,7 @@ export function ORRView() {
               {currentSection.content && (
                 <div className="pt-3 border-t border-gray-200">
                   <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2">AI Observations</div>
-                  <div className="bg-blue-50 rounded border border-blue-100 p-3 text-sm text-gray-700 leading-relaxed">
+                  <div className="bg-blue-50 rounded-sm border border-blue-100 p-3 text-sm text-gray-700 leading-relaxed">
                     {renderMarkdown(currentSection.content)}
                   </div>
                 </div>
@@ -759,7 +759,7 @@ export function ORRView() {
                       return (
                         <div
                           key={i}
-                          className={`rounded border px-3 py-2 text-xs ${
+                          className={`rounded-sm border px-3 py-2 text-xs ${
                             isResolved
                               ? "border-gray-200 bg-gray-50 opacity-60"
                               : isRisk
@@ -768,16 +768,16 @@ export function ORRView() {
                           }`}
                         >
                           <div className="flex items-center gap-2">
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${FLAG_COLORS[f.type] || "bg-gray-100 text-gray-600"}`}>
+                            <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${FLAG_COLORS[f.type] || "bg-gray-100 text-gray-600"}`}>
                               {f.type}
                             </span>
                             {isRisk && f.severity && (
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${SEVERITY_COLORS_BOLD[f.severity] || "bg-gray-200"}`}>
+                              <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-bold ${SEVERITY_COLORS_BOLD[f.severity] || "bg-gray-200"}`}>
                                 {f.severity}
                               </span>
                             )}
                             {status !== "OPEN" && (
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                              <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${
                                 status === "ACCEPTED" ? "bg-purple-100 text-purple-700" : "bg-green-100 text-green-700"
                               }`}>
                                 {status}
@@ -799,7 +799,7 @@ export function ORRView() {
                                         reloadData();
                                       }
                                     }}
-                                    className="text-[9px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 hover:bg-purple-100"
+                                    className="text-[9px] px-1.5 py-0.5 rounded-sm bg-purple-50 text-purple-600 hover:bg-purple-100"
                                   >
                                     Accept
                                   </button>
@@ -811,7 +811,7 @@ export function ORRView() {
                                         reloadData();
                                       }
                                     }}
-                                    className="text-[9px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 hover:bg-green-100"
+                                    className="text-[9px] px-1.5 py-0.5 rounded-sm bg-green-50 text-green-600 hover:bg-green-100"
                                   >
                                     Resolve
                                   </button>
@@ -822,7 +822,7 @@ export function ORRView() {
                                     await api.flags.updateStatus(id!, activeSection!, i, { status: "OPEN" });
                                     reloadData();
                                   }}
-                                  className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                  className="text-[9px] px-1.5 py-0.5 rounded-sm bg-gray-100 text-gray-500 hover:bg-gray-200"
                                 >
                                   Reopen
                                 </button>

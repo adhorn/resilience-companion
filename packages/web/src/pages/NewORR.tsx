@@ -120,7 +120,7 @@ export function NewORR() {
       </p>
 
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 p-2 rounded mb-4">{error}</div>
+        <div className="text-sm text-red-600 bg-red-50 p-2 rounded-sm mb-4">{error}</div>
       )}
 
       {/* Step 1: Type Selection */}
@@ -167,7 +167,7 @@ export function NewORR() {
               value={serviceName}
               onChange={(e) => setServiceName(e.target.value)}
               placeholder="e.g., Payment Service, User Auth API"
-              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-sm text-sm focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
@@ -184,7 +184,7 @@ export function NewORR() {
                       key={value}
                       type="button"
                       onClick={() => toggleChangeType(value)}
-                      className={`text-left px-3 py-2 rounded border text-sm transition-colors ${
+                      className={`text-left px-3 py-2 rounded-sm border text-sm transition-colors ${
                         changeTypes.includes(value)
                           ? "border-blue-500 bg-blue-50 text-blue-700"
                           : "border-gray-200 text-gray-600 hover:border-gray-300"
@@ -211,7 +211,7 @@ export function NewORR() {
                   onChange={(e) => setChangeDescription(e.target.value)}
                   placeholder="e.g., Adding Redis as a session cache to replace in-memory sessions. This introduces a new external dependency and changes our failure domain..."
                   rows={3}
-                  className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500"
+                  className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-sm text-sm focus:ring-blue-500 focus:border-blue-500"
                 />
                 <p className="mt-1 text-xs text-gray-500">
                   The AI will use this to focus its questions during the review.
@@ -228,7 +228,7 @@ export function NewORR() {
                   <select
                     value={parentOrrId}
                     onChange={(e) => setParentOrrId(e.target.value)}
-                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm bg-white focus:ring-blue-500 focus:border-blue-500"
+                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-sm text-sm bg-white focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">None — standalone feature review</option>
                     {parentOrrs.map((o: any) => (
@@ -256,7 +256,7 @@ export function NewORR() {
               value={repositoryUrl}
               onChange={(e) => setRepositoryUrl(e.target.value)}
               placeholder="https://github.com/org/repo"
-              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 font-mono"
+              className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-sm text-sm focus:ring-blue-500 focus:border-blue-500 font-mono"
             />
             <p className="mt-1 text-xs text-gray-500">
               The AI can search and read code during the review.
@@ -274,7 +274,7 @@ export function NewORR() {
                 value={repositoryToken}
                 onChange={(e) => setRepositoryToken(e.target.value)}
                 placeholder="ghp_... or glpat-..."
-                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 font-mono"
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-sm text-sm focus:ring-blue-500 focus:border-blue-500 font-mono"
               />
             </div>
           )}
@@ -290,7 +290,7 @@ export function NewORR() {
                 value={repositoryServicePath}
                 onChange={(e) => setRepositoryServicePath(e.target.value)}
                 placeholder="e.g., services/payments"
-                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 font-mono"
+                className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-sm text-sm focus:ring-blue-500 focus:border-blue-500 font-mono"
               />
               <p className="mt-1 text-xs text-gray-500">
                 If set, code exploration is scoped to this subdirectory of the cloned repo. Leave blank for single-service repos.
@@ -315,7 +315,7 @@ export function NewORR() {
                 }
               }}
               disabled={!canProceedFromDetails || creating}
-              className="flex-1 py-2 px-4 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-sm text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
               {orrType === "service"
                 ? creating ? "Creating..." : "Create Service ORR"
@@ -330,7 +330,7 @@ export function NewORR() {
       {/* Step 3: Question Review (feature ORR only) */}
       {step === "questions" && (
         <div className="space-y-4">
-          <div className="text-sm text-gray-600 bg-gray-50 rounded p-3">
+          <div className="text-sm text-gray-600 bg-gray-50 rounded-sm p-3">
             {enabledSections.length} sections, {enabledSections.reduce((sum, s) => sum + s.prompts.length, 0)} questions selected.
             Toggle sections on/off to customize.
           </div>
@@ -348,7 +348,7 @@ export function NewORR() {
                   className="w-full flex items-center gap-3 px-4 py-3 text-left"
                 >
                   <div
-                    className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                    className={`w-5 h-5 rounded-sm border-2 flex items-center justify-center shrink-0 ${
                       section.enabled ? "border-blue-500 bg-blue-500" : "border-gray-300"
                     }`}
                   >
@@ -389,7 +389,7 @@ export function NewORR() {
             <button
               onClick={handleCreate}
               disabled={creating || enabledSections.length === 0}
-              className="flex-1 py-2 px-4 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-sm text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
               {creating ? "Creating..." : `Create Feature ORR (${enabledSections.reduce((sum, s) => sum + s.prompts.length, 0)} questions)`}
             </button>

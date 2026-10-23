@@ -417,7 +417,7 @@ export function DependenciesPanel({ orrId, serviceName, sections }: Props) {
           </svg>
 
           {/* Legend */}
-          <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur rounded-lg border border-gray-200 px-3 py-2 text-[10px] text-gray-500">
+          <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-sm rounded-lg border border-gray-200 px-3 py-2 text-[10px] text-gray-500">
             <div className="flex items-center gap-3">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-red-500" /> critical
@@ -463,7 +463,7 @@ export function DependenciesPanel({ orrId, serviceName, sections }: Props) {
               <div>
                 <span className="text-gray-500">Criticality</span>
                 <div className="mt-0.5">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                  <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold ${
                     selectedDep.criticality === "critical" ? "bg-red-600 text-white" :
                     selectedDep.criticality === "important" ? "bg-orange-500 text-white" :
                     "bg-gray-400 text-white"
@@ -484,7 +484,7 @@ export function DependenciesPanel({ orrId, serviceName, sections }: Props) {
                   )}
                 </div>
                 {selectedDep.fallbackDescription && (
-                  <div className="mt-1 text-gray-600 bg-green-50 rounded px-2 py-1">
+                  <div className="mt-1 text-gray-600 bg-green-50 rounded-sm px-2 py-1">
                     {selectedDep.fallbackDescription}
                   </div>
                 )}
@@ -503,7 +503,7 @@ export function DependenciesPanel({ orrId, serviceName, sections }: Props) {
               )}
               <button
                 onClick={() => handleDelete(selectedDep.id)}
-                className="mt-2 w-full py-1.5 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50 transition-colors"
+                className="mt-2 w-full py-1.5 text-xs text-red-600 border border-red-200 rounded-sm hover:bg-red-50 transition-colors"
               >
                 Remove dependency
               </button>

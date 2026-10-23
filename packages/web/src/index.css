@@ -1,3 +1,51 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/*
+  Tailwind 4 changed a few defaults that the UI was built against. These keep
+  the Tailwind 3 look so the upgrade doesn't silently restyle every bordered
+  card, form field, badge and button.
+*/
+
+/*
+  v4 text sizes set a unitless line-height ratio; v3 set a fixed length. Small
+  text like text-[10px] inherits its parent's line-height, so with ratios every
+  badge and section-nav row inside text-xs/text-sm shrinks.
+*/
+@theme {
+  --text-xs--line-height: 1rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl--line-height: 2rem;
+}
+
+@layer base {
+  /* v4 defaults border colour to currentColor; v3 used gray-200. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  /* v4 makes form fields transparent; v3 kept the browser's field background. */
+  input:where(:not([type="button"], [type="reset"], [type="submit"])),
+  textarea,
+  select {
+    background-color: revert;
+  }
+
+  /* v4 defaults placeholders to 50% of the text colour; v3 used gray-400. */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  /* v4 drops cursor: pointer on buttons. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}

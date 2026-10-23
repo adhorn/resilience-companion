@@ -164,20 +164,20 @@ function ExperimentCard({
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${EXPERIMENT_TYPE_COLORS[exp.type] || "bg-gray-100"}`}>
+            <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${EXPERIMENT_TYPE_COLORS[exp.type] || "bg-gray-100"}`}>
               {TYPE_LABELS[exp.type] || exp.type}
             </span>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${PRIORITY_COLORS[exp.priority] || ""}`}>
+            <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-bold ${PRIORITY_COLORS[exp.priority] || ""}`}>
               {exp.priority}
             </span>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${EXPERIMENT_STATUS_COLORS[exp.status] || ""}`}>
+            <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${EXPERIMENT_STATUS_COLORS[exp.status] || ""}`}>
               {exp.status}
             </span>
           </div>
           <h4 className="text-sm font-medium text-gray-900 mt-1">{exp.title}</h4>
           <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{exp.hypothesis}</p>
         </div>
-        <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 mt-1 transition-transform ${expanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className={`w-4 h-4 text-gray-400 shrink-0 mt-1 transition-transform ${expanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
@@ -222,7 +222,7 @@ function ExperimentCard({
               {exp.status === "suggested" && (
                 <button
                   onClick={() => onUpdateStatus(exp.id, "accepted")}
-                  className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700"
+                  className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-sm hover:bg-blue-700"
                 >
                   Accept
                 </button>
@@ -230,7 +230,7 @@ function ExperimentCard({
               {exp.status === "accepted" && (
                 <button
                   onClick={() => onUpdateStatus(exp.id, "scheduled")}
-                  className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                  className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-sm hover:bg-indigo-700"
                 >
                   Mark Scheduled
                 </button>
@@ -241,7 +241,7 @@ function ExperimentCard({
                     const notes = prompt("What were the results?");
                     if (notes !== null) onUpdateStatus(exp.id, "completed", { completedNotes: notes });
                   }}
-                  className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded hover:bg-green-700"
+                  className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-sm hover:bg-green-700"
                 >
                   Mark Completed
                 </button>
@@ -251,7 +251,7 @@ function ExperimentCard({
                   const reason = prompt("Why dismiss this experiment?");
                   if (reason) onUpdateStatus(exp.id, "dismissed", { dismissedReason: reason });
                 }}
-                className="px-3 py-1.5 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-50"
+                className="px-3 py-1.5 text-xs text-gray-500 border border-gray-300 rounded-sm hover:bg-gray-50"
               >
                 Dismiss
               </button>
@@ -261,7 +261,7 @@ function ExperimentCard({
             <div className="pt-1">
               <button
                 onClick={() => onUpdateStatus(exp.id, "suggested")}
-                className="px-3 py-1.5 text-xs text-gray-500 border border-gray-300 rounded hover:bg-gray-50"
+                className="px-3 py-1.5 text-xs text-gray-500 border border-gray-300 rounded-sm hover:bg-gray-50"
               >
                 Reopen
               </button>

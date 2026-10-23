@@ -63,7 +63,7 @@ export function Insights() {
       </p>
 
       {!hasData ? (
-        <div className="bg-white rounded-lg shadow-sm border p-8 text-center">
+        <div className="bg-white rounded-lg shadow-xs border p-8 text-center">
           <p className="text-gray-500 mb-2">No learning signals yet.</p>
           <p className="text-sm text-gray-400">
             As you conduct ORR reviews and incident analyses, discoveries, cross-practice suggestions, and action items will appear here.
@@ -107,14 +107,14 @@ export function Insights() {
                 {crossLinks.map((link) => (
                   <div key={link.id} className="bg-white border rounded-lg px-4 py-3">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700">
+                      <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-medium bg-blue-50 text-blue-700">
                         {link.sourcePracticeType}
                       </span>
                       <span className="text-[10px] text-gray-400">&rarr;</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700">
+                      <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-medium bg-purple-50 text-purple-700">
                         {link.targetPracticeType.replace(/_/g, " ")}
                       </span>
-                      <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      <span className={`ml-auto px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${
                         link.status === "accepted" ? "bg-green-100 text-green-700" :
                         link.status === "dismissed" ? "bg-gray-100 text-gray-500" :
                         "bg-yellow-50 text-yellow-700"
@@ -168,14 +168,14 @@ export function Insights() {
                           <div className="text-[10px] text-gray-400">{item.practiceType}</div>
                         </td>
                         <td className="px-4 py-2.5">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${PRIORITY_COLORS[item.priority] || "bg-gray-100 text-gray-600"}`}>
+                          <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${PRIORITY_COLORS[item.priority] || "bg-gray-100 text-gray-600"}`}>
                             {item.priority}
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-xs text-gray-600">{item.type}</td>
                         <td className="px-4 py-2.5 text-xs text-gray-600">{item.owner || "—"}</td>
                         <td className="px-4 py-2.5">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${
                             item.status === "in_progress" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
                           }`}>
                             {item.status.replace(/_/g, " ")}

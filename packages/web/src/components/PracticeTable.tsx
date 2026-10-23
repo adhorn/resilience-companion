@@ -27,11 +27,11 @@ export function PracticeTable({
 }) {
   if (items.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border p-6 text-center">
+      <div className="bg-white rounded-lg shadow-xs border p-6 text-center">
         <p className="text-gray-500 mb-3 text-sm">{emptyText}</p>
         <Link
           to={newPath}
-          className="inline-block px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+          className="inline-block px-3 py-1.5 bg-blue-600 text-white rounded-sm text-sm font-medium hover:bg-blue-700"
         >
           {newLabel}
         </Link>
@@ -40,7 +40,7 @@ export function PracticeTable({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+    <div className="bg-white rounded-lg shadow-xs border overflow-hidden">
       <table className="w-full">
         <thead className="bg-gray-50">
           <tr>
@@ -70,7 +70,7 @@ export function PracticeTable({
                 <td key={col.header} className="px-4 py-2.5">{col.render(item)}</td>
               ))}
               <td className="px-4 py-2.5">
-                <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${PRACTICE_STATUS_COLORS[item.status] || ""}`}>
+                <span className={`inline-block px-2 py-0.5 rounded-sm text-xs font-medium ${PRACTICE_STATUS_COLORS[item.status] || ""}`}>
                   {item.status.replace(/_/g, " ")}
                 </span>
               </td>

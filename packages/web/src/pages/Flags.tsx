@@ -169,7 +169,7 @@ export function Flags() {
         <select
           value={severityFilter}
           onChange={(e) => updateFilter("severity", e.target.value)}
-          className="text-sm border border-gray-300 rounded px-2 py-1.5 bg-white"
+          className="text-sm border border-gray-300 rounded-sm px-2 py-1.5 bg-white"
         >
           <option value="">All severities</option>
           {SEVERITIES.map((s) => (
@@ -180,7 +180,7 @@ export function Flags() {
         <select
           value={statusFilter}
           onChange={(e) => updateFilter("status", e.target.value)}
-          className="text-sm border border-gray-300 rounded px-2 py-1.5 bg-white"
+          className="text-sm border border-gray-300 rounded-sm px-2 py-1.5 bg-white"
         >
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
@@ -191,7 +191,7 @@ export function Flags() {
         <select
           value={orrFilter}
           onChange={(e) => updateFilter("orrId", e.target.value)}
-          className="text-sm border border-gray-300 rounded px-2 py-1.5 bg-white"
+          className="text-sm border border-gray-300 rounded-sm px-2 py-1.5 bg-white"
         >
           <option value="">All services</option>
           {services.map(([id, name]) => (
@@ -217,15 +217,15 @@ export function Flags() {
 
       {/* Flags table */}
       {allFlags.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm border p-8 text-center">
+        <div className="bg-white rounded-lg shadow-xs border p-8 text-center">
           <p className="text-gray-500">No flags yet. Flags are created during AI review sessions.</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm border p-8 text-center">
+        <div className="bg-white rounded-lg shadow-xs border p-8 text-center">
           <p className="text-gray-500">No flags match the current filters.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+        <div className="bg-white rounded-lg shadow-xs border overflow-hidden">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
@@ -246,19 +246,19 @@ export function Flags() {
                 return (
                   <tr key={i} className={`hover:bg-gray-50 ${flag.isOverdue && !isResolved ? "bg-red-50/50" : ""} ${isResolved ? "opacity-60" : ""}`}>
                     <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${FLAG_COLORS[flag.type]}`}>
+                      <span className={`inline-block px-2 py-0.5 rounded-sm text-[11px] font-medium ${FLAG_COLORS[flag.type]}`}>
                         {flag.type.replace("_", " ")}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       {flag.severity && (
-                        <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${SEVERITY_COLORS_BOLD[flag.severity]}`}>
+                        <span className={`inline-block px-2 py-0.5 rounded-sm text-[11px] font-bold ${SEVERITY_COLORS_BOLD[flag.severity]}`}>
                           {flag.severity}
                         </span>
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${FLAG_STATUS_COLORS[status]}`}>
+                      <span className={`inline-block px-2 py-0.5 rounded-sm text-[11px] font-medium ${FLAG_STATUS_COLORS[status]}`}>
                         {status}
                       </span>
                     </td>
@@ -290,13 +290,13 @@ export function Flags() {
                         <div className="flex gap-1">
                           <button
                             onClick={() => { setDialog({ flag, action: "ACCEPTED" }); setResolution(""); }}
-                            className="text-[10px] px-2 py-1 rounded bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium"
+                            className="text-[10px] px-2 py-1 rounded-sm bg-purple-50 text-purple-700 hover:bg-purple-100 font-medium"
                           >
                             Accept
                           </button>
                           <button
                             onClick={() => { setDialog({ flag, action: "RESOLVED" }); setResolution(""); }}
-                            className="text-[10px] px-2 py-1 rounded bg-green-50 text-green-700 hover:bg-green-100 font-medium"
+                            className="text-[10px] px-2 py-1 rounded-sm bg-green-50 text-green-700 hover:bg-green-100 font-medium"
                           >
                             Resolve
                           </button>
@@ -304,7 +304,7 @@ export function Flags() {
                       ) : (
                         <button
                           onClick={() => handleReopen(flag)}
-                          className="text-[10px] px-2 py-1 rounded bg-gray-50 text-gray-600 hover:bg-gray-100 font-medium"
+                          className="text-[10px] px-2 py-1 rounded-sm bg-gray-50 text-gray-600 hover:bg-gray-100 font-medium"
                         >
                           Reopen
                         </button>
@@ -330,7 +330,7 @@ export function Flags() {
                 ? "Acknowledge this risk and explain why it's acceptable."
                 : "Describe what was done to address this flag."}
             </p>
-            <div className="mb-3 p-2 bg-gray-50 rounded text-xs text-gray-600 line-clamp-3">
+            <div className="mb-3 p-2 bg-gray-50 rounded-sm text-xs text-gray-600 line-clamp-3">
               {dialog.flag.note}
             </div>
             <textarea
@@ -338,7 +338,7 @@ export function Flags() {
               value={resolution}
               onChange={(e) => setResolution(e.target.value)}
               placeholder={dialog.action === "ACCEPTED" ? "Why is this risk acceptable?" : "What was done to resolve this?"}
-              className="w-full border border-gray-300 rounded p-2.5 text-sm resize-y focus:ring-blue-500 focus:border-blue-500"
+              className="w-full border border-gray-300 rounded-sm p-2.5 text-sm resize-y focus:ring-blue-500 focus:border-blue-500"
               rows={3}
             />
             <div className="flex justify-end gap-2 mt-4">
@@ -351,7 +351,7 @@ export function Flags() {
               <button
                 onClick={handleAction}
                 disabled={!resolution.trim() || submitting}
-                className={`px-4 py-1.5 text-sm font-medium rounded text-white disabled:opacity-50 ${
+                className={`px-4 py-1.5 text-sm font-medium rounded-sm text-white disabled:opacity-50 ${
                   dialog.action === "ACCEPTED" ? "bg-purple-600 hover:bg-purple-700" : "bg-green-600 hover:bg-green-700"
                 }`}
               >

@@ -29,7 +29,7 @@ export function IncidentList() {
         <h2 className="text-xl font-bold text-gray-900">Incident Analyses</h2>
         <Link
           to="/incidents/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+          className="px-4 py-2 bg-blue-600 text-white rounded-sm text-sm font-medium hover:bg-blue-700"
         >
           New Incident
         </Link>
@@ -48,7 +48,7 @@ export function IncidentList() {
           extraColumns={[{
             header: "Severity",
             render: (item) => item.severity ? (
-              <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${SEVERITY_COLORS_LIGHT[item.severity] || ""}`}>
+              <span className={`inline-block px-2 py-0.5 rounded-sm text-xs font-medium ${SEVERITY_COLORS_LIGHT[item.severity] || ""}`}>
                 {item.severity}
               </span>
             ) : <span className="text-xs text-gray-400">--</span>,

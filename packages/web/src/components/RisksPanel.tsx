@@ -123,7 +123,7 @@ export function RisksPanel({ orrId, sections, onNavigateToSection, onReload }: P
           return (
             <div key={type}>
               <div className="flex items-center gap-2 mb-2">
-                <span className={`px-2 py-0.5 rounded text-xs font-medium ${FLAG_COLORS[type] || "bg-gray-100"}`}>
+                <span className={`px-2 py-0.5 rounded-sm text-xs font-medium ${FLAG_COLORS[type] || "bg-gray-100"}`}>
                   {type.replace(/_/g, " ")}
                 </span>
                 <span className="text-xs text-gray-400">({flags.length})</span>
@@ -186,7 +186,7 @@ function FlagCard({
   const isOverdue = flag.type === "RISK" && flag.deadline && new Date(flag.deadline) < new Date() && !isResolved;
 
   return (
-    <div className={`rounded border px-3 py-2 text-xs ${
+    <div className={`rounded-sm border px-3 py-2 text-xs ${
       isResolved
         ? "border-gray-200 bg-gray-50 opacity-60"
         : flag.type === "RISK"
@@ -195,12 +195,12 @@ function FlagCard({
     }`}>
       <div className="flex items-center gap-2 flex-wrap">
         {flag.type === "RISK" && flag.severity && (
-          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${SEVERITY_COLORS_BOLD[flag.severity] || ""}`}>
+          <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-bold ${SEVERITY_COLORS_BOLD[flag.severity] || ""}`}>
             {flag.severity}
           </span>
         )}
         {flag.status && flag.status !== "OPEN" && (
-          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${FLAG_STATUS_COLORS[flag.status] || ""}`}>
+          <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${FLAG_STATUS_COLORS[flag.status] || ""}`}>
             {flag.status}
           </span>
         )}
@@ -227,15 +227,15 @@ function FlagCard({
       <div className="mt-1.5 flex gap-1">
         {!isResolved ? (
           <>
-            <button onClick={onAccept} className="text-[9px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 hover:bg-purple-100">
+            <button onClick={onAccept} className="text-[9px] px-1.5 py-0.5 rounded-sm bg-purple-50 text-purple-600 hover:bg-purple-100">
               Accept
             </button>
-            <button onClick={onResolve} className="text-[9px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 hover:bg-green-100">
+            <button onClick={onResolve} className="text-[9px] px-1.5 py-0.5 rounded-sm bg-green-50 text-green-600 hover:bg-green-100">
               Resolve
             </button>
           </>
         ) : (
-          <button onClick={onReopen} className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 hover:bg-gray-200">
+          <button onClick={onReopen} className="text-[9px] px-1.5 py-0.5 rounded-sm bg-gray-100 text-gray-500 hover:bg-gray-200">
             Reopen
           </button>
         )}

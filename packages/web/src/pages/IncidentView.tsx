@@ -200,14 +200,14 @@ export function IncidentView() {
   return (
     <div className="flex h-screen">
       {/* Column 1: Section sidebar */}
-      <div className="w-56 flex-shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 overflow-hidden">
+      <div className="w-56 shrink-0 border-r border-gray-200 flex flex-col bg-gray-50 overflow-hidden">
         <div className="p-3 border-b border-gray-200">
           <Link to="/incidents" className="text-[10px] text-gray-400 hover:text-blue-600">&larr; All Incidents</Link>
           <h2 className="font-bold text-sm text-gray-900 truncate mt-1">{incident.title}</h2>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-[10px] text-gray-500">{incident.status.replace(/_/g, " ")}</span>
             {incident.severity && (
-              <span className={`px-1 py-0 rounded text-[10px] font-medium ${SEVERITY_COLORS_BOLD[incident.severity] || ""}`}>
+              <span className={`px-1 py-0 rounded-sm text-[10px] font-medium ${SEVERITY_COLORS_BOLD[incident.severity] || ""}`}>
                 {incident.severity}
               </span>
             )}
@@ -224,7 +224,7 @@ export function IncidentView() {
               setIncident({ ...incident, steeringTier: tier });
               await api.incidents.update(id!, { steeringTier: tier });
             }}
-            className="mt-1.5 w-full text-[10px] px-1.5 py-0.5 border border-gray-300 rounded bg-white text-gray-700"
+            className="mt-1.5 w-full text-[10px] px-1.5 py-0.5 border border-gray-300 rounded-sm bg-white text-gray-700"
             title="Agent steering rigor"
           >
             <option value="standard">Standard</option>
@@ -239,7 +239,7 @@ export function IncidentView() {
                 key={s.id}
                 onClick={() => setActiveSection(s.id)}
                 title={`${s.title}: ${DEPTH_LABELS[s.depth]}`}
-                className={`flex-1 h-2 rounded-sm ${DEPTH_COLORS[s.depth]} ${
+                className={`flex-1 h-2 rounded-xs ${DEPTH_COLORS[s.depth]} ${
                   s.id === activeSection ? "ring-2 ring-blue-500" : ""
                 }`}
               />
@@ -270,7 +270,7 @@ export function IncidentView() {
                 }`}
               >
                 <div className="flex items-center gap-1.5">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${DEPTH_COLORS[s.depth]}`} />
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${DEPTH_COLORS[s.depth]}`} />
                   <span className="flex-1 truncate text-gray-700">
                     {s.position}. {s.title}
                   </span>
@@ -315,14 +315,14 @@ export function IncidentView() {
           <div className="ml-auto flex items-center gap-1 pr-2">
             <a
               href={`/api/v1/incidents/${id}/export/markdown`}
-              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-sm transition-colors"
               title="Export incident analysis as Markdown"
             >
               Export Doc
             </a>
             <a
               href={`/api/v1/incidents/${id}/export/conversation`}
-              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-sm transition-colors"
               title="Export conversation transcript"
             >
               Export Chat
@@ -338,7 +338,7 @@ export function IncidentView() {
               <div className="mb-4">
                 <h3 className="text-lg font-bold text-gray-900">{currentSection.title}</h3>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                  <span className={`px-2 py-0.5 rounded-sm text-xs font-medium ${
                     currentSection.depth === "DEEP" ? "bg-green-100 text-green-700" :
                     currentSection.depth === "MODERATE" ? "bg-orange-100 text-orange-700" :
                     currentSection.depth === "SURFACE" ? "bg-yellow-100 text-yellow-700" :
@@ -366,10 +366,10 @@ export function IncidentView() {
                   return (
                     <div key={i} id={`question-${i}`} className="group scroll-mt-4">
                       <div className="flex items-start gap-2 mb-1.5">
-                        <span className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                        <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
                           isAnswered ? "bg-green-500" : "bg-gray-300"
                         }`} />
-                        <span className="text-xs font-mono text-gray-400 mt-0.5 flex-shrink-0">Q{i + 1}</span>
+                        <span className="text-xs font-mono text-gray-400 mt-0.5 shrink-0">Q{i + 1}</span>
                         <span className="text-sm text-gray-700 font-medium">{prompt}</span>
                       </div>
                       <div className="ml-4">
@@ -387,20 +387,20 @@ export function IncidentView() {
                               });
                             }}
                             placeholder="Type your answer here..."
-                            className="w-full bg-white rounded border border-blue-300 p-2.5 text-sm text-gray-700 ring-1 ring-blue-500 resize-y transition-colors"
+                            className="w-full bg-white rounded-sm border border-blue-300 p-2.5 text-sm text-gray-700 ring-1 ring-blue-500 resize-y transition-colors"
                             rows={responseValue ? Math.max(3, responseValue.split("\n").length + 1) : 3}
                           />
                         ) : savedValue ? (
                           <div
                             onClick={() => session.setEditingResponses((prev) => ({ ...prev, [i]: savedValue }))}
-                            className="w-full bg-gray-50 rounded border border-gray-200 p-2.5 text-sm text-gray-700 cursor-text hover:border-gray-300 hover:bg-gray-100 transition-colors"
+                            className="w-full bg-gray-50 rounded-sm border border-gray-200 p-2.5 text-sm text-gray-700 cursor-text hover:border-gray-300 hover:bg-gray-100 transition-colors"
                           >
                             {renderMarkdown(savedValue)}
                           </div>
                         ) : (
                           <div
                             onClick={() => session.setEditingResponses((prev) => ({ ...prev, [i]: "" }))}
-                            className="w-full bg-gray-50 rounded border border-dashed border-gray-300 p-2.5 text-sm text-gray-400 cursor-text hover:border-gray-400 hover:bg-gray-100 transition-colors"
+                            className="w-full bg-gray-50 rounded-sm border border-dashed border-gray-300 p-2.5 text-sm text-gray-400 cursor-text hover:border-gray-400 hover:bg-gray-100 transition-colors"
                           >
                             Click to answer...
                           </div>
@@ -433,19 +433,19 @@ export function IncidentView() {
                     <h4 className="text-sm font-medium text-gray-900 mb-2">Flags</h4>
                     <div className="space-y-2">
                       {flags.map((flag: any, i: number) => (
-                        <div key={i} className={`p-2 rounded border text-sm ${
+                        <div key={i} className={`p-2 rounded-sm border text-sm ${
                           flag.status === "RESOLVED" || flag.status === "ACCEPTED"
                             ? "opacity-50" : ""
                         }`}>
                           <div className="flex items-center gap-2">
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${
                               flag.type === "RISK" ? "bg-red-100 text-red-700" :
                               flag.type === "GAP" ? "bg-amber-100 text-amber-700" :
                               flag.type === "STRENGTH" ? "bg-green-100 text-green-700" :
                               "bg-blue-100 text-blue-700"
                             }`}>{flag.type}</span>
                             {flag.severity && (
-                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${SEVERITY_COLORS_BOLD[flag.severity] || ""}`}>
+                              <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${SEVERITY_COLORS_BOLD[flag.severity] || ""}`}>
                                 {flag.severity}
                               </span>
                             )}
@@ -465,8 +465,8 @@ export function IncidentView() {
             <div>
               <h3 className="text-lg font-bold text-gray-900 mb-4">Timeline</h3>
               {timelineEvents.length === 0 ? (
-                <div className="text-sm text-gray-500 bg-gray-50 rounded p-4">
-                  No timeline events yet. Use the AI conversation to build the timeline — try the <code className="bg-gray-200 px-1 rounded">/timeline</code> command.
+                <div className="text-sm text-gray-500 bg-gray-50 rounded-sm p-4">
+                  No timeline events yet. Use the AI conversation to build the timeline — try the <code className="bg-gray-200 px-1 rounded-sm">/timeline</code> command.
                 </div>
               ) : (
                 <div className="relative">
@@ -480,7 +480,7 @@ export function IncidentView() {
                             <span className="text-xs font-mono text-gray-500">
                               {evt.timestamp ? new Date(evt.timestamp).toLocaleString() : "Unknown time"}
                             </span>
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${EVENT_TYPE_COLORS[evt.eventType] || EVENT_TYPE_COLORS.other}`}>
+                            <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${EVENT_TYPE_COLORS[evt.eventType] || EVENT_TYPE_COLORS.other}`}>
                               {evt.eventType.replace(/_/g, " ")}
                             </span>
                             {evt.actor && (
@@ -504,19 +504,19 @@ export function IncidentView() {
             <div>
               <h3 className="text-lg font-bold text-gray-900 mb-4">Contributing Factors</h3>
               {contributingFactors.length === 0 ? (
-                <div className="text-sm text-gray-500 bg-gray-50 rounded p-4">
-                  No contributing factors yet. Use the AI conversation to identify factors — try the <code className="bg-gray-200 px-1 rounded">/factors</code> command.
+                <div className="text-sm text-gray-500 bg-gray-50 rounded-sm p-4">
+                  No contributing factors yet. Use the AI conversation to identify factors — try the <code className="bg-gray-200 px-1 rounded-sm">/factors</code> command.
                 </div>
               ) : (
                 <div className="space-y-3">
                   {contributingFactors.map((factor) => (
                     <div key={factor.id} className="bg-white border rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${FACTOR_CATEGORY_COLORS[factor.category] || "bg-gray-100 text-gray-700"}`}>
+                        <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${FACTOR_CATEGORY_COLORS[factor.category] || "bg-gray-100 text-gray-700"}`}>
                           {factor.category.replace(/_/g, " ")}
                         </span>
                         {factor.isSystemic && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
+                          <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-medium bg-red-50 text-red-600 border border-red-200">
                             systemic
                           </span>
                         )}
@@ -536,8 +536,8 @@ export function IncidentView() {
             <div>
               <h3 className="text-lg font-bold text-gray-900 mb-4">Action Items</h3>
               {actionItems.length === 0 ? (
-                <div className="text-sm text-gray-500 bg-gray-50 rounded p-4">
-                  No action items yet. Use the AI conversation to generate actions — try the <code className="bg-gray-200 px-1 rounded">/actions</code> command.
+                <div className="text-sm text-gray-500 bg-gray-50 rounded-sm p-4">
+                  No action items yet. Use the AI conversation to generate actions — try the <code className="bg-gray-200 px-1 rounded-sm">/actions</code> command.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -545,16 +545,16 @@ export function IncidentView() {
                     <div key={item.id} className="bg-white border rounded-lg p-3">
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${
                             item.priority === "high" ? "bg-red-100 text-red-700" :
                             item.priority === "medium" ? "bg-orange-100 text-orange-700" :
                             "bg-gray-100 text-gray-700"
                           }`}>{item.priority}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700">
+                          <span className="px-1.5 py-0.5 rounded-sm text-[10px] font-medium bg-blue-50 text-blue-700">
                             {item.type}
                           </span>
                         </div>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        <span className={`px-1.5 py-0.5 rounded-sm text-[10px] font-medium ${
                           item.status === "done" ? "bg-green-100 text-green-700" :
                           item.status === "in_progress" ? "bg-blue-100 text-blue-700" :
                           "bg-gray-100 text-gray-600"
