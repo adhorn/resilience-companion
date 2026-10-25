@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@orr/shared": "*",
-    "@tanstack/react-query": "^5.102.0",
+    "@tanstack/react-query": "^5.102.8",
     "d3-force": "^3.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
