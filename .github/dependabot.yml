@@ -46,6 +46,13 @@ updates:
       # Majors: no group — each gets its own PR so breaking changes are
       # reviewed and merged one at a time.
 
+    ignore:
+      # TypeScript 7 (the native compiler) no longer exports the classic
+      # compiler API that Stryker uses, so `npm run test:mutate` fails on it.
+      # Remove this once Stryker supports TypeScript 7.
+      - dependency-name: "typescript"
+        versions: [">= 7"]
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
