@@ -10,6 +10,20 @@ const shortString = (max = 255) => z.string().min(1).max(max);
 const optionalShortString = (max = 255) => z.string().max(max).optional();
 const contentString = (max = 100_000) => z.string().max(max);
 
+// Every request collection needs a size bound: zod rejects an oversized bounded
+// array before parsing its elements, but walks an unbounded one in full,
+// building an issue per bad element (GHSA-mrhx-c7xc-m3w5). Bundled templates top
+// out at 14 sections and 27 prompts per section.
+const MAX_PROMPTS = 200;
+const promptList = z.array(z.string().max(2000)).max(MAX_PROMPTS);
+
+// z.record has no .max(), so count keys before any value is parsed.
+const boundedRecord = <T extends z.ZodType>(value: T, maxKeys: number) =>
+  z.custom<Record<string, any>>(
+    (v) => typeof v === "object" && v !== null && !Array.isArray(v) && Object.keys(v).length <= maxKeys,
+    { message: `Expected an object with at most ${maxKeys} keys` },
+  ).pipe(z.record(z.string(), value));
+
 const relativeServicePath = z.string().max(500).refine(
   (v) => v === "" || (!v.startsWith("/") && !v.split(/[\\/]/).includes("..")),
   { message: "repositoryServicePath must be a relative path (no leading slash, no '..' segments)" },
@@ -29,8 +43,8 @@ export const createOrrSchema = z.object({
   changeDescription: z.string().max(5000).optional(),
   selectedSections: z.array(z.object({
     title: z.string().max(255),
-    prompts: z.array(z.string().max(2000)),
-  })).optional(),
+    prompts: promptList,
+  })).max(50).optional(),
   repositoryServicePath: relativeServicePath.optional(),
 });
 
@@ -71,15 +85,15 @@ export const updateIncidentSchema = z.object({
 
 export const updateSectionSchema = z.object({
   content: contentString().optional(),
-  prompts: z.array(z.string().max(2000)).optional(),
+  prompts: promptList.optional(),
   promptResponses: z.union([
-    z.record(z.string(), z.union([
+    boundedRecord(z.union([
       z.string().max(10_000),
       z.object({
         answer: z.string().max(10_000),
         source: z.enum(["team", "code"]).optional(),
       }),
-    ])),
+    ]), MAX_PROMPTS),
     z.string().max(200_000), // Allow JSON string passthrough (agent sends stringified)
   ]).optional(),
 });
