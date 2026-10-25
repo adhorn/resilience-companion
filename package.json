@@ -33,7 +33,7 @@
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/typescript-checker": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
-    "concurrently": "^9.2.5",
+    "concurrently": "^10.0.4",
     "playwright": "^1.62.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.12"
