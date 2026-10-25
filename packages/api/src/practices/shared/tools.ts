@@ -437,6 +437,11 @@ export function executeSharedTool(
     }
 
     case "update_depth_assessment": {
+      const section = db.select().from(ref.table)
+        .where(and(eq(ref.idCol, args.section_id as string), eq(ref.parentIdCol, practiceId)))
+        .get();
+      if (!section) return JSON.stringify({ error: "Section not found" });
+
       db.update(ref.table)
         .set({
           depth: args.depth as "UNKNOWN" | "SURFACE" | "MODERATE" | "DEEP",
@@ -452,10 +457,9 @@ export function executeSharedTool(
       const existingSection = db.select().from(ref.table)
         .where(and(eq(ref.idCol, args.section_id as string), eq(ref.parentIdCol, practiceId)))
         .get();
+      if (!existingSection) return JSON.stringify({ error: "Section not found" });
 
-      const existingFlags: any[] = existingSection
-        ? safeJsonParse(existingSection.flags, [])
-        : [];
+      const existingFlags: any[] = safeJsonParse(existingSection.flags, []);
 
       const preservedFlags = existingFlags.filter(
         (f) => f.status === "ACCEPTED" || f.status === "RESOLVED",

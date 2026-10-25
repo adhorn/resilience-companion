@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { setupTestDb, seedTestOrr, seedTestSession } from "../test-helpers.js";
+import { setupTestDb, seedTestOrr, seedTestFeatureOrr, seedTestSession } from "../test-helpers.js";
 import { executeTool } from "./tools.js";
 import { getDb } from "../db/connection.js";
 import * as schema from "../db/schema.js";
@@ -11,6 +11,7 @@ import { join } from "node:path";
 let orrId: string;
 let sessionId: string;
 let sectionIds: string[];
+let otherOrrSectionIds: string[];
 
 beforeEach(() => {
   const db = setupTestDb();
@@ -18,7 +19,18 @@ beforeEach(() => {
   orrId = seed.orrId;
   sectionIds = seed.sectionIds;
   sessionId = seedTestSession(db, orrId, seed.userId);
+  otherOrrSectionIds = seedTestFeatureOrr(db, orrId).featureSectionIds;
 });
+
+/** Section ids a write must reject: a near-miss typo, and a real section of another ORR. */
+const unknownSections: Array<[string, () => string]> = [
+  ["a mistyped section id", () => sectionIds[0].slice(0, -1) + "x"],
+  ["another ORR's section", () => otherOrrSectionIds[0]],
+];
+
+function allSections() {
+  return getDb().select().from(schema.sections).all();
+}
 
 describe("read_section", () => {
   it("returns section data", () => {
@@ -72,6 +84,15 @@ describe("update_depth_assessment", () => {
     expect(section.depth).toBe("MODERATE");
     expect(section.depthRationale).toBe("Team demonstrated understanding.");
   });
+
+  it.each(unknownSections)("returns an error and writes nothing for %s", (_, sectionId) => {
+    const before = allSections();
+    const result = JSON.parse(executeTool("update_depth_assessment", {
+      section_id: sectionId(), depth: "DEEP", rationale: "Should not land anywhere.",
+    }, orrId, sessionId));
+    expect(result).toEqual({ error: "Section not found" });
+    expect(allSections()).toEqual(before);
+  });
 });
 
 describe("set_flags", () => {
@@ -113,6 +134,18 @@ describe("set_flags", () => {
     const types = section.flags.map((f: any) => f.type);
     expect(types).toContain("GAP");
     expect(types).toContain("STRENGTH");
+  });
+
+  // Seen live: a local model mistyped one character of the section id, and
+  // set_flags reported success while the flags went nowhere.
+  it.each(unknownSections)("returns an error and writes nothing for %s", (_, sectionId) => {
+    const before = allSections();
+    const result = JSON.parse(executeTool("set_flags", {
+      section_id: sectionId(),
+      flags: [{ type: "RISK", note: "Should not land anywhere.", severity: "HIGH", deadline: "2026-11-08" }],
+    }, orrId, sessionId));
+    expect(result).toEqual({ error: "Section not found" });
+    expect(allSections()).toEqual(before);
   });
 });
 

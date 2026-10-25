@@ -13,6 +13,9 @@ import type { LLMAdapter, StreamChunk, LLMToolDef } from "../llm/index.js";
 import { runAgent } from "./loop.js";
 import type { AgentInput } from "./loop.js";
 import { orrPracticeConfig } from "../practices/orr/config.js";
+import { getDb } from "../db/connection.js";
+import * as schema from "../db/schema.js";
+import { eq } from "drizzle-orm";
 
 /** Mock LLM that plays a sequence of responses, one per chat() call. */
 function sequenceLLM(responses: StreamChunk[][]): LLMAdapter {
@@ -158,5 +161,74 @@ describe("agent loop — wrap-up does not duplicate text", () => {
     const output = await collectText(makeInput());
 
     expect(output).toContain("Here is my summary of what I found.");
+  });
+});
+
+describe("agent loop — writes to a section that doesn't exist", () => {
+  let orrId: string;
+  let sectionIds: string[];
+  let sessionId: string;
+
+  beforeEach(() => {
+    const db = setupTestDb();
+    const seed = seedTestOrr(db);
+    orrId = seed.orrId;
+    sectionIds = seed.sectionIds;
+    sessionId = seedTestSession(db, orrId, seed.userId);
+    resetLLM();
+  });
+
+  // Seen live with a local model: it mistyped one character of the section id,
+  // set_flags reported success, the UI was told that section changed, and the
+  // flags were never stored.
+  it("tells the model the section is missing, emits no update for it, and stores the retry", async () => {
+    const good = sectionIds[0];
+    const typo = good.slice(0, -1) + "x";
+    const flags = [{ type: "RISK", note: "Failover never tested", severity: "HIGH", deadline: "2026-11-08" }];
+
+    setLLM(sequenceLLM([
+      [
+        ...toolCall("tc1", "read_section", { section_id: typo }),
+        ...toolCall("tc2", "set_flags", { section_id: typo, flags }),
+        ...toolCall("tc3", "update_depth_assessment", { section_id: typo, depth: "SURFACE", rationale: "Guessing." }),
+        done(),
+      ],
+      [
+        ...toolCall("tc4", "read_section", { section_id: good }),
+        ...toolCall("tc5", "set_flags", { section_id: good, flags }),
+        done(),
+      ],
+      [text("Flagged the failover risk."), done()],
+    ]));
+
+    const results: Array<{ tool: string; sectionId: unknown; result: any }> = [];
+    const sectionUpdates: string[] = [];
+    let lastArgs: Record<string, unknown> = {};
+    for await (const event of runAgent({
+      practiceConfig: orrPracticeConfig,
+      practiceId: orrId,
+      sessionId,
+      activeSectionId: good,
+      conversationHistory: [],
+      userMessage: "Our Postgres failover has never been tested.",
+      sessionTokenUsage: 0,
+    })) {
+      if (event.type === "tool_call") lastArgs = event.args as Record<string, unknown>;
+      if (event.type === "tool_result") results.push({ tool: event.tool, sectionId: lastArgs.section_id, result: event.result });
+      if (event.type === "section_updated") sectionUpdates.push(event.sectionId);
+    }
+
+    const writesToTypo = results.filter((r) => r.sectionId === typo && r.tool !== "read_section");
+    expect(writesToTypo.map((r) => r.tool)).toEqual(["set_flags", "update_depth_assessment"]);
+    for (const r of writesToTypo) expect(r.result).toEqual({ error: "Section not found" });
+
+    expect(sectionUpdates).not.toContain(typo);
+    expect(sectionUpdates).toContain(good);
+
+    const section = getDb().select().from(schema.sections).where(eq(schema.sections.id, good)).get()!;
+    const stored = typeof section.flags === "string" ? JSON.parse(section.flags) : section.flags;
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ type: "RISK", note: "Failover never tested", status: "OPEN" });
+    expect(section.depth).toBe("UNKNOWN");
   });
 });
