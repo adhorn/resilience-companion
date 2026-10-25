@@ -101,6 +101,20 @@ describe("incident tools - section operations", () => {
     expect(flags[1].status).toBe("OPEN");
   });
 
+  it("set_flags and update_depth_assessment reject an unknown section and write nothing", () => {
+    const before = db.select().from(schema.incidentSections).all();
+    const flags = JSON.parse(executeIncidentTool("set_flags", {
+      section_id: "isec-9", flags: [{ type: "RISK", note: "Should not land anywhere.", severity: "HIGH" }],
+    }, incidentId, sessionId));
+    const depth = JSON.parse(executeIncidentTool("update_depth_assessment", {
+      section_id: "isec-9", depth: "DEEP", rationale: "Should not land anywhere.",
+    }, incidentId, sessionId));
+
+    expect(flags).toEqual({ error: "Section not found" });
+    expect(depth).toEqual({ error: "Section not found" });
+    expect(db.select().from(schema.incidentSections).all()).toEqual(before);
+  });
+
   it("update_question_response records answer", () => {
     executeIncidentTool("update_question_response", {
       section_id: sectionIds[0], question_index: 0, response: "2024-03-15 at 14:30 UTC",
