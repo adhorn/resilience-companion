@@ -60,6 +60,11 @@ updates:
       # makes Dependabot pick one of those over 10.0.6, the first fixed 10.x.
       - dependency-name: "concurrently"
         versions: [">= 10.0.0, < 10.0.6"]
+      # vite 8.3.0-8.3.2 are affected by GHSA-9jrq-w75r-8gcw and
+      # GHSA-rq7h-c2jc-7f22 (fixed in 8.3.3); the minor cooldown would
+      # otherwise offer 8.3.2 before 8.3.3 clears it (#198 did this with 8.2.2).
+      - dependency-name: "vite"
+        versions: [">= 8.3.0, < 8.3.3"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
