@@ -23,6 +23,7 @@ import { experimentRoutes } from "./routes/experiments.js";
 import { insightsRoutes } from "./routes/insights.js";
 import { orrLearningRoutes, incidentLearningRoutes } from "./routes/learning.js";
 import { tokenRoutes } from "./routes/tokens.js";
+import { requestBodyLimit } from "./middleware/body-limit.js";
 
 export const app = new Hono();
 
@@ -48,6 +49,8 @@ app.use(
     credentials: true,
   }),
 );
+
+app.use("/api/*", requestBodyLimit);
 
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok" }));
