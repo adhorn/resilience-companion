@@ -16,8 +16,11 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
+    # Monthly keeps routine version bumps to one batch a month. Security
+    # updates are not tied to this schedule and still arrive as soon as an
+    # advisory is published.
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     # Raised from 5 to absorb the initial backlog of separate major-bump PRs
     # that the split grouping will surface. Steady-state PR volume is much
     # lower.
@@ -52,11 +55,16 @@ updates:
       # Remove this once Stryker supports TypeScript 7.
       - dependency-name: "typescript"
         versions: [">= 7"]
+      # concurrently 10.0.0-10.0.5 pin shell-quote < 1.11.0, which is affected
+      # by GHSA-pqg4-j6r4-53mv (critical). The 90-day major cooldown otherwise
+      # makes Dependabot pick one of those over 10.0.6, the first fixed 10.x.
+      - dependency-name: "concurrently"
+        versions: [">= 10.0.0, < 10.0.6"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     open-pull-requests-limit: 5
     cooldown:
       default-days: 30
