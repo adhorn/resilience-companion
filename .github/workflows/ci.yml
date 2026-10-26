@@ -29,6 +29,13 @@ jobs:
       # registry publish that a version bump alone wouldn't reveal.
       - name: Verify dependency signatures
         run: npm audit signatures
+      # Known-vulnerability gate: fails on any high or critical advisory in the
+      # installed tree, dev dependencies included. dependency-review (below)
+      # passed Dependabot PRs that pinned vulnerable versions (#198: vite 8.2.2;
+      # #199: shell-quote 1.9.0 via concurrently 10.0.4). Patch and minor bumps
+      # auto-merge on green CI, so the gate lives in the required `test` job.
+      - name: Audit for known vulnerabilities
+        run: npm audit --audit-level=high
       - run: npm run build
       - run: npm run lint
       - run: npm test
