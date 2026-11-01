@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
-    "@types/better-sqlite3": "^7.6.12",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/pg": "^8.23.1",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
